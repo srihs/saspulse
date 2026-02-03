@@ -121,6 +121,13 @@ REPOSITORY_STATUS.md
 .claude.json
 .claude.json.backup
 
+# Docker files (not using Docker)
+docker-compose.yml
+docker-compose*.yml
+Dockerfile*
+.dockerignore
+Makefile
+
 # Ignore Django Migrations in Development if you are working on team
 # Only for Development only
 # **/migrations/**

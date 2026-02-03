@@ -27,23 +27,25 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
 
-    # Third-party apps
-    'rest_framework',
-    'rest_framework_simplejwt',
-    'corsheaders',
-    'django_filters',
-    'drf_spectacular',
-
-    # Development tools
-    'django_extensions',
+    # Third-party apps (will be enabled after pip install)
+    # 'rest_framework',
+    # 'rest_framework_simplejwt',
+    # 'corsheaders',
+    # 'django_filters',
+    # 'drf_spectacular',
+    # 'django_extensions',
 ]
 
+# Only add debug toolbar if it's installed
 if DEBUG:
-    INSTALLED_APPS += ['django_debug_toolbar']
+    try:
+        import django_debug_toolbar
+        INSTALLED_APPS += ['django_debug_toolbar']
+    except ImportError:
+        pass
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -52,8 +54,13 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
+# Add optional middleware if packages are installed
 if DEBUG:
-    MIDDLEWARE.insert(0, 'django_debug_toolbar.middleware.DebugToolbarMiddleware')
+    try:
+        import django_debug_toolbar
+        MIDDLEWARE.insert(0, 'django_debug_toolbar.middleware.DebugToolbarMiddleware')
+    except ImportError:
+        pass
 
 ROOT_URLCONF = 'saspulse.urls'
 
@@ -126,42 +133,41 @@ MEDIA_ROOT = BASE_DIR / 'media'
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Django REST Framework
-REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
-        'rest_framework.authentication.SessionAuthentication',
-    ],
-    'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated',
-    ],
-    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE': 50,
-    'DEFAULT_FILTER_BACKENDS': [
-        'django_filters.rest_framework.DjangoFilterBackend',
-        'rest_framework.filters.SearchFilter',
-        'rest_framework.filters.OrderingFilter',
-    ],
-    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
-}
+# Django REST Framework (will be enabled when rest_framework is installed)
+# REST_FRAMEWORK = {
+#     'DEFAULT_AUTHENTICATION_CLASSES': [
+#         'rest_framework_simplejwt.authentication.JWTAuthentication',
+#         'rest_framework.authentication.SessionAuthentication',
+#     ],
+#     'DEFAULT_PERMISSION_CLASSES': [
+#         'rest_framework.permissions.IsAuthenticated',
+#     ],
+#     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+#     'PAGE_SIZE': 50,
+#     'DEFAULT_FILTER_BACKENDS': [
+#         'django_filters.rest_framework.DjangoFilterBackend',
+#         'rest_framework.filters.SearchFilter',
+#         'rest_framework.filters.OrderingFilter',
+#     ],
+#     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+# }
 
 # API Documentation
-SPECTACULAR_SETTINGS = {
-    'TITLE': 'SasPulse API',
-    'DESCRIPTION': 'Cin7 Dashboard API Documentation',
-    'VERSION': '1.0.0',
-    'SERVE_INCLUDE_SCHEMA': False,
-}
+# SPECTACULAR_SETTINGS = {
+#     'TITLE': 'SasPulse API',
+#     'DESCRIPTION': 'Cin7 Dashboard API Documentation',
+#     'VERSION': '1.0.0',
+#     'SERVE_INCLUDE_SCHEMA': False,
+# }
 
-# CORS Settings
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://localhost:5173",
-    "http://127.0.0.1:3000",
-    "http://127.0.0.1:5173",
-]
-
-CORS_ALLOW_CREDENTIALS = True
+# CORS Settings (will be enabled when corsheaders is installed)
+# CORS_ALLOWED_ORIGINS = [
+#     "http://localhost:3000",
+#     "http://localhost:5173",
+#     "http://127.0.0.1:3000",
+#     "http://127.0.0.1:5173",
+# ]
+# CORS_ALLOW_CREDENTIALS = True
 
 # Redis Configuration
 REDIS_URL = config('REDIS_URL', default='redis://localhost:6379/0')
