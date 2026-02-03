@@ -1,5 +1,11 @@
 .PHONY: help build up down restart logs shell migrate createsuperuser test clean
 
+# Detect Docker Compose command (v1 vs v2)
+DOCKER_COMPOSE := $(shell command -v docker-compose 2> /dev/null)
+ifndef DOCKER_COMPOSE
+	DOCKER_COMPOSE := docker compose
+endif
+
 help:
 	@echo "SasPulse Docker Management"
 	@echo "=========================="
@@ -18,71 +24,73 @@ help:
 	@echo "make test           - Run tests"
 	@echo "make clean          - Remove containers and volumes"
 	@echo "make ps             - Show running containers"
+	@echo ""
+	@echo "Using: $(DOCKER_COMPOSE)"
 
 build:
-	docker-compose build
+	$(DOCKER_COMPOSE) build
 
 up:
-	docker-compose up -d
+	$(DOCKER_COMPOSE) up -d
 	@echo "Services are starting..."
 	@echo "Backend: http://localhost:8000"
 	@echo "Admin: http://localhost:8000/admin"
 	@echo "API: http://localhost:8000/api/v1/"
 
 down:
-	docker-compose down
+	$(DOCKER_COMPOSE) down
 
 restart:
-	docker-compose restart
+	$(DOCKER_COMPOSE) restart
 
 logs:
-	docker-compose logs -f
+	$(DOCKER_COMPOSE) logs -f
 
 logs-backend:
-	docker-compose logs -f backend
+	$(DOCKER_COMPOSE) logs -f backend
 
 logs-celery:
-	docker-compose logs -f celery
+	$(DOCKER_COMPOSE) logs -f celery
 
 logs-db:
-	docker-compose logs -f db
+	$(DOCKER_COMPOSE) logs -f db
 
 shell:
-	docker-compose exec backend python manage.py shell
+	$(DOCKER_COMPOSE) exec backend python manage.py shell
 
 bash:
-	docker-compose exec backend bash
+	$(DOCKER_COMPOSE) exec backend bash
 
 migrate:
-	docker-compose exec backend python manage.py migrate
+	$(DOCKER_COMPOSE) exec backend python manage.py migrate
 
 makemigrations:
-	docker-compose exec backend python manage.py makemigrations
+	$(DOCKER_COMPOSE) exec backend python manage.py makemigrations
 
 createsuperuser:
-	docker-compose exec backend python manage.py createsuperuser
+	$(DOCKER_COMPOSE) exec backend python manage.py createsuperuser
 
 test:
-	docker-compose exec backend pytest
+	$(DOCKER_COMPOSE) exec backend pytest
 
 test-coverage:
-	docker-compose exec backend pytest --cov=apps --cov-report=html
+	$(DOCKER_COMPOSE) exec backend pytest --cov=apps --cov-report=html
 
 clean:
-	docker-compose down -v
+	$(DOCKER_COMPOSE) down -v
 	rm -rf static media
 
 ps:
-	docker-compose ps
+	$(DOCKER_COMPOSE) ps
 
 dbshell:
-	docker-compose exec db psql -U saspulse -d saspulse
+	$(DOCKER_COMPOSE) exec db psql -U saspulse -d saspulse
 
 redis-cli:
-	docker-compose exec redis redis-cli
+	$(DOCKER_COMPOSE) exec redis redis-cli
 
 check:
-	docker-compose exec backend python manage.py check
+	$(DOCKER_COMPOSE) exec backend python manage.py check
 
 collectstatic:
-	docker-compose exec backend python manage.py collectstatic --noinput
+	$(DOCKER_COMPOSE) exec backend python manage.py collectstatic --noinput
