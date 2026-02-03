@@ -113,7 +113,13 @@ media/
 
 # Documentation and temporary files
 DJANGO_CONVERSION_SUMMARY.md
+REPOSITORY_STATUS.md
 *.backup
+
+# Claude Code settings
+.claude/
+.claude.json
+.claude.json.backup
 
 # Ignore Django Migrations in Development if you are working on team
 # Only for Development only
