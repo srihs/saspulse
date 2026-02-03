@@ -1,0 +1,145 @@
+{% extends "users/base_system.html" %}
+{% load static %}
+
+{% block title %}Users - SasPulse{% endblock %}
+
+{% block system_content %}
+<div class="mb-9">
+  <div class="row g-3 mb-4">
+    <div class="col-auto">
+      <h2 class="mb-0">Users</h2>
+    </div>
+  </div>
+
+  <!-- Breadcrumb -->
+  <nav aria-label="breadcrumb">
+    <ol class="breadcrumb mb-4">
+      <li class="breadcrumb-item"><a href="/">Home</a></li>
+      <li class="breadcrumb-item"><a href="#">System</a></li>
+      <li class="breadcrumb-item active" aria-current="page">Users</li>
+    </ol>
+  </nav>
+
+  <!-- Card -->
+  <div class="card">
+    <div class="card-header border-bottom">
+      <div class="row flex-between-center">
+        <div class="col-sm-auto">
+          <h5 class="mb-2 mb-sm-0">User Management</h5>
+        </div>
+        <div class="col-sm-auto">
+          <a href="{% url 'users:user_create' %}" class="btn btn-primary">
+            <span data-feather="plus" class="me-2"></span>Create User
+          </a>
+        </div>
+      </div>
+    </div>
+    <div class="card-body p-0">
+      {% if messages %}
+        <div class="mx-3 mt-3">
+          {% for message in messages %}
+            <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+              {{ message }}
+              <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      <div class="table-responsive scrollbar">
+        <table class="table table-hover table-striped overflow-hidden mb-0">
+          <thead>
+            <tr>
+              <th scope="col">Username</th>
+              <th scope="col">Email</th>
+              <th scope="col">Full Name</th>
+              <th scope="col">Roles</th>
+              <th scope="col" class="text-center">Status</th>
+              <th scope="col" class="text-end">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for user in users %}
+            <tr>
+              <td class="align-middle">
+                <div class="d-flex align-items-center">
+                  <div class="avatar avatar-m">
+                    <div class="avatar-name rounded-circle">
+                      <span>{{ user.username.0|upper }}</span>
+                    </div>
+                  </div>
+                  <div class="ms-2">
+                    <span class="fw-semi-bold">{{ user.username }}</span>
+                  </div>
+                </div>
+              </td>
+              <td class="align-middle">
+                <a href="mailto:{{ user.email }}" class="text-muted">{{ user.email|default:"-" }}</a>
+              </td>
+              <td class="align-middle">
+                <span class="text-muted">{{ user.get_full_name|default:"-" }}</span>
+              </td>
+              <td class="align-middle">
+                {% if user.roles.exists %}
+                  {% for role in user.roles.all %}
+                    <span class="badge badge-phoenix badge-phoenix-primary me-1">{{ role.name }}</span>
+                  {% endfor %}
+                {% else %}
+                  <span class="text-muted">No roles</span>
+                {% endif %}
+              </td>
+              <td class="align-middle text-center">
+                {% if user.is_active %}
+                  <span class="badge badge-phoenix badge-phoenix-success">
+                    <span data-feather="check-circle" class="me-1" style="width: 14px; height: 14px;"></span>Active
+                  </span>
+                {% else %}
+                  <span class="badge badge-phoenix badge-phoenix-secondary">
+                    <span data-feather="x-circle" class="me-1" style="width: 14px; height: 14px;"></span>Inactive
+                  </span>
+                {% endif %}
+              </td>
+              <td class="align-middle text-end">
+                <div class="btn-reveal-trigger position-static">
+                  <button class="btn btn-sm dropdown-toggle dropdown-caret-none transition-none btn-reveal" type="button" data-bs-toggle="dropdown" data-boundary="window" aria-haspopup="true" aria-expanded="false" data-bs-reference="parent">
+                    <span data-feather="more-horizontal" class="fs-10"></span>
+                  </button>
+                  <div class="dropdown-menu dropdown-menu-end py-2">
+                    <a class="dropdown-item" href="{% url 'users:user_update' user.id %}">
+                      <span data-feather="edit-2" class="me-2"></span>Edit
+                    </a>
+                    <a class="dropdown-item" href="{% url 'users:user_roles' user.id %}">
+                      <span data-feather="shield" class="me-2"></span>Manage Roles
+                    </a>
+                    <div class="dropdown-divider"></div>
+                    <a class="dropdown-item text-danger" href="{% url 'users:user_delete' user.id %}">
+                      <span data-feather="trash-2" class="me-2"></span>Delete
+                    </a>
+                  </div>
+                </div>
+              </td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="6" class="text-center py-5">
+                <div class="mb-3">
+                  <span data-feather="users" style="width: 48px; height: 48px;"></span>
+                </div>
+                <p class="text-muted mb-0">No users found. Create your first user to get started.</p>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/feather-icons"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    feather.replace();
+  });
+</script>
+{% endblock %}

@@ -4,13 +4,13 @@ Django settings for saspulse project.
 
 import os
 from pathlib import Path
-
-# These imports will be enabled when packages are installed
-# import dj_database_url
-# from decouple import config
+from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Load environment variables from .env file
+load_dotenv(BASE_DIR / '.env')
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-h#$ie3h)1xi!n4p=of2i^k-e7qq%niz@ox**r91vh@yss5-zku')
@@ -20,6 +20,9 @@ DEBUG = os.getenv('DEBUG', 'True') == 'True'
 
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
+# Site URL for email links (used in authentication emails)
+SITE_URL = os.getenv('SITE_URL', 'http://localhost:8000')
+
 # Application definition
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -28,6 +31,10 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+
+    # Local apps
+    'cin7',
+    'users',
 
     # Third-party apps (will be enabled after pip install)
     # 'rest_framework',
@@ -52,6 +59,8 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'users.middleware.AuthenticationMiddleware',  # Custom auth middleware
+    'users.middleware.SessionSecurityMiddleware',  # Custom session security
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -89,8 +98,15 @@ WSGI_APPLICATION = 'saspulse.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': os.getenv('POSTGRES_DB', 'saspulse'),
+        'USER': os.getenv('POSTGRES_USER', 'postgres'),
+        'PASSWORD': os.getenv('POSTGRES_PASSWORD', 'postgres'),
+        'HOST': os.getenv('POSTGRES_HOST', 'localhost'),
+        'PORT': os.getenv('POSTGRES_PORT', '5432'),
+        'OPTIONS': {
+            'connect_timeout': 10,
+        },
     }
 }
 
@@ -109,6 +125,42 @@ AUTH_PASSWORD_VALIDATORS = [
         'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
     },
 ]
+
+# Password Hashing - Using Argon2 (most secure)
+PASSWORD_HASHERS = [
+    'django.contrib.auth.hashers.Argon2PasswordHasher',
+    'django.contrib.auth.hashers.PBKDF2PasswordHasher',
+    'django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher',
+    'django.contrib.auth.hashers.BCryptSHA256PasswordHasher',
+]
+
+# Custom Authentication Settings
+AUTHENTICATION_BACKENDS = [
+    'users.auth_backend.CustomAuthBackend',
+]
+
+# Session Settings
+SESSION_COOKIE_AGE = 7200  # 2 hours
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = 'Lax'
+SESSION_SAVE_EVERY_REQUEST = True  # Update last_activity on every request
+
+# Auth URLs
+LOGIN_URL = '/auth/login/'
+LOGOUT_REDIRECT_URL = '/auth/login/'
+
+# Custom Auth Configuration
+PASSWORD_MIN_LENGTH = 8
+PASSWORD_REQUIRE_UPPERCASE = True
+PASSWORD_REQUIRE_LOWERCASE = True
+PASSWORD_REQUIRE_NUMBERS = True
+PASSWORD_REQUIRE_SPECIAL = True
+
+# Account Security
+MAX_FAILED_LOGIN_ATTEMPTS = 5
+ACCOUNT_LOCKOUT_DURATION = 30  # minutes
+ACTIVATION_TOKEN_EXPIRY = 24  # hours
+RESET_TOKEN_EXPIRY = 1  # hour
 
 # Internationalization
 LANGUAGE_CODE = 'en-us'
@@ -196,13 +248,17 @@ CIN7_USERNAME = os.getenv('CIN7_USERNAME', '')
 CIN7_API_KEY = os.getenv('CIN7_API_KEY', '')
 
 # Email Configuration
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = os.getenv('EMAIL_HOST', 'smtp.gmail.com')
-EMAIL_PORT = int(os.getenv('EMAIL_PORT', '587'))
-EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'True') == 'True'
-EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
-EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
-DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', EMAIL_HOST_USER)
+# Use console backend for development (prints emails to console)
+if DEBUG:
+    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+else:
+    EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+    EMAIL_HOST = os.getenv('EMAIL_HOST', 'smtp.gmail.com')
+    EMAIL_PORT = int(os.getenv('EMAIL_PORT', '587'))
+    EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'True') == 'True'
+    EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
+    EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
+    DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', EMAIL_HOST_USER)
 
 # Django Debug Toolbar
 if DEBUG:

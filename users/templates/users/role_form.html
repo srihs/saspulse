@@ -1,0 +1,138 @@
+{% extends "users/base_system.html" %}
+{% load static %}
+
+{% block title %}{% if form.instance.pk %}Edit Role{% else %}Create Role{% endif %} - SasPulse{% endblock %}
+
+{% block system_content %}
+<div class="mb-9">
+  <div class="row g-3 mb-4">
+    <div class="col-auto">
+      <h2 class="mb-0">{% if form.instance.pk %}Edit Role{% else %}Create Role{% endif %}</h2>
+    </div>
+  </div>
+
+  <!-- Breadcrumb -->
+  <nav aria-label="breadcrumb">
+    <ol class="breadcrumb mb-4">
+      <li class="breadcrumb-item"><a href="/">Home</a></li>
+      <li class="breadcrumb-item"><a href="#">System</a></li>
+      <li class="breadcrumb-item"><a href="{% url 'users:role_list' %}">Roles</a></li>
+      <li class="breadcrumb-item active" aria-current="page">{% if form.instance.pk %}Edit{% else %}Create{% endif %}</li>
+    </ol>
+  </nav>
+
+  <!-- Card -->
+  <div class="row">
+    <div class="col-xl-9">
+      <div class="card">
+        <div class="card-header">
+          <h5 class="mb-0">Role Information</h5>
+        </div>
+        <div class="card-body">
+          {% if messages %}
+            {% for message in messages %}
+              <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+              </div>
+            {% endfor %}
+          {% endif %}
+
+          <form method="post" novalidate>
+            {% csrf_token %}
+
+            <!-- Name Field -->
+            <div class="mb-3">
+              <label class="form-label" for="{{ form.name.id_for_label }}">
+                Name <span class="text-danger">*</span>
+              </label>
+              {{ form.name }}
+              {% if form.name.errors %}
+                <div class="invalid-feedback d-block">
+                  {{ form.name.errors.0 }}
+                </div>
+              {% endif %}
+              <div class="form-text">Enter a unique name for this role.</div>
+            </div>
+
+            <!-- Description Field -->
+            <div class="mb-3">
+              <label class="form-label" for="{{ form.description.id_for_label }}">
+                Description
+              </label>
+              {{ form.description }}
+              {% if form.description.errors %}
+                <div class="invalid-feedback d-block">
+                  {{ form.description.errors.0 }}
+                </div>
+              {% endif %}
+              <div class="form-text">Provide a brief description of this role's purpose.</div>
+            </div>
+
+            <!-- Permissions Field -->
+            <div class="mb-3">
+              <label class="form-label" for="{{ form.permissions.id_for_label }}">
+                Permissions (JSON)
+              </label>
+              {{ form.permissions }}
+              {% if form.permissions.errors %}
+                <div class="invalid-feedback d-block">
+                  {{ form.permissions.errors.0 }}
+                </div>
+              {% endif %}
+              <div class="form-text">
+                Enter permissions in JSON format. Example: <code>{"can_view": true, "can_edit": false}</code>
+              </div>
+            </div>
+
+            <!-- Form Actions -->
+            <div class="d-flex justify-content-end gap-2 mt-4">
+              <a href="{% url 'users:role_list' %}" class="btn btn-phoenix-secondary">
+                <span data-feather="x" class="me-2"></span>Cancel
+              </a>
+              <button type="submit" class="btn btn-primary">
+                <span data-feather="save" class="me-2"></span>Save Role
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-xl-3">
+      <div class="card">
+        <div class="card-header">
+          <h6 class="mb-0">Help</h6>
+        </div>
+        <div class="card-body">
+          <p class="text-muted fs-10 mb-3">
+            <span data-feather="info" class="me-1"></span>
+            <strong>Role Name:</strong> Choose a descriptive name that clearly identifies the role's purpose.
+          </p>
+          <p class="text-muted fs-10 mb-3">
+            <span data-feather="info" class="me-1"></span>
+            <strong>Description:</strong> Explain what this role is for and what responsibilities it includes.
+          </p>
+          <p class="text-muted fs-10 mb-0">
+            <span data-feather="info" class="me-1"></span>
+            <strong>Permissions:</strong> Define access rights using JSON format. This determines what users with this role can do.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/feather-icons"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    feather.replace();
+
+    // Add form-control class to form fields
+    const fields = document.querySelectorAll('input[type="text"], textarea');
+    fields.forEach(field => {
+      field.classList.add('form-control');
+    });
+  });
+</script>
+{% endblock %}

@@ -1,0 +1,210 @@
+{% extends "users/base_system.html" %}
+{% load static %}
+
+{% block title %}Manage User Roles - {{ user.username }} - SasPulse{% endblock %}
+
+{% block system_content %}
+<div class="mb-9">
+  <div class="row g-3 mb-4">
+    <div class="col-auto">
+      <h2 class="mb-0">Manage User Roles</h2>
+    </div>
+  </div>
+
+  <!-- Breadcrumb -->
+  <nav aria-label="breadcrumb">
+    <ol class="breadcrumb mb-4">
+      <li class="breadcrumb-item"><a href="/">Home</a></li>
+      <li class="breadcrumb-item"><a href="#">System</a></li>
+      <li class="breadcrumb-item"><a href="{% url 'users:user_list' %}">Users</a></li>
+      <li class="breadcrumb-item active" aria-current="page">Manage Roles</li>
+    </ol>
+  </nav>
+
+  <!-- Card -->
+  <div class="row">
+    <div class="col-xl-8">
+      <div class="card">
+        <div class="card-header">
+          <h5 class="mb-0">Assign Roles to {{ user.username }}</h5>
+        </div>
+        <div class="card-body">
+          {% if messages %}
+            {% for message in messages %}
+              <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+              </div>
+            {% endfor %}
+          {% endif %}
+
+          <!-- User Info -->
+          <div class="alert alert-info mb-4">
+            <div class="d-flex align-items-start">
+              <span data-feather="user" class="me-2 mt-1"></span>
+              <div>
+                <p class="mb-1"><strong>Username:</strong> {{ user.username }}</p>
+                <p class="mb-1"><strong>Email:</strong> {{ user.email|default:"-" }}</p>
+                <p class="mb-0"><strong>Full Name:</strong> {{ user.get_full_name|default:"-" }}</p>
+              </div>
+            </div>
+          </div>
+
+          <form method="post" id="rolesForm">
+            {% csrf_token %}
+
+            <div class="mb-3">
+              <label class="form-label">Available Roles</label>
+              <div class="form-text mb-3">Select the roles to assign to this user. Users can have multiple roles.</div>
+
+              {% if all_roles %}
+                <div class="role-checkboxes">
+                  {% for role in all_roles %}
+                    <div class="card mb-2">
+                      <div class="card-body p-3">
+                        <div class="form-check">
+                          <input
+                            class="form-check-input"
+                            type="checkbox"
+                            name="roles"
+                            value="{{ role.id }}"
+                            id="role_{{ role.id }}"
+                            {% if role in user.roles.all %}checked{% endif %}
+                          >
+                          <label class="form-check-label w-100" for="role_{{ role.id }}">
+                            <div class="d-flex justify-content-between align-items-start">
+                              <div>
+                                <strong>{{ role.name }}</strong>
+                                {% if role.description %}
+                                  <p class="text-muted mb-0 mt-1">{{ role.description }}</p>
+                                {% endif %}
+                              </div>
+                              <span class="badge badge-phoenix badge-phoenix-secondary ms-2">
+                                {{ role.users.count }} user{{ role.users.count|pluralize }}
+                              </span>
+                            </div>
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  {% endfor %}
+                </div>
+              {% else %}
+                <div class="alert alert-warning">
+                  <div class="d-flex align-items-start">
+                    <span data-feather="alert-circle" class="me-2 mt-1"></span>
+                    <div>
+                      <p class="mb-0">
+                        No roles available. Please <a href="{% url 'users:role_create' %}">create a role</a> first.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              {% endif %}
+            </div>
+
+            <!-- Form Actions -->
+            <div class="d-flex justify-content-end gap-2 mt-4">
+              <a href="{% url 'users:user_list' %}" class="btn btn-phoenix-secondary">
+                <span data-feather="x" class="me-2"></span>Cancel
+              </a>
+              {% if all_roles %}
+                <button type="submit" class="btn btn-primary">
+                  <span data-feather="save" class="me-2"></span>Save Roles
+                </button>
+              {% endif %}
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-xl-4">
+      <!-- Current Roles Summary -->
+      <div class="card">
+        <div class="card-header">
+          <h6 class="mb-0">Current Roles</h6>
+        </div>
+        <div class="card-body">
+          {% if user.roles.exists %}
+            <div class="d-flex flex-wrap gap-2">
+              {% for role in user.roles.all %}
+                <span class="badge badge-phoenix badge-phoenix-primary">
+                  <span data-feather="shield" class="me-1" style="width: 12px; height: 12px;"></span>
+                  {{ role.name }}
+                </span>
+              {% endfor %}
+            </div>
+          {% else %}
+            <p class="text-muted mb-0">
+              <span data-feather="info" class="me-1"></span>
+              This user currently has no roles assigned.
+            </p>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Help Card -->
+      <div class="card mt-3">
+        <div class="card-header">
+          <h6 class="mb-0">Help</h6>
+        </div>
+        <div class="card-body">
+          <p class="text-muted fs-10 mb-3">
+            <span data-feather="info" class="me-1"></span>
+            <strong>Roles:</strong> Define what a user can do in the system. A user can have multiple roles.
+          </p>
+          <p class="text-muted fs-10 mb-3">
+            <span data-feather="info" class="me-1"></span>
+            <strong>Multiple Roles:</strong> When a user has multiple roles, they get the combined permissions from all assigned roles.
+          </p>
+          <p class="text-muted fs-10 mb-0">
+            <span data-feather="info" class="me-1"></span>
+            <strong>Changes:</strong> Role changes take effect immediately after saving.
+          </p>
+        </div>
+      </div>
+
+      <!-- Quick Actions -->
+      <div class="card mt-3">
+        <div class="card-header">
+          <h6 class="mb-0">Quick Actions</h6>
+        </div>
+        <div class="card-body">
+          <a href="{% url 'users:user_update' user.id %}" class="btn btn-phoenix-primary w-100 mb-2">
+            <span data-feather="edit-2" class="me-2"></span>Edit User
+          </a>
+          <a href="{% url 'users:role_list' %}" class="btn btn-phoenix-secondary w-100">
+            <span data-feather="shield" class="me-2"></span>Manage Roles
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/feather-icons"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    feather.replace();
+
+    // Highlight selected roles
+    const checkboxes = document.querySelectorAll('.role-checkboxes input[type="checkbox"]');
+    checkboxes.forEach(checkbox => {
+      checkbox.addEventListener('change', function() {
+        const card = this.closest('.card');
+        if (this.checked) {
+          card.classList.add('border-primary');
+        } else {
+          card.classList.remove('border-primary');
+        }
+      });
+
+      // Initialize on page load
+      if (checkbox.checked) {
+        checkbox.closest('.card').classList.add('border-primary');
+      }
+    });
+  });
+</script>
+{% endblock %}

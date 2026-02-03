@@ -1,0 +1,227 @@
+{% extends "users/base_system.html" %}
+{% load static %}
+
+{% block title %}{% if form.instance.pk %}Edit User{% else %}Create User{% endif %} - SasPulse{% endblock %}
+
+{% block system_content %}
+<div class="mb-9">
+  <div class="row g-3 mb-4">
+    <div class="col-auto">
+      <h2 class="mb-0">{% if form.instance.pk %}Edit User{% else %}Create User{% endif %}</h2>
+    </div>
+  </div>
+
+  <!-- Breadcrumb -->
+  <nav aria-label="breadcrumb">
+    <ol class="breadcrumb mb-4">
+      <li class="breadcrumb-item"><a href="/">Home</a></li>
+      <li class="breadcrumb-item"><a href="#">System</a></li>
+      <li class="breadcrumb-item"><a href="{% url 'users:user_list' %}">Users</a></li>
+      <li class="breadcrumb-item active" aria-current="page">{% if form.instance.pk %}Edit{% else %}Create{% endif %}</li>
+    </ol>
+  </nav>
+
+  <!-- Card -->
+  <div class="row">
+    <div class="col-xl-9">
+      <div class="card">
+        <div class="card-header">
+          <h5 class="mb-0">User Information</h5>
+        </div>
+        <div class="card-body">
+          {% if messages %}
+            {% for message in messages %}
+              <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+              </div>
+            {% endfor %}
+          {% endif %}
+
+          <form method="post" novalidate>
+            {% csrf_token %}
+
+            <div class="row gx-3">
+              <!-- Username Field -->
+              <div class="col-md-6 mb-3">
+                <label class="form-label" for="{{ form.username.id_for_label }}">
+                  Username <span class="text-danger">*</span>
+                </label>
+                {{ form.username }}
+                {% if form.username.errors %}
+                  <div class="invalid-feedback d-block">
+                    {{ form.username.errors.0 }}
+                  </div>
+                {% endif %}
+                <div class="form-text">Choose a unique username for login.</div>
+              </div>
+
+              <!-- Email Field -->
+              <div class="col-md-6 mb-3">
+                <label class="form-label" for="{{ form.email.id_for_label }}">
+                  Email <span class="text-danger">*</span>
+                </label>
+                {{ form.email }}
+                {% if form.email.errors %}
+                  <div class="invalid-feedback d-block">
+                    {{ form.email.errors.0 }}
+                  </div>
+                {% endif %}
+                <div class="form-text">User's email address.</div>
+              </div>
+            </div>
+
+            <div class="row gx-3">
+              <!-- First Name Field -->
+              <div class="col-md-6 mb-3">
+                <label class="form-label" for="{{ form.first_name.id_for_label }}">
+                  First Name
+                </label>
+                {{ form.first_name }}
+                {% if form.first_name.errors %}
+                  <div class="invalid-feedback d-block">
+                    {{ form.first_name.errors.0 }}
+                  </div>
+                {% endif %}
+              </div>
+
+              <!-- Last Name Field -->
+              <div class="col-md-6 mb-3">
+                <label class="form-label" for="{{ form.last_name.id_for_label }}">
+                  Last Name
+                </label>
+                {{ form.last_name }}
+                {% if form.last_name.errors %}
+                  <div class="invalid-feedback d-block">
+                    {{ form.last_name.errors.0 }}
+                  </div>
+                {% endif %}
+              </div>
+            </div>
+
+            {% if not form.instance.pk %}
+            <!-- Password Field (Create Only) -->
+            <div class="row gx-3">
+              <div class="col-md-6 mb-3">
+                <label class="form-label" for="{{ form.password1.id_for_label }}">
+                  Password <span class="text-danger">*</span>
+                </label>
+                {{ form.password1 }}
+                {% if form.password1.errors %}
+                  <div class="invalid-feedback d-block">
+                    {{ form.password1.errors.0 }}
+                  </div>
+                {% endif %}
+                <div class="form-text">Minimum 8 characters.</div>
+              </div>
+
+              <div class="col-md-6 mb-3">
+                <label class="form-label" for="{{ form.password2.id_for_label }}">
+                  Confirm Password <span class="text-danger">*</span>
+                </label>
+                {{ form.password2 }}
+                {% if form.password2.errors %}
+                  <div class="invalid-feedback d-block">
+                    {{ form.password2.errors.0 }}
+                  </div>
+                {% endif %}
+                <div class="form-text">Re-enter the password.</div>
+              </div>
+            </div>
+            {% endif %}
+
+            <!-- Is Active Field -->
+            <div class="mb-3">
+              <div class="form-check">
+                {{ form.is_active }}
+                <label class="form-check-label" for="{{ form.is_active.id_for_label }}">
+                  Active User
+                </label>
+                {% if form.is_active.errors %}
+                  <div class="invalid-feedback d-block">
+                    {{ form.is_active.errors.0 }}
+                  </div>
+                {% endif %}
+              </div>
+              <div class="form-text">Inactive users cannot log in to the system.</div>
+            </div>
+
+            <!-- Form Actions -->
+            <div class="d-flex justify-content-end gap-2 mt-4">
+              <a href="{% url 'users:user_list' %}" class="btn btn-phoenix-secondary">
+                <span data-feather="x" class="me-2"></span>Cancel
+              </a>
+              <button type="submit" class="btn btn-primary">
+                <span data-feather="save" class="me-2"></span>Save User
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-xl-3">
+      <div class="card">
+        <div class="card-header">
+          <h6 class="mb-0">Help</h6>
+        </div>
+        <div class="card-body">
+          <p class="text-muted fs-10 mb-3">
+            <span data-feather="info" class="me-1"></span>
+            <strong>Username:</strong> Must be unique and will be used for login.
+          </p>
+          <p class="text-muted fs-10 mb-3">
+            <span data-feather="info" class="me-1"></span>
+            <strong>Email:</strong> Required for password reset and notifications.
+          </p>
+          {% if not form.instance.pk %}
+          <p class="text-muted fs-10 mb-3">
+            <span data-feather="info" class="me-1"></span>
+            <strong>Password:</strong> Must be at least 8 characters long and secure.
+          </p>
+          {% endif %}
+          <p class="text-muted fs-10 mb-0">
+            <span data-feather="info" class="me-1"></span>
+            <strong>Status:</strong> Inactive users cannot access the system.
+          </p>
+        </div>
+      </div>
+
+      {% if form.instance.pk %}
+      <div class="card mt-3">
+        <div class="card-header">
+          <h6 class="mb-0">Quick Actions</h6>
+        </div>
+        <div class="card-body">
+          <a href="{% url 'users:user_roles' form.instance.pk %}" class="btn btn-phoenix-primary w-100 mb-2">
+            <span data-feather="shield" class="me-2"></span>Manage Roles
+          </a>
+          <a href="#" class="btn btn-phoenix-secondary w-100">
+            <span data-feather="key" class="me-2"></span>Reset Password
+          </a>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/feather-icons"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    feather.replace();
+
+    // Add form-control class to form fields
+    const textFields = document.querySelectorAll('input[type="text"], input[type="email"], input[type="password"]');
+    textFields.forEach(field => {
+      field.classList.add('form-control');
+    });
+
+    // Add form-check-input class to checkboxes
+    const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+    checkboxes.forEach(checkbox => {
+      checkbox.classList.add('form-check-input');
+    });
+  });
+</script>
+{% endblock %}
