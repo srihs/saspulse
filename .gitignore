@@ -116,10 +116,7 @@ DJANGO_CONVERSION_SUMMARY.md
 REPOSITORY_STATUS.md
 *.backup
 
-# Claude Code settings
-.claude/
-.claude.json
-.claude.json.backup
+
 
 # Docker files (not using Docker)
 docker-compose.yml
