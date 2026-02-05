@@ -23,7 +23,7 @@ from .email_utils import send_activation_email, send_password_reset_email
 
 class LoginView(View):
     """
-    Handle user login with username/email and password.
+    Handle user login with email and password.
     Supports remember_me functionality and redirects to next parameter.
     """
     template_name = 'users/auth/login.html'
@@ -48,12 +48,12 @@ class LoginView(View):
         next_url = request.POST.get('next', '') or request.GET.get('next', '')
 
         if form.is_valid():
-            username = form.cleaned_data['username']
+            email = form.cleaned_data['email']
             password = form.cleaned_data['password']
             remember_me = form.cleaned_data.get('remember_me', False)
 
-            # Authenticate user
-            user = auth_backend.authenticate(request, username=username, password=password)
+            # Authenticate user (pass email as username parameter)
+            user = auth_backend.authenticate(request, username=email, password=password)
 
             if user is not None:
                 # Check if user account is locked

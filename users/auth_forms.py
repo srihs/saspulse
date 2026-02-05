@@ -15,16 +15,15 @@ from .models import CustomUser
 class LoginForm(forms.Form):
     """
     Form for user login.
-    Accepts username or email for authentication.
+    Requires email address for authentication.
     """
-    username = forms.CharField(
-        max_length=150,
-        widget=forms.TextInput(attrs={
+    email = forms.EmailField(
+        widget=forms.EmailInput(attrs={
             'class': 'form-control',
-            'placeholder': 'Username or Email',
+            'placeholder': 'name@example.com',
             'autofocus': True
         }),
-        label='Username or Email'
+        label='Email address'
     )
     password = forms.CharField(
         widget=forms.PasswordInput(attrs={

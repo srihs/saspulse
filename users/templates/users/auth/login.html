@@ -36,32 +36,16 @@
                     <div class="card border border-translucent auth-card">
                         <div class="card-body pe-md-0">
                             <div class="row align-items-center gx-0 gy-7">
-                                <div class="col-auto bg-body-highlight dark__bg-gray-1100 rounded-3 position-relative overflow-hidden auth-title-box">
-                                    <div class="bg-holder" style="background-image:url({% static 'img/bg/38.png' %});"></div>
-                                    <div class="position-relative px-4 px-lg-7 pt-7 pb-7 pb-sm-5 text-center text-md-start pb-lg-7 pb-md-7">
-                                        <h3 class="mb-3 text-body-emphasis fs-7">SasPulse Authentication</h3>
-                                        <p class="text-body-tertiary">Give yourself some hassle-free development process with the uniqueness of SasPulse!</p>
-                                        <ul class="list-unstyled mb-0 w-max-content w-md-auto">
-                                            <li class="d-flex align-items-center"><span class="uil uil-check-circle text-success me-2"></span><span class="text-body-tertiary fw-semibold">Fast</span></li>
-                                            <li class="d-flex align-items-center"><span class="uil uil-check-circle text-success me-2"></span><span class="text-body-tertiary fw-semibold">Simple</span></li>
-                                            <li class="d-flex align-items-center"><span class="uil uil-check-circle text-success me-2"></span><span class="text-body-tertiary fw-semibold">Responsive</span></li>
-                                        </ul>
-                                    </div>
-                                    <div class="position-relative z-n1 mb-6 d-none d-md-block text-center mt-md-15">
-                                        <img class="auth-title-box-img d-dark-none" src="{% static 'img/spot-illustrations/auth.png' %}" alt="" />
-                                        <img class="auth-title-box-img d-light-none" src="{% static 'img/spot-illustrations/auth-dark.png' %}" alt="" />
-                                    </div>
-                                </div>
+                                    
                                 <div class="col mx-auto">
                                     <div class="auth-form-box">
                                         <div class="text-center mb-7">
                                             <a class="d-flex flex-center text-decoration-none mb-4" href="/">
                                                 <div class="d-flex align-items-center fw-bolder fs-3 d-inline-block">
-                                                    <img src="{% static 'img/icons/logo.png' %}" alt="SasPulse" width="58" />
+                                                    <img src="{% static 'img/icons/logo.png' %}" alt="SasPulse" width="250" />
                                                 </div>
                                             </a>
-                                            <h3 class="text-body-highlight">Sign In</h3>
-                                            <p class="text-body-tertiary">Get access to your account</p>
+                                        
                                         </div>
 
                                         <!-- Display Django messages -->
@@ -81,16 +65,16 @@
                                                 <input type="hidden" name="next" value="{{ next }}">
                                             {% endif %}
 
-                                            <!-- Username/Email Field -->
+                                            <!-- Email Field -->
                                             <div class="mb-3 text-start">
-                                                <label class="form-label" for="id_username">{{ form.username.label }}</label>
+                                                <label class="form-label" for="id_email">{{ form.email.label }}</label>
                                                 <div class="form-icon-container">
-                                                    {{ form.username }}
-                                                    <span class="fas fa-user text-body fs-9 form-icon"></span>
+                                                    {{ form.email }}
+                                                    <span class="fas fa-envelope text-body fs-9 form-icon"></span>
                                                 </div>
-                                                {% if form.username.errors %}
+                                                {% if form.email.errors %}
                                                     <div class="text-danger small mt-1">
-                                                        {% for error in form.username.errors %}
+                                                        {% for error in form.email.errors %}
                                                             {{ error }}
                                                         {% endfor %}
                                                     </div>
@@ -129,9 +113,7 @@
                                             <!-- Submit Button -->
                                             <button class="btn btn-primary w-100 mb-3" type="submit">Sign In</button>
 
-                                            <div class="text-center">
-                                                <a class="fs-9 fw-bold" href="{% url 'users:register' %}">Create an account</a>
-                                            </div>
+                                            
                                         </form>
                                     </div>
                                 </div>
