@@ -49,6 +49,7 @@ class ProductCategory(TimestampedModel):
     objects = ProductCategoryManager()
 
     class Meta:
+        db_table = 'cin7_sync_productcategory'
         verbose_name_plural = "Product Categories"
         ordering = ['name']
         indexes = [
@@ -86,6 +87,7 @@ class Branch(TimestampedModel):
     objects = BranchManager()
 
     class Meta:
+        db_table = 'cin7_sync_branch'
         verbose_name_plural = "Branches"
         ordering = ['name']
         indexes = [
@@ -205,6 +207,7 @@ class Product(TimestampedModel):
     sales_account = models.CharField(max_length=100, blank=True)
     purchases_account = models.CharField(max_length=100, blank=True)
     import_customs_duty = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    cost_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Product cost price")
 
     # Size Range
     size_range_id = models.IntegerField(null=True, blank=True)
@@ -223,6 +226,7 @@ class Product(TimestampedModel):
     objects = ProductManager()
 
     class Meta:
+        db_table = 'cin7_sync_product'
         ordering = ['name']
         indexes = [
             models.Index(fields=['cin7_id']),
@@ -322,6 +326,7 @@ class ProductOption(TimestampedModel):
     objects = ProductOptionManager()
 
     class Meta:
+        db_table = 'cin7_sync_productoption'
         ordering = ['product', 'code']
         indexes = [
             models.Index(fields=['cin7_id']),
@@ -552,6 +557,7 @@ class SalesOrder(TimestampedModel):
     # Dates
     created_date = models.DateTimeField(null=True, blank=True, db_index=True)
     modified_date = models.DateTimeField(null=True, blank=True)
+    invoice_date = models.DateTimeField(null=True, blank=True, db_index=True, help_text="Invoice date")
     cancellation_date = models.DateTimeField(null=True, blank=True, help_text="Read-only")
 
     # Users
@@ -569,6 +575,7 @@ class SalesOrder(TimestampedModel):
         Contact, on_delete=models.PROTECT, related_name='sales_orders',
         null=True, blank=True, limit_choices_to={'type': 'Customer'}
     )
+    customer_name = models.CharField(max_length=255, blank=True, help_text="Customer name from order")
     first_name = models.CharField(max_length=250, blank=True)
     last_name = models.CharField(max_length=250, blank=True)
     company = models.CharField(max_length=250, blank=True)
@@ -642,6 +649,7 @@ class SalesOrder(TimestampedModel):
     objects = SalesOrderManager()
 
     class Meta:
+        db_table = 'cin7_sync_salesorder'
         ordering = ['-created_date']
         indexes = [
             models.Index(fields=['cin7_id']),
@@ -665,6 +673,84 @@ class SalesOrder(TimestampedModel):
         """Mark order as synced with Cin7"""
         self.last_synced_at = timezone.now()
         self.save(update_fields=['last_synced_at'])
+
+
+# ==================== SALES ORDER LINE ITEM ====================
+
+class SalesOrderLineItemManager(models.Manager):
+    """Custom manager for SalesOrderLineItem"""
+
+    def get_for_order(self, sales_order_cin7_id):
+        """Get all line items for a sales order"""
+        return self.filter(cin7_sales_order_id=sales_order_cin7_id)
+
+
+class SalesOrderLineItem(TimestampedModel):
+    """
+    Sales order line items from Cin7
+    Individual products/items on a sales order
+    """
+
+    # Core Identifiers
+    cin7_line_id = models.CharField(max_length=100, db_index=True, help_text="Cin7 line item ID")
+    cin7_sales_order_id = models.CharField(max_length=100, db_index=True, help_text="Cin7 sales order ID")
+
+    # Relations
+    sales_order = models.ForeignKey(
+        SalesOrder, on_delete=models.CASCADE, related_name='line_items',
+        null=True, blank=True
+    )
+    product = models.ForeignKey(
+        Product, on_delete=models.PROTECT, related_name='sales_line_items',
+        null=True, blank=True
+    )
+
+    # Product Identifiers (denormalized)
+    cin7_product_id = models.IntegerField(null=True, blank=True, db_index=True)
+    cin7_product_option_id = models.IntegerField(null=True, blank=True)
+    code = models.CharField(max_length=100, db_index=True, help_text="SKU/Product code")
+    name = models.CharField(max_length=255)
+    barcode = models.CharField(max_length=100)
+
+    # Variant Options
+    option1 = models.CharField(max_length=100)
+    option2 = models.CharField(max_length=100)
+    option3 = models.CharField(max_length=100)
+
+    # Quantities
+    qty = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    qty_shipped = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+
+    # Pricing
+    unit_price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    unit_cost = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    discount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    tax_rate = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    line_total = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, db_index=True)
+
+    # Additional Info
+    comments = models.TextField(blank=True)
+    sort_order = models.IntegerField(null=True, blank=True)
+    line_type = models.CharField(max_length=50)
+
+    # Raw Data
+    raw_data = models.JSONField(default=dict, blank=True)
+
+    objects = SalesOrderLineItemManager()
+
+    class Meta:
+        db_table = 'cin7_sync_salesorderlineitem'
+        ordering = ['cin7_sales_order_id', 'sort_order']
+        indexes = [
+            models.Index(fields=['cin7_line_id']),
+            models.Index(fields=['cin7_sales_order_id']),
+            models.Index(fields=['cin7_product_id']),
+            models.Index(fields=['code']),
+            models.Index(fields=['line_total']),
+        ]
+
+    def __str__(self):
+        return f"{self.code} - {self.name} (Qty: {self.qty})"
 
 
 # ==================== PURCHASE ORDER ====================
@@ -794,6 +880,7 @@ class PurchaseOrder(TimestampedModel):
     objects = PurchaseOrderManager()
 
     class Meta:
+        db_table = 'cin7_sync_purchaseorder'
         ordering = ['-created_date']
         indexes = [
             models.Index(fields=['cin7_id']),
@@ -877,6 +964,7 @@ class Stock(TimestampedModel):
     objects = StockManager()
 
     class Meta:
+        db_table = 'cin7_sync_stock'
         unique_together = [['cin7_product_option_id', 'cin7_branch_id']]
         ordering = ['product_name', 'code', 'branch_name']
         indexes = [

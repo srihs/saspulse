@@ -32,7 +32,7 @@ class LoginView(View):
         """Display login form."""
         # Redirect if already authenticated
         if auth_backend.is_authenticated(request):
-            return redirect('dashboard:index')
+            return redirect('dashboard:home')
 
         form = LoginForm()
         next_url = request.GET.get('next', '')
@@ -87,7 +87,7 @@ class LoginView(View):
                 # Redirect to next URL or dashboard
                 if next_url and next_url.startswith('/'):
                     return redirect(next_url)
-                return redirect('dashboard:index')
+                return redirect('dashboard:home')
             else:
                 # Authentication failed
                 messages.error(
@@ -126,7 +126,7 @@ class RegisterView(View):
         """Display registration form."""
         # Redirect if already authenticated
         if auth_backend.is_authenticated(request):
-            return redirect('dashboard:index')
+            return redirect('dashboard:home')
 
         form = RegisterForm()
         return render(request, self.template_name, {'form': form})
@@ -219,7 +219,7 @@ class ForgotPasswordView(View):
         """Display forgot password form."""
         # Redirect if already authenticated
         if auth_backend.is_authenticated(request):
-            return redirect('dashboard:index')
+            return redirect('dashboard:home')
 
         form = ForgotPasswordForm()
         return render(request, self.template_name, {'form': form})

@@ -130,3 +130,6 @@ Makefile
 # **/migrations/**
 # !**/migrations
 # !**/migrations/__init__.py
+
+docs/
+*.sqlite3

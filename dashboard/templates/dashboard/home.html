@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}Stock vs BTS Sales Dashboard - SasPulse{% endblock %}
+
+{% block content %}
+<div class="mb-9">
+    <!-- Header -->
+    <div class="row g-3 mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <h2 class="mb-2">Stock vs BTS Sales Dashboard</h2>
+                    <h5 class="text-body-tertiary fw-semibold">Analysis Period: {{ bts_period }}</h5>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Date Range Picker -->
+    <div class="row g-3 mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <form method="GET" action="{% url 'dashboard:home' %}" class="row g-3 align-items-end">
+                        <div class="col-md-4">
+                            <label class="form-label" for="start_date">Start Date</label>
+                            <input class="form-control" type="date" id="start_date" name="start_date" value="{{ start_date }}" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="end_date">End Date</label>
+                            <input class="form-control" type="date" id="end_date" name="end_date" value="{{ end_date }}" required>
+                        </div>
+                        <div class="col-md-4">
+                            <button class="btn btn-primary w-100" type="submit">
+                                <span class="fas fa-sync-alt me-2"></span>Update Dashboard
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Summary Tiles -->
+    <div class="summary-tiles">
+        <!-- Total Stock Value -->
+        <div class="tile tile-stock">
+            <div class="tile-label">Total Stock Value</div>
+            <div class="tile-value">${{ summary.total_stock_value|floatformat:2|intcomma }}</div>
+            <div class="tile-subtitle">Current inventory value</div>
+        </div>
+
+        <!-- Total BTS Sales -->
+        <div class="tile tile-sales">
+            <div class="tile-label">Total BTS Sales</div>
+            <div class="tile-value green">${{ summary.total_bts_sales|floatformat:2|intcomma }}</div>
+            <div class="tile-subtitle">Back to School 2026 (YTD)</div>
+        </div>
+
+        <!-- Stock vs Sales Ratio -->
+        <div class="tile tile-ratio {% if summary.overall_ratio > 3 %}critical{% elif summary.overall_ratio > 2 %}warning{% else %}healthy{% endif %}">
+            <div class="tile-label">Stock vs Sales Ratio</div>
+            <div class="tile-value {% if summary.overall_ratio > 3 %}red{% elif summary.overall_ratio > 2 %}amber{% else %}green{% endif %}">
+                {{ summary.overall_ratio }}x
+            </div>
+            <div class="tile-subtitle">Overall ratio</div>
+            {% if summary.overall_ratio > 3 %}
+                <span class="status-badge critical">High Risk</span>
+            {% elif summary.overall_ratio > 2 %}
+                <span class="status-badge warning">Monitor</span>
+            {% else %}
+                <span class="status-badge healthy">Healthy</span>
+            {% endif %}
+        </div>
+
+        <!-- Customers at Risk -->
+        <div class="tile tile-risk">
+            <div class="tile-label">Customers at Risk</div>
+            <div class="tile-value red">{{ summary.customers_at_risk }}</div>
+            <div class="tile-subtitle">Ratio > {{ summary.risk_threshold }}</div>
+        </div>
+    </div>
+
+    <!-- Customer Rankings Section -->
+    <div class="row g-3 mb-4">
+        <div class="col-12">
+            <div class="card customer-rankings-card">
+                <div class="card-body p-0">
+                    <div class="p-4 border-bottom">
+                        <h3 class="mb-1">Customer Rankings</h3>
+                        <p class="text-body-tertiary mb-0">Who is Holding Too Much Stock?</p>
+                    </div>
+
+                    {% if customer_rankings %}
+                    <div class="table-responsive p-0">
+                        <table id="customerRankingsTable" class="ranking-table table table-hover mb-0"
+                               data-start-date="{{ start_date }}"
+                               data-end-date="{{ end_date }}"
+                               data-bts-period="{{ bts_period }}">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Customer Name</th>
+                                    <th class="text-end">Stock Value</th>
+                                    <th class="text-end">BTS Sales</th>
+                                    <th class="text-end">Ratio</th>
+                                    <th class="text-center">Risk Band</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for customer in customer_rankings %}
+                                <tr class="{{ customer.risk_band }}">
+                                    <td>{{ forloop.counter }}</td>
+                                    <td class="customer-name">{{ customer.customer_name }}</td>
+                                    <td class="text-end" data-order="{{ customer.stock_value }}">${{ customer.stock_value|floatformat:2|intcomma }}</td>
+                                    <td class="text-end" data-order="{{ customer.bts_sales }}">${{ customer.bts_sales|floatformat:2|intcomma }}</td>
+                                    <td class="text-end" data-order="{{ customer.ratio }}">
+                                        <span class="ratio-value {{ customer.risk_band }}">{{ customer.ratio_display }}x</span>
+                                    </td>
+                                    <td class="text-center" data-order="{{ customer.ratio }}">
+                                        <span class="status-badge {{ customer.risk_band }}">{{ customer.risk_label }}</span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="p-4 text-center text-muted">
+                        <p class="mb-0">No customer data available for the selected period.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Product Rankings Section -->
+    <div class="row g-3 mb-4">
+        <div class="col-12">
+            <div class="card product-rankings-card">
+                <div class="card-body p-0">
+                    <div class="p-4 border-bottom">
+                        <h3 class="mb-1">Product Rankings</h3>
+                        <p class="text-body-tertiary mb-0">What Products Are the Biggest Problem?</p>
+                    </div>
+
+                    {% if product_rankings %}
+                    <div class="table-responsive p-0">
+                        <table id="productRankingsTable" class="ranking-table table table-hover mb-0"
+                               data-start-date="{{ start_date }}"
+                               data-end-date="{{ end_date }}"
+                               data-bts-period="{{ bts_period }}">
+                            <thead>
+                                <tr>
+                                    <th class="text-center">#</th>
+                                    <th>School</th>
+                                    <th>Style Code</th>
+                                    <th>Product Name</th>
+                                    <th class="text-end">Stock Value</th>
+                                    <th class="text-end">BTS Sales</th>
+                                    <th class="text-end">Ratio</th>
+                                    <th class="text-center">Risk Band</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for product in product_rankings %}
+                                <tr class="{{ product.risk_band }}">
+                                    <td>{{ forloop.counter }}</td>
+                                    <td class="school-name">{{ product.school }}</td>
+                                    <td class="style-code">{{ product.style_code }}</td>
+                                    <td class="product-name">{{ product.product_name }}</td>
+                                    <td class="text-end" data-order="{{ product.stock_value }}">${{ product.stock_value|floatformat:2|intcomma }}</td>
+                                    <td class="text-end" data-order="{{ product.bts_sales }}">${{ product.bts_sales|floatformat:2|intcomma }}</td>
+                                    <td class="text-end" data-order="{{ product.ratio }}">
+                                        <span class="ratio-value {{ product.risk_band }}">{{ product.ratio_display }}x</span>
+                                    </td>
+                                    <td class="text-center" data-order="{{ product.ratio }}">
+                                        <span class="status-badge {{ product.risk_band }}">{{ product.risk_label }}</span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="p-4 text-center text-muted">
+                        <p class="mb-0">No product data available for the selected period.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
