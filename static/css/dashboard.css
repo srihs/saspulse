@@ -790,3 +790,154 @@ div.dataTables_wrapper div.dataTables_paginate {
     text-align: right !important;
     padding-right: 1rem !important;
 }
+
+/* BTS Forecasting Tables - Color Coding for Historical Data */
+/* School Forecast Table */
+#schoolForecastTable {
+    font-size: 1rem;
+}
+
+#schoolForecastTable thead th {
+    font-size: 1.05rem;
+    font-weight: 600;
+}
+
+#schoolForecastTable tbody td {
+    font-size: 0.95rem;
+    padding: 0.75rem;
+}
+
+#schoolForecastTable thead th:nth-child(2) {
+    background-color: #d1fae5 !important;
+    color: #065f46 !important;
+}
+
+#schoolForecastTable tbody td:nth-child(2) {
+    background-color: #f0fdf4 !important;
+    font-weight: 600;
+}
+
+#schoolForecastTable thead th:nth-child(3) {
+    background-color: #dbeafe !important;
+    color: #1e3a8a !important;
+}
+
+#schoolForecastTable tbody td:nth-child(3) {
+    background-color: #eff6ff !important;
+}
+
+#schoolForecastTable thead th:nth-child(4) {
+    background-color: #fef3c7 !important;
+    color: #78350f !important;
+}
+
+#schoolForecastTable tbody td:nth-child(4) {
+    background-color: #fefce8 !important;
+}
+
+#schoolForecastTable thead th:nth-child(5) {
+    background-color: #fce7f3 !important;
+    color: #831843 !important;
+}
+
+#schoolForecastTable tbody td:nth-child(5) {
+    background-color: #fdf2f8 !important;
+}
+
+#schoolForecastTable thead th:nth-child(6) {
+    background-color: #e0e7ff !important;
+    color: #3730a3 !important;
+}
+
+#schoolForecastTable tbody td:nth-child(6) {
+    background-color: #eef2ff !important;
+}
+
+#schoolForecastTable thead th:nth-child(7) {
+    background-color: #e0f2fe !important;
+    color: #075985 !important;
+}
+
+#schoolForecastTable tbody td:nth-child(7) {
+    background-color: #f0f9ff !important;
+}
+
+#schoolForecastTable thead th:nth-child(8),
+#schoolForecastTable tbody td:nth-child(8) {
+    padding-right: 1.5rem !important;
+}
+
+/* Product Forecast Table */
+#productForecastTable {
+    font-size: 1rem;
+}
+
+#productForecastTable thead th {
+    font-size: 1.05rem;
+    font-weight: 600;
+}
+
+#productForecastTable tbody td {
+    font-size: 0.95rem;
+    padding: 0.75rem;
+}
+
+#productForecastTable thead th:nth-child(2) {
+    background-color: #d1fae5 !important;
+    color: #065f46 !important;
+}
+
+#productForecastTable tbody td:nth-child(2) {
+    background-color: #f0fdf4 !important;
+    font-weight: 600;
+}
+
+#productForecastTable thead th:nth-child(3) {
+    background-color: #dbeafe !important;
+    color: #1e3a8a !important;
+}
+
+#productForecastTable tbody td:nth-child(3) {
+    background-color: #eff6ff !important;
+}
+
+#productForecastTable thead th:nth-child(4) {
+    background-color: #fef3c7 !important;
+    color: #78350f !important;
+}
+
+#productForecastTable tbody td:nth-child(4) {
+    background-color: #fefce8 !important;
+}
+
+#productForecastTable thead th:nth-child(5) {
+    background-color: #fce7f3 !important;  /* 2024 Actual - Pink */
+    color: #831843 !important;
+}
+
+#productForecastTable tbody td:nth-child(5) {
+    background-color: #fdf2f8 !important;
+}
+
+#productForecastTable thead th:nth-child(6) {
+    background-color: #e0e7ff !important;  /* 2023 Actual - Indigo */
+    color: #3730a3 !important;
+}
+
+#productForecastTable tbody td:nth-child(6) {
+    background-color: #eef2ff !important;
+}
+
+#productForecastTable thead th:nth-child(7) {
+    background-color: #e0f2fe !important;  /* 2022 Actual - Light Blue */
+    color: #075985 !important;
+}
+
+#productForecastTable tbody td:nth-child(7) {
+    background-color: #f0f9ff !important;
+}
+
+#productForecastTable thead th:nth-child(8),
+#productForecastTable tbody td:nth-child(8) {
+    padding-right: 1.5rem !important;
+}

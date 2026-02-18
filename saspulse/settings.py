@@ -303,6 +303,15 @@ if not DEBUG:
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
+    'filters': {
+        'suppress_https_errors': {
+            '()': 'django.utils.log.CallbackFilter',
+            'callback': lambda record: not (
+                'HTTPS' in record.getMessage() or
+                'Bad request version' in record.getMessage()
+            ),
+        },
+    },
     'formatters': {
         'verbose': {
             'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
@@ -317,6 +326,7 @@ LOGGING = {
         'console': {
             'class': 'logging.StreamHandler',
             'formatter': 'verbose',
+            'filters': ['suppress_https_errors'],
         },
     },
     'root': {
@@ -327,6 +337,11 @@ LOGGING = {
         'django': {
             'handlers': ['console'],
             'level': os.getenv('DJANGO_LOG_LEVEL', 'INFO'),
+            'propagate': False,
+        },
+        'django.server': {
+            'handlers': ['console'],
+            'level': 'WARNING',  # Suppress INFO level server logs
             'propagate': False,
         },
         'saspulse': {

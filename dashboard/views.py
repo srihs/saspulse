@@ -1138,6 +1138,146 @@ def calculate_school_forecasts():
     return school_data
 
 
+def calculate_customer_lifetime_value():
+    """
+    Calculate Customer Lifetime Value (CLV) prediction for each school
+    Predicts 12-month revenue, churn risk, and customer value tier
+    """
+    from django.db import connection
+    from datetime import datetime, timedelta
+
+    with connection.cursor() as cursor:
+        # Get historical sales data per school
+        cursor.execute("""
+            SELECT
+                p.sub_category as school,
+                YEAR(so.invoice_date) as year,
+                MONTH(so.invoice_date) as month_num,
+                COUNT(DISTINCT so.id) as order_count,
+                SUM(COALESCE(soli.qty, 0) * COALESCE(soli.unit_price, 0)) as total_revenue,
+                MAX(so.invoice_date) as last_order_date
+            FROM cin7_sync_salesorder so
+            JOIN cin7_sync_salesorderlineitem soli ON CAST(so.cin7_id AS CHAR) = soli.cin7_sales_order_id
+            JOIN cin7_sync_product p ON soli.cin7_product_id = p.cin7_id
+            WHERE (p.category_name = 'Wholesale Schools' OR p.category_name LIKE %s)
+              AND so.invoice_date IS NOT NULL
+              AND p.sub_category IS NOT NULL
+              AND p.sub_category <> ''
+              AND p.sub_category NOT LIKE %s
+              AND YEAR(so.invoice_date) >= 2022
+            GROUP BY p.sub_category, YEAR(so.invoice_date), MONTH(so.invoice_date)
+            ORDER BY p.sub_category, year DESC, month_num DESC
+        """, ['% Shop', '%Shop%'])
+
+        rows = cursor.fetchall()
+
+    # Organize data by school
+    school_data = {}
+    for row in rows:
+        school = row[0]
+        if school not in school_data:
+            school_data[school] = {
+                'monthly_data': [],
+                'last_order_date': None
+            }
+
+        school_data[school]['monthly_data'].append({
+            'year': int(row[1]),
+            'month': int(row[2]),
+            'order_count': int(row[3]),
+            'revenue': float(row[4] or 0)
+        })
+
+        # Track most recent order date
+        if row[5]:
+            if not school_data[school]['last_order_date'] or row[5] > school_data[school]['last_order_date']:
+                school_data[school]['last_order_date'] = row[5]
+
+    # Calculate CLV metrics for each school
+    clv_results = []
+    current_date = datetime.now()
+
+    for school, data in school_data.items():
+        monthly_data = data['monthly_data']
+        last_order = data['last_order_date']
+
+        if not monthly_data:
+            continue
+
+        # Calculate historical metrics
+        total_revenue = sum(m['revenue'] for m in monthly_data)
+        total_orders = sum(m['order_count'] for m in monthly_data)
+        months_active = len(monthly_data)
+
+        # Average monthly revenue
+        avg_monthly_revenue = total_revenue / months_active if months_active > 0 else 0
+
+        # Calculate trend (are they growing or declining?)
+        recent_6_months = [m for m in monthly_data if m['year'] >= 2025]
+        older_6_months = [m for m in monthly_data if m['year'] < 2025]
+
+        recent_avg = sum(m['revenue'] for m in recent_6_months) / len(recent_6_months) if recent_6_months else 0
+        older_avg = sum(m['revenue'] for m in older_6_months) / len(older_6_months) if older_6_months else avg_monthly_revenue
+
+        if older_avg > 0:
+            growth_rate = ((recent_avg - older_avg) / older_avg) * 100
+        else:
+            growth_rate = 0
+
+        # Predict next 12 months revenue (using average + growth trend)
+        predicted_12m_revenue = avg_monthly_revenue * 12 * (1 + (growth_rate / 100))
+
+        # Calculate churn risk
+        if last_order:
+            days_since_last_order = (current_date - last_order).days
+        else:
+            days_since_last_order = 999
+
+        # Churn risk logic
+        if days_since_last_order > 365:
+            churn_risk = "High"
+            churn_score = 80
+        elif days_since_last_order > 180:
+            churn_risk = "Medium"
+            churn_score = 50
+        elif days_since_last_order > 90:
+            churn_risk = "Low"
+            churn_score = 20
+        else:
+            churn_risk = "Very Low"
+            churn_score = 5
+
+        # Customer value tier
+        if predicted_12m_revenue > 100000:
+            value_tier = "VIP"
+        elif predicted_12m_revenue > 50000:
+            value_tier = "High Value"
+        elif predicted_12m_revenue > 20000:
+            value_tier = "Medium Value"
+        else:
+            value_tier = "Low Value"
+
+        clv_results.append({
+            'school': school,
+            'predicted_12m_revenue': predicted_12m_revenue,
+            'historical_total_revenue': total_revenue,
+            'avg_monthly_revenue': avg_monthly_revenue,
+            'total_orders': total_orders,
+            'months_active': months_active,
+            'growth_rate': growth_rate,
+            'churn_risk': churn_risk,
+            'churn_score': churn_score,
+            'value_tier': value_tier,
+            'days_since_last_order': days_since_last_order,
+            'last_order_date': last_order
+        })
+
+    # Sort by predicted revenue (highest value customers first)
+    clv_results.sort(key=lambda x: x['predicted_12m_revenue'], reverse=True)
+
+    return clv_results
+
+
 def calculate_product_forecasts():
     """
     Calculate historical sales by product for forecasting
@@ -1161,9 +1301,7 @@ def calculate_product_forecasts():
               AND p.sub_category NOT LIKE %s
               AND MONTH(so.invoice_date) IN (1, 2)
             GROUP BY p.name, YEAR(so.invoice_date), MONTH(so.invoice_date)
-            HAVING SUM(COALESCE(soli.qty, 0) * COALESCE(soli.unit_price, 0)) > 1000
             ORDER BY total_sales DESC
-            LIMIT 50
         """, ['% Shop', '%Shop%'])
 
         rows = cursor.fetchall()
@@ -1260,37 +1398,53 @@ def bts_forecasting(request):
         historical_data = calculate_bts_historical_data()
         school_data = calculate_school_forecasts()
         product_data = calculate_product_forecasts()
+        clv_data = calculate_customer_lifetime_value()
 
         # Generate overall forecast
         overall_forecast = generate_simple_forecast(historical_data)
 
-        # Generate top 10 school forecasts
+        # Generate top 20 school forecasts
         school_forecasts = []
-        for school, data in sorted(school_data.items(), key=lambda x: sum(d['sales'] for d in x[1]), reverse=True)[:10]:
+        for school, data in sorted(school_data.items(), key=lambda x: sum(d['sales'] for d in x[1]), reverse=True)[:20]:
             forecast = generate_simple_forecast([{'month_num': d['month'], 'year': d['year'], 'total_sales': d['sales']} for d in data])
+
+            # Create a dictionary mapping year to sales for easy template access
+            sales_by_year = {}
+            for i, year in enumerate(forecast.get('historical_years', [])):
+                sales_by_year[year] = forecast.get('historical_sales', [])[i] if i < len(forecast.get('historical_sales', [])) else 0
+
             school_forecasts.append({
                 'school': school,
                 'forecast': forecast['forecast_2027'],
                 'historical_sales': forecast.get('historical_sales', []),
-                'historical_years': forecast.get('historical_years', [])
+                'historical_years': forecast.get('historical_years', []),
+                'sales_by_year': sales_by_year
             })
 
         # Generate top 20 product forecasts
         product_forecasts = []
         for product, data in sorted(product_data.items(), key=lambda x: sum(d['sales'] for d in x[1]), reverse=True)[:20]:
             forecast = generate_simple_forecast([{'month_num': d['month'], 'year': d['year'], 'total_sales': d['sales']} for d in data])
+
+            # Create a dictionary mapping year to sales for easy template access
+            sales_by_year = {}
+            for i, year in enumerate(forecast.get('historical_years', [])):
+                sales_by_year[year] = forecast.get('historical_sales', [])[i] if i < len(forecast.get('historical_sales', [])) else 0
+
             product_forecasts.append({
                 'product': product,
                 'forecast': forecast['forecast_2027'],
                 'historical_sales': forecast.get('historical_sales', []),
-                'historical_years': forecast.get('historical_years', [])
+                'historical_years': forecast.get('historical_years', []),
+                'sales_by_year': sales_by_year
             })
 
         forecast_data = {
             'overall_forecast': overall_forecast,
             'school_forecasts': school_forecasts,
             'product_forecasts': product_forecasts,
-            'historical_data': historical_data
+            'historical_data': historical_data,
+            'clv_data': clv_data
         }
 
         # Cache for 1 hour
@@ -1303,7 +1457,8 @@ def bts_forecasting(request):
         'school_forecasts': forecast_data['school_forecasts'],
         'product_forecasts': forecast_data['product_forecasts'],
         'historical_data': forecast_data['historical_data'],
-        'historical_data_json': json.dumps(forecast_data['historical_data'])
+        'historical_data_json': json.dumps(forecast_data['historical_data']),
+        'clv_data': forecast_data.get('clv_data', [])
     }
 
     return render(request, 'dashboard/bts_forecasting.html', context)
