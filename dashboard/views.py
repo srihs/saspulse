@@ -1048,3 +1048,262 @@ def refresh_cache(request):
         'status': 'success',
         'message': 'Cache refreshed successfully'
     })
+
+
+def calculate_bts_historical_data():
+    """
+    Calculate historical BTS sales data for forecasting
+    Returns monthly sales data for the BTS period (Jan-Feb) across all years
+    """
+    from django.db import connection
+    from datetime import datetime
+
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            SELECT
+                DATE_FORMAT(so.invoice_date, '%%Y-%%m') as month,
+                YEAR(so.invoice_date) as year,
+                MONTH(so.invoice_date) as month_num,
+                SUM(COALESCE(soli.qty, 0) * COALESCE(soli.unit_price, 0)) as total_sales,
+                COUNT(DISTINCT so.cin7_id) as order_count,
+                COUNT(DISTINCT so.customer_name) as customer_count
+            FROM cin7_sync_salesorder so
+            JOIN cin7_sync_salesorderlineitem soli ON CAST(so.cin7_id AS CHAR) = soli.cin7_sales_order_id
+            JOIN cin7_sync_product p ON soli.cin7_product_id = p.cin7_id
+            WHERE (p.category_name = 'Wholesale Schools' OR p.category_name LIKE %s)
+              AND so.invoice_date IS NOT NULL
+              AND MONTH(so.invoice_date) IN (1, 2)
+              AND p.sub_category IS NOT NULL
+              AND p.sub_category <> ''
+              AND p.sub_category NOT LIKE %s
+            GROUP BY DATE_FORMAT(so.invoice_date, '%%Y-%%m'), YEAR(so.invoice_date), MONTH(so.invoice_date)
+            ORDER BY so.invoice_date
+        """, ['% Shop', '%Shop%'])
+
+        rows = cursor.fetchall()
+
+    historical_data = []
+    for row in rows:
+        historical_data.append({
+            'month': row[0],
+            'year': int(row[1]),
+            'month_num': int(row[2]),
+            'total_sales': float(row[3] or 0),
+            'order_count': int(row[4] or 0),
+            'customer_count': int(row[5] or 0)
+        })
+
+    return historical_data
+
+
+def calculate_school_forecasts():
+    """
+    Calculate historical sales by school for forecasting
+    """
+    from django.db import connection
+
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            SELECT
+                p.sub_category as school,
+                YEAR(so.invoice_date) as year,
+                MONTH(so.invoice_date) as month_num,
+                SUM(COALESCE(soli.qty, 0) * COALESCE(soli.unit_price, 0)) as total_sales
+            FROM cin7_sync_salesorder so
+            JOIN cin7_sync_salesorderlineitem soli ON CAST(so.cin7_id AS CHAR) = soli.cin7_sales_order_id
+            JOIN cin7_sync_product p ON soli.cin7_product_id = p.cin7_id
+            WHERE (p.category_name = 'Wholesale Schools' OR p.category_name LIKE %s)
+              AND so.invoice_date IS NOT NULL
+              AND p.sub_category IS NOT NULL
+              AND p.sub_category <> ''
+              AND p.sub_category NOT LIKE %s
+              AND MONTH(so.invoice_date) IN (1, 2)
+            GROUP BY p.sub_category, YEAR(so.invoice_date), MONTH(so.invoice_date)
+            ORDER BY p.sub_category, YEAR(so.invoice_date), MONTH(so.invoice_date)
+        """, ['% Shop', '%Shop%'])
+
+        rows = cursor.fetchall()
+
+    school_data = {}
+    for row in rows:
+        school = row[0]
+        if school not in school_data:
+            school_data[school] = []
+        school_data[school].append({
+            'year': int(row[1]),
+            'month': int(row[2]),
+            'sales': float(row[3] or 0)
+        })
+
+    return school_data
+
+
+def calculate_product_forecasts():
+    """
+    Calculate historical sales by product for forecasting
+    """
+    from django.db import connection
+
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            SELECT
+                p.name as product,
+                YEAR(so.invoice_date) as year,
+                MONTH(so.invoice_date) as month_num,
+                SUM(COALESCE(soli.qty, 0) * COALESCE(soli.unit_price, 0)) as total_sales
+            FROM cin7_sync_salesorder so
+            JOIN cin7_sync_salesorderlineitem soli ON CAST(so.cin7_id AS CHAR) = soli.cin7_sales_order_id
+            JOIN cin7_sync_product p ON soli.cin7_product_id = p.cin7_id
+            WHERE (p.category_name = 'Wholesale Schools' OR p.category_name LIKE %s)
+              AND so.invoice_date IS NOT NULL
+              AND p.sub_category IS NOT NULL
+              AND p.sub_category <> ''
+              AND p.sub_category NOT LIKE %s
+              AND MONTH(so.invoice_date) IN (1, 2)
+            GROUP BY p.name, YEAR(so.invoice_date), MONTH(so.invoice_date)
+            HAVING SUM(COALESCE(soli.qty, 0) * COALESCE(soli.unit_price, 0)) > 1000
+            ORDER BY total_sales DESC
+            LIMIT 50
+        """, ['% Shop', '%Shop%'])
+
+        rows = cursor.fetchall()
+
+    product_data = {}
+    for row in rows:
+        product = row[0]
+        if product not in product_data:
+            product_data[product] = []
+        product_data[product].append({
+            'year': int(row[1]),
+            'month': int(row[2]),
+            'sales': float(row[3] or 0)
+        })
+
+    return product_data
+
+
+def generate_simple_forecast(historical_data):
+    """
+    Generate simple forecast using moving average (fallback if Prophet fails)
+    """
+    if not historical_data:
+        return {'forecast_2027': 0, 'confidence_lower': 0, 'confidence_upper': 0}
+
+    # Calculate BTS season sales (Jan-Feb) for each year
+    bts_sales_by_year = {}
+    for item in historical_data:
+        if item['month_num'] in [1, 2]:
+            year = item['year']
+            if year not in bts_sales_by_year:
+                bts_sales_by_year[year] = 0
+            bts_sales_by_year[year] += item['total_sales']
+
+    if not bts_sales_by_year:
+        return {'forecast_2027': 0, 'confidence_lower': 0, 'confidence_upper': 0}
+
+    # Calculate growth rate
+    years = sorted(bts_sales_by_year.keys())
+    if len(years) < 2:
+        forecast = bts_sales_by_year[years[0]]
+        return {
+            'forecast_2027': forecast,
+            'confidence_lower': forecast * 0.8,
+            'confidence_upper': forecast * 1.2
+        }
+
+    # Calculate average year-over-year growth
+    growth_rates = []
+    for i in range(1, len(years)):
+        prev_sales = bts_sales_by_year[years[i-1]]
+        curr_sales = bts_sales_by_year[years[i]]
+        if prev_sales > 0:
+            growth_rate = (curr_sales - prev_sales) / prev_sales
+            growth_rates.append(growth_rate)
+
+    avg_growth = sum(growth_rates) / len(growth_rates) if growth_rates else 0
+    latest_year = years[-1]
+    latest_sales = bts_sales_by_year[latest_year]
+
+    # Project to 2027
+    years_to_forecast = 2027 - latest_year
+    forecast = latest_sales * ((1 + avg_growth) ** years_to_forecast)
+
+    # Calculate confidence intervals (±20%)
+    return {
+        'forecast_2027': forecast,
+        'confidence_lower': forecast * 0.8,
+        'confidence_upper': forecast * 1.2,
+        'historical_years': years,
+        'historical_sales': [bts_sales_by_year[year] for year in years]
+    }
+
+
+@require_http_methods(["GET"])
+def bts_forecasting(request):
+    """
+    BTS Sales Forecasting Dashboard
+    Predict next year's BTS sales (Jan-Feb 2027)
+    """
+    if not auth_backend.is_authenticated(request):
+        return redirect('users:login')
+
+    from django.core.cache import cache
+
+    # Check cache
+    cache_key = 'bts_forecasting_data'
+    cached_data = cache.get(cache_key)
+
+    if cached_data:
+        forecast_data = cached_data
+    else:
+        # Calculate historical data
+        historical_data = calculate_bts_historical_data()
+        school_data = calculate_school_forecasts()
+        product_data = calculate_product_forecasts()
+
+        # Generate overall forecast
+        overall_forecast = generate_simple_forecast(historical_data)
+
+        # Generate top 10 school forecasts
+        school_forecasts = []
+        for school, data in sorted(school_data.items(), key=lambda x: sum(d['sales'] for d in x[1]), reverse=True)[:10]:
+            forecast = generate_simple_forecast([{'month_num': d['month'], 'year': d['year'], 'total_sales': d['sales']} for d in data])
+            school_forecasts.append({
+                'school': school,
+                'forecast': forecast['forecast_2027'],
+                'historical_sales': forecast.get('historical_sales', []),
+                'historical_years': forecast.get('historical_years', [])
+            })
+
+        # Generate top 20 product forecasts
+        product_forecasts = []
+        for product, data in sorted(product_data.items(), key=lambda x: sum(d['sales'] for d in x[1]), reverse=True)[:20]:
+            forecast = generate_simple_forecast([{'month_num': d['month'], 'year': d['year'], 'total_sales': d['sales']} for d in data])
+            product_forecasts.append({
+                'product': product,
+                'forecast': forecast['forecast_2027'],
+                'historical_sales': forecast.get('historical_sales', []),
+                'historical_years': forecast.get('historical_years', [])
+            })
+
+        forecast_data = {
+            'overall_forecast': overall_forecast,
+            'school_forecasts': school_forecasts,
+            'product_forecasts': product_forecasts,
+            'historical_data': historical_data
+        }
+
+        # Cache for 1 hour
+        cache.set(cache_key, forecast_data, 3600)
+
+    import json
+
+    context = {
+        'overall_forecast': forecast_data['overall_forecast'],
+        'school_forecasts': forecast_data['school_forecasts'],
+        'product_forecasts': forecast_data['product_forecasts'],
+        'historical_data': forecast_data['historical_data'],
+        'historical_data_json': json.dumps(forecast_data['historical_data'])
+    }
+
+    return render(request, 'dashboard/bts_forecasting.html', context)

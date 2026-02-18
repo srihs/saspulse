@@ -88,9 +88,23 @@
                   <div class="parent-wrapper label-1">
                     <ul class="nav collapse parent show" data-bs-parent="#navbarVerticalCollapse" id="nv-sales">
                       <li class="collapsed-nav-item-title d-none">Sales</li>
-                      <li class="nav-item"><a class="nav-link active" href="/dashboard/">
-                          <div class="d-flex align-items-center"><span class="nav-link-text">BTS Dashboard</span></div>
+                      <li class="nav-item"><a class="nav-link dropdown-indicator" href="#nv-back-to-school" data-bs-toggle="collapse" aria-expanded="false" aria-controls="nv-back-to-school">
+                          <div class="d-flex align-items-center">
+                            <div class="dropdown-indicator-icon-wrapper"><span class="fas fa-caret-right dropdown-indicator-icon"></span></div><span class="nav-link-text">Back to school</span>
+                          </div>
                         </a>
+                        <div class="parent-wrapper label-1">
+                          <ul class="nav collapse parent" data-bs-parent="#nv-sales" id="nv-back-to-school">
+                            <li class="nav-item"><a class="nav-link active" href="/dashboard/">
+                                <div class="d-flex align-items-center"><span class="nav-link-text">BTS Dashboard</span></div>
+                              </a>
+                            </li>
+                            <li class="nav-item"><a class="nav-link" href="/dashboard/bts-forecasting/">
+                                <div class="d-flex align-items-center"><span class="nav-link-text">BTS Sales Forecasting</span></div>
+                              </a>
+                            </li>
+                          </ul>
+                        </div>
                       </li>
                       <li class="nav-item"><a class="nav-link" href="/dashboard/retail-sales/">
                           <div class="d-flex align-items-center"><span class="nav-link-text">Retail sales</span></div>

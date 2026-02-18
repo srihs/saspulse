@@ -1,0 +1,393 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block title %}BTS Sales Forecasting - SAS Pulse{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4">
+    <!-- Page Header -->
+    <div class="row g-3 mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2 class="mb-0">BTS Sales Forecasting</h2>
+                    <p class="text-muted mb-0">Predictive Analytics for 2027 Back-to-School Season</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Overall Forecast Summary -->
+    <div class="row g-3 mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <h4 class="mb-3">2027 BTS Season Forecast (Jan-Feb)</h4>
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <div class="summary-tile forecast-tile">
+                                <div class="tile-icon">
+                                    <i class="fas fa-chart-line"></i>
+                                </div>
+                                <div class="tile-content">
+                                    <div class="tile-label">Predicted Sales</div>
+                                    <div class="tile-value forecast-value">
+                                        ${{ overall_forecast.forecast_2027|floatformat:0|intcomma|default:"0" }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="summary-tile">
+                                <div class="tile-icon confidence-lower">
+                                    <i class="fas fa-arrow-down"></i>
+                                </div>
+                                <div class="tile-content">
+                                    <div class="tile-label">Lower Bound (80%)</div>
+                                    <div class="tile-value">
+                                        ${{ overall_forecast.confidence_lower|floatformat:0|intcomma|default:"0" }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="summary-tile">
+                                <div class="tile-icon confidence-upper">
+                                    <i class="fas fa-arrow-up"></i>
+                                </div>
+                                <div class="tile-content">
+                                    <div class="tile-label">Upper Bound (120%)</div>
+                                    <div class="tile-value">
+                                        ${{ overall_forecast.confidence_upper|floatformat:0|intcomma|default:"0" }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Historical Trend Chart -->
+    <div class="row g-3 mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="mb-3">Historical BTS Sales Trend</h5>
+                    <div id="historicalTrendChart" style="width: 100%; height: 400px;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Top 10 Schools Forecast -->
+    <div class="row g-3 mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="mb-3">Top 10 Schools - 2027 Forecast</h5>
+                    <div class="table-responsive">
+                        <table id="schoolForecastTable" class="table table-striped table-hover ranking-table" style="width:100%">
+                            <thead>
+                                <tr>
+                                    <th>School</th>
+                                    <th class="text-end">2027 Forecast</th>
+                                    <th class="text-end">2026 Actual</th>
+                                    <th class="text-end">2025 Actual</th>
+                                    <th class="text-end">Growth Trend</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for school in school_forecasts %}
+                                <tr>
+                                    <td>{{ school.school }}</td>
+                                    <td class="text-end" data-order="{{ school.forecast }}">${{ school.forecast|floatformat:0|intcomma }}</td>
+                                    <td class="text-end">
+                                        {% if school.historical_sales|length > 0 %}
+                                            ${{ school.historical_sales|last|floatformat:0|intcomma }}
+                                        {% else %}
+                                            N/A
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        {% if school.historical_sales|length > 1 %}
+                                            ${{ school.historical_sales.1|floatformat:0|intcomma }}
+                                        {% else %}
+                                            N/A
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        {% if school.historical_sales|length > 1 %}
+                                            {% widthratio school.historical_sales|last school.historical_sales.1 100 %}%
+                                        {% else %}
+                                            N/A
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Top 20 Products Forecast -->
+    <div class="row g-3 mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="mb-3">Top 20 Products - 2027 Forecast</h5>
+                    <div class="table-responsive">
+                        <table id="productForecastTable" class="table table-striped table-hover ranking-table" style="width:100%">
+                            <thead>
+                                <tr>
+                                    <th>Product</th>
+                                    <th class="text-end">2027 Forecast</th>
+                                    <th class="text-end">2026 Actual</th>
+                                    <th class="text-end">2025 Actual</th>
+                                    <th class="text-end">Growth Trend</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for product in product_forecasts %}
+                                <tr>
+                                    <td>{{ product.product }}</td>
+                                    <td class="text-end" data-order="{{ product.forecast }}">${{ product.forecast|floatformat:0|intcomma }}</td>
+                                    <td class="text-end">
+                                        {% if product.historical_sales|length > 0 %}
+                                            ${{ product.historical_sales|last|floatformat:0|intcomma }}
+                                        {% else %}
+                                            N/A
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        {% if product.historical_sales|length > 1 %}
+                                            ${{ product.historical_sales.1|floatformat:0|intcomma }}
+                                        {% else %}
+                                            N/A
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        {% if product.historical_sales|length > 1 %}
+                                            {% widthratio product.historical_sales|last product.historical_sales.1 100 %}%
+                                        {% else %}
+                                            N/A
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Methodology Note -->
+    <div class="row g-3 mb-4">
+        <div class="col-12">
+            <div class="card bg-light">
+                <div class="card-body">
+                    <h6 class="mb-2">Forecasting Methodology</h6>
+                    <p class="mb-0 text-muted small">
+                        Forecasts are generated using historical growth rate analysis based on {{ overall_forecast.historical_years|length }} years of BTS sales data ({{ overall_forecast.historical_years|first }}-{{ overall_forecast.historical_years|last }}).
+                        The prediction model calculates average year-over-year growth and projects future sales with confidence intervals.
+                        Confidence bounds represent ±20% variance from the central forecast.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/echarts/echarts.min.js' %}"></script>
+<script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js"></script>
+
+<script>
+$(document).ready(function() {
+    // Initialize DataTables
+    $('#schoolForecastTable').DataTable({
+        order: [[1, 'desc']],
+        pageLength: 10,
+        dom: 'frtip'
+    });
+
+    $('#productForecastTable').DataTable({
+        order: [[1, 'desc']],
+        pageLength: 20,
+        dom: 'frtip'
+    });
+
+    // Historical Trend Chart with ECharts - Horizontal Bar Style
+    const historicalData = {{ historical_data_json|safe }};
+
+    // Group by year and month (Jan-Feb only)
+    const btsSales = {};
+    historicalData.forEach(item => {
+        if (item.month_num === 1 || item.month_num === 2) {
+            if (!btsSales[item.year]) {
+                btsSales[item.year] = 0;
+            }
+            btsSales[item.year] += item.total_sales;
+        }
+    });
+
+    const years = Object.keys(btsSales).sort();
+    const sales = years.map(year => btsSales[year]);
+
+    // Add forecast data
+    const forecastYear = '2027 (Forecast)';
+    const forecastSale = {{ overall_forecast.forecast_2027|default:0 }};
+
+    // Combine all years including forecast
+    const allYears = [...years, '2027'];
+    const allSales = [...sales, forecastSale];
+
+    // Find max value for scaling
+    const maxValue = Math.max(...allSales);
+    const maxScale = maxValue * 1.15; // Add 15% padding
+
+    // Initialize ECharts
+    const chartDom = document.getElementById('historicalTrendChart');
+    const myChart = echarts.init(chartDom);
+
+    const option = {
+        tooltip: {
+            trigger: 'axis',
+            axisPointer: {
+                type: 'none'
+            },
+            backgroundColor: 'rgba(255, 255, 255, 0.95)',
+            borderColor: '#ddd',
+            borderWidth: 1,
+            textStyle: {
+                color: '#333'
+            },
+            formatter: function(params) {
+                const value = params[0].value;
+                const year = params[0].name;
+                return year + '<br/>Sales: $' + value.toLocaleString();
+            }
+        },
+        grid: {
+            left: '80px',
+            right: '15%',
+            top: '20px',
+            bottom: '20px',
+            containLabel: false
+        },
+        xAxis: {
+            type: 'value',
+            max: maxScale,
+            axisLine: {
+                show: false
+            },
+            axisTick: {
+                show: false
+            },
+            axisLabel: {
+                show: false
+            },
+            splitLine: {
+                show: false
+            }
+        },
+        yAxis: {
+            type: 'category',
+            data: allYears,
+            inverse: true,
+            axisLine: {
+                show: false
+            },
+            axisTick: {
+                show: false
+            },
+            axisLabel: {
+                color: '#333',
+                fontSize: 13,
+                fontWeight: 500,
+                margin: 15
+            }
+        },
+        series: [
+            {
+                name: 'BTS Sales',
+                type: 'bar',
+                barWidth: '50%',
+                data: allSales.map((value, index) => {
+                    const isForecast = index === allSales.length - 1;
+                    return {
+                        value: value,
+                        itemStyle: {
+                            color: isForecast ? '#91cc75' : '#5470c6',
+                            borderRadius: [0, 4, 4, 0]
+                        },
+                        label: {
+                            show: true,
+                            position: 'right',
+                            formatter: function(params) {
+                                return '$' + params.value.toLocaleString();
+                            },
+                            color: '#333',
+                            fontSize: 12,
+                            fontWeight: 500,
+                            offset: [10, 0]
+                        }
+                    };
+                }),
+                backgroundStyle: {
+                    color: 'rgba(220, 220, 220, 0.3)'
+                },
+                showBackground: true
+            }
+        ]
+    };
+
+    myChart.setOption(option);
+
+    // Make chart responsive
+    window.addEventListener('resize', function() {
+        myChart.resize();
+    });
+});
+</script>
+
+<style>
+.forecast-tile {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+
+.forecast-tile .tile-icon {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.forecast-value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #fff;
+}
+
+.confidence-lower {
+    background: rgba(239, 68, 68, 0.1);
+    color: #dc2626;
+}
+
+.confidence-upper {
+    background: rgba(34, 197, 94, 0.1);
+    color: #16a34a;
+}
+</style>
+{% endblock %}

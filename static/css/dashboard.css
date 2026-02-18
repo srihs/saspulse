@@ -14,6 +14,82 @@
     margin-bottom: 2rem;
 }
 
+/* Forecast Summary Tiles */
+.summary-tile {
+    background: white;
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    box-shadow: 0 0.125rem 0.5rem rgba(0,0,0,0.08);
+    transition: transform 0.2s, box-shadow 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    height: 100%;
+}
+
+.summary-tile:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0.25rem 1rem rgba(0,0,0,0.12);
+}
+
+.summary-tile .tile-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 60px;
+    height: 60px;
+    border-radius: 0.5rem;
+    font-size: 1.5rem;
+    flex-shrink: 0;
+}
+
+.forecast-tile {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.forecast-tile .tile-icon {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+}
+
+.forecast-tile .tile-label {
+    color: rgba(255, 255, 255, 0.9) !important;
+}
+
+.forecast-tile .tile-value {
+    color: white !important;
+}
+
+.confidence-lower {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    color: white;
+}
+
+.confidence-upper {
+    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    color: white;
+}
+
+.summary-tile .tile-content {
+    flex: 1;
+}
+
+.summary-tile .tile-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #6c757d;
+    margin-bottom: 0.5rem;
+}
+
+.summary-tile .tile-value {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: #1a1a1a;
+    line-height: 1.2;
+}
+
 .tile {
     background: white;
     border-radius: 0.75rem;
