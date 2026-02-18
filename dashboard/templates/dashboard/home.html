@@ -82,6 +82,65 @@
         </div>
     </div>
 
+    <!-- Top Performing Schools Section -->
+    <div class="row g-3 mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <div class="mb-3">
+                        <h4 class="mb-0">Top Performing Schools</h4>
+                    </div>
+
+                    {% if top_performing_schools %}
+                    <div class="table-responsive">
+                        <table id="performanceTable" class="table table-striped table-hover ranking-table" style="width:100%">
+                            <thead>
+                                <tr>
+                                    <th rowspan="2">School</th>
+                                    <th colspan="3" class="text-center">{{ top_performing_schools.0.current_year }}</th>
+                                    <th colspan="3" class="text-center">{{ top_performing_schools.0.last_year }}</th>
+                                    <th colspan="3" class="text-center">{{ top_performing_schools.0.year_before }}</th>
+                                </tr>
+                                <tr>
+                                    <th class="text-end">Sales</th>
+                                    <th>Top Item</th>
+                                    <th class="text-end">Qty</th>
+                                    <th class="text-end">Sales</th>
+                                    <th>Top Item</th>
+                                    <th class="text-end">Qty</th>
+                                    <th class="text-end">Sales</th>
+                                    <th>Top Item</th>
+                                    <th class="text-end">Qty</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for school in top_performing_schools %}
+                                <tr>
+                                    <td class="school-name">{{ school.school }}</td>
+                                    <td class="text-end" data-order="{{ school.current_year_sales }}">${{ school.current_year_sales|floatformat:2|intcomma }}</td>
+                                    <td>{{ school.current_year_item }}</td>
+                                    <td class="text-end" data-order="{{ school.current_year_qty }}">{{ school.current_year_qty|floatformat:0|intcomma }}</td>
+                                    <td class="text-end" data-order="{{ school.last_year_sales }}">${{ school.last_year_sales|floatformat:2|intcomma }}</td>
+                                    <td>{{ school.last_year_item }}</td>
+                                    <td class="text-end" data-order="{{ school.last_year_qty }}">{{ school.last_year_qty|floatformat:0|intcomma }}</td>
+                                    <td class="text-end" data-order="{{ school.year_before_sales }}">${{ school.year_before_sales|floatformat:2|intcomma }}</td>
+                                    <td>{{ school.year_before_item }}</td>
+                                    <td class="text-end" data-order="{{ school.year_before_qty }}">{{ school.year_before_qty|floatformat:0|intcomma }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center text-muted py-4">
+                        <p class="mb-0">No performance data available for the selected period.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Customer Rankings Section -->
     <div class="row g-3 mb-4">
         <div class="col-12">

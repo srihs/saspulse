@@ -629,3 +629,88 @@ div.dataTables_wrapper div.dataTables_paginate {
 .product-detail-row small {
     font-size: 0.875rem;
 }
+
+/* School Performance Styles */
+.performance-icon {
+    font-size: 1.75rem;
+}
+
+/* Top Performing Schools Table Year Colors */
+#performanceTable {
+    font-size: 1rem;
+}
+
+#performanceTable thead th {
+    font-weight: 600;
+    font-size: 1.05rem;
+}
+
+#performanceTable tbody td {
+    font-size: 0.95rem;
+    padding: 0.75rem;
+}
+
+/* Current Year (2026) - Green tint */
+#performanceTable thead tr:first-child th:nth-child(2) {
+    background-color: #d1fae5 !important;
+    color: #065f46 !important;
+}
+
+#performanceTable thead tr:last-child th:nth-child(1),
+#performanceTable thead tr:last-child th:nth-child(2),
+#performanceTable thead tr:last-child th:nth-child(3) {
+    background-color: #ecfdf5 !important;
+    color: #065f46 !important;
+}
+
+#performanceTable tbody td:nth-child(2),
+#performanceTable tbody td:nth-child(3),
+#performanceTable tbody td:nth-child(4) {
+    background-color: #f0fdf4 !important;
+}
+
+/* Last Year (2025) - Blue tint */
+#performanceTable thead tr:first-child th:nth-child(3) {
+    background-color: #dbeafe !important;
+    color: #1e3a8a !important;
+}
+
+#performanceTable thead tr:last-child th:nth-child(4),
+#performanceTable thead tr:last-child th:nth-child(5),
+#performanceTable thead tr:last-child th:nth-child(6) {
+    background-color: #eff6ff !important;
+    color: #1e3a8a !important;
+}
+
+#performanceTable tbody td:nth-child(5),
+#performanceTable tbody td:nth-child(6),
+#performanceTable tbody td:nth-child(7) {
+    background-color: #f0f9ff !important;
+}
+
+/* Year Before (2024) - Amber tint */
+#performanceTable thead tr:first-child th:nth-child(4) {
+    background-color: #fef3c7 !important;
+    color: #78350f !important;
+}
+
+#performanceTable thead tr:last-child th:nth-child(7),
+#performanceTable thead tr:last-child th:nth-child(8),
+#performanceTable thead tr:last-child th:nth-child(9) {
+    background-color: #fffbeb !important;
+    color: #78350f !important;
+}
+
+#performanceTable tbody td:nth-child(8),
+#performanceTable tbody td:nth-child(9),
+#performanceTable tbody td:nth-child(10) {
+    background-color: #fefce8 !important;
+}
+
+/* Force right alignment for all quantity columns */
+#performanceTable tbody td:nth-child(4),
+#performanceTable tbody td:nth-child(7),
+#performanceTable tbody td:nth-child(10) {
+    text-align: right !important;
+    padding-right: 1rem !important;
+}

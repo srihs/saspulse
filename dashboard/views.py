@@ -692,11 +692,267 @@ def calculate_heatmap_data(start_date=None, end_date=None, top_n_products=10):
     }
 
 
+def calculate_top_performing_schools(start_date=None, end_date=None, limit=10):
+    """
+    Calculate top 10 performing schools based on sales volume for current year, last year, and year before
+
+    Returns:
+        List of schools with:
+        - School name
+        - Most sold item for each year
+        - Most sold item quantity for each year
+        - Sales for each year
+    """
+    from django.db import connection
+    from datetime import datetime
+
+    # Parse the end date to determine the current year
+    if end_date:
+        current_year = datetime.strptime(end_date, '%Y-%m-%d').year
+    else:
+        current_year = datetime.strptime(BTS_END_DATE, '%Y-%m-%d').year
+
+    # Define date ranges for three years
+    current_year_start = f"{current_year}-01-01"
+    current_year_end = f"{current_year}-12-31"
+
+    last_year = current_year - 1
+    last_year_start = f"{last_year}-01-01"
+    last_year_end = f"{last_year}-12-31"
+
+    year_before = current_year - 2
+    year_before_start = f"{year_before}-01-01"
+    year_before_end = f"{year_before}-12-31"
+
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            WITH all_schools AS (
+                SELECT DISTINCT p.sub_category as school
+                FROM cin7_sync_product p
+                WHERE (p.category_name = 'Wholesale Schools' OR p.category_name LIKE %s)
+                  AND p.sub_category IS NOT NULL
+                  AND p.sub_category <> ''
+                  AND p.sub_category NOT LIKE %s
+            ),
+            current_year_sales AS (
+                SELECT
+                    p.sub_category as school,
+                    SUM(COALESCE(soli.qty, 0) * COALESCE(soli.unit_price, 0)) as total_sales
+                FROM cin7_sync_salesorder so
+                JOIN cin7_sync_salesorderlineitem soli ON CAST(so.cin7_id AS CHAR) = soli.cin7_sales_order_id
+                JOIN cin7_sync_product p ON soli.cin7_product_id = p.cin7_id
+                WHERE (p.category_name = 'Wholesale Schools' OR p.category_name LIKE %s)
+                  AND so.invoice_date >= %s
+                  AND so.invoice_date <= %s
+                  AND p.sub_category IS NOT NULL
+                  AND p.sub_category <> ''
+                  AND p.sub_category NOT LIKE %s
+                GROUP BY p.sub_category
+            ),
+            last_year_sales AS (
+                SELECT
+                    p.sub_category as school,
+                    SUM(COALESCE(soli.qty, 0) * COALESCE(soli.unit_price, 0)) as total_sales
+                FROM cin7_sync_salesorder so
+                JOIN cin7_sync_salesorderlineitem soli ON CAST(so.cin7_id AS CHAR) = soli.cin7_sales_order_id
+                JOIN cin7_sync_product p ON soli.cin7_product_id = p.cin7_id
+                WHERE (p.category_name = 'Wholesale Schools' OR p.category_name LIKE %s)
+                  AND so.invoice_date >= %s
+                  AND so.invoice_date <= %s
+                  AND p.sub_category IS NOT NULL
+                  AND p.sub_category <> ''
+                  AND p.sub_category NOT LIKE %s
+                GROUP BY p.sub_category
+            ),
+            year_before_sales AS (
+                SELECT
+                    p.sub_category as school,
+                    SUM(COALESCE(soli.qty, 0) * COALESCE(soli.unit_price, 0)) as total_sales
+                FROM cin7_sync_salesorder so
+                JOIN cin7_sync_salesorderlineitem soli ON CAST(so.cin7_id AS CHAR) = soli.cin7_sales_order_id
+                JOIN cin7_sync_product p ON soli.cin7_product_id = p.cin7_id
+                WHERE (p.category_name = 'Wholesale Schools' OR p.category_name LIKE %s)
+                  AND so.invoice_date >= %s
+                  AND so.invoice_date <= %s
+                  AND p.sub_category IS NOT NULL
+                  AND p.sub_category <> ''
+                  AND p.sub_category NOT LIKE %s
+                GROUP BY p.sub_category
+            ),
+            top_product_current_year AS (
+                SELECT
+                    p.sub_category as school,
+                    p.name as product_name,
+                    SUM(COALESCE(soli.qty, 0)) as product_qty,
+                    ROW_NUMBER() OVER (PARTITION BY p.sub_category ORDER BY SUM(COALESCE(soli.qty, 0)) DESC) as rn
+                FROM cin7_sync_salesorder so
+                JOIN cin7_sync_salesorderlineitem soli ON CAST(so.cin7_id AS CHAR) = soli.cin7_sales_order_id
+                JOIN cin7_sync_product p ON soli.cin7_product_id = p.cin7_id
+                WHERE (p.category_name = 'Wholesale Schools' OR p.category_name LIKE %s)
+                  AND so.invoice_date >= %s
+                  AND so.invoice_date <= %s
+                  AND p.sub_category IS NOT NULL
+                  AND p.sub_category <> ''
+                  AND p.sub_category NOT LIKE %s
+                GROUP BY p.sub_category, p.name
+            ),
+            top_product_last_year AS (
+                SELECT
+                    p.sub_category as school,
+                    p.name as product_name,
+                    SUM(COALESCE(soli.qty, 0)) as product_qty,
+                    ROW_NUMBER() OVER (PARTITION BY p.sub_category ORDER BY SUM(COALESCE(soli.qty, 0)) DESC) as rn
+                FROM cin7_sync_salesorder so
+                JOIN cin7_sync_salesorderlineitem soli ON CAST(so.cin7_id AS CHAR) = soli.cin7_sales_order_id
+                JOIN cin7_sync_product p ON soli.cin7_product_id = p.cin7_id
+                WHERE (p.category_name = 'Wholesale Schools' OR p.category_name LIKE %s)
+                  AND so.invoice_date >= %s
+                  AND so.invoice_date <= %s
+                  AND p.sub_category IS NOT NULL
+                  AND p.sub_category <> ''
+                  AND p.sub_category NOT LIKE %s
+                GROUP BY p.sub_category, p.name
+            ),
+            top_product_year_before AS (
+                SELECT
+                    p.sub_category as school,
+                    p.name as product_name,
+                    SUM(COALESCE(soli.qty, 0)) as product_qty,
+                    ROW_NUMBER() OVER (PARTITION BY p.sub_category ORDER BY SUM(COALESCE(soli.qty, 0)) DESC) as rn
+                FROM cin7_sync_salesorder so
+                JOIN cin7_sync_salesorderlineitem soli ON CAST(so.cin7_id AS CHAR) = soli.cin7_sales_order_id
+                JOIN cin7_sync_product p ON soli.cin7_product_id = p.cin7_id
+                WHERE (p.category_name = 'Wholesale Schools' OR p.category_name LIKE %s)
+                  AND so.invoice_date >= %s
+                  AND so.invoice_date <= %s
+                  AND p.sub_category IS NOT NULL
+                  AND p.sub_category <> ''
+                  AND p.sub_category NOT LIKE %s
+                GROUP BY p.sub_category, p.name
+            )
+            SELECT
+                a.school,
+                COALESCE(cy.total_sales, 0) as current_year_sales,
+                tpcy.product_name as cy_product,
+                tpcy.product_qty as cy_qty,
+                COALESCE(ly.total_sales, 0) as last_year_sales,
+                tply.product_name as ly_product,
+                tply.product_qty as ly_qty,
+                COALESCE(yb.total_sales, 0) as year_before_sales,
+                tpyb.product_name as yb_product,
+                tpyb.product_qty as yb_qty
+            FROM all_schools a
+            LEFT JOIN current_year_sales cy ON a.school = cy.school
+            LEFT JOIN last_year_sales ly ON a.school = ly.school
+            LEFT JOIN year_before_sales yb ON a.school = yb.school
+            LEFT JOIN top_product_current_year tpcy ON a.school = tpcy.school AND tpcy.rn = 1
+            LEFT JOIN top_product_last_year tply ON a.school = tply.school AND tply.rn = 1
+            LEFT JOIN top_product_year_before tpyb ON a.school = tpyb.school AND tpyb.rn = 1
+            ORDER BY current_year_sales DESC
+            LIMIT %s
+        """, [
+            '% Shop', '%Shop%',  # all_schools
+            '% Shop', current_year_start, current_year_end, '%Shop%',  # current_year_sales
+            '% Shop', last_year_start, last_year_end, '%Shop%',  # last_year_sales
+            '% Shop', year_before_start, year_before_end, '%Shop%',  # year_before_sales
+            '% Shop', current_year_start, current_year_end, '%Shop%',  # top_product_current_year
+            '% Shop', last_year_start, last_year_end, '%Shop%',  # top_product_last_year
+            '% Shop', year_before_start, year_before_end, '%Shop%',  # top_product_year_before
+            limit
+        ])
+
+        rows = cursor.fetchall()
+
+    results = []
+    for row in rows:
+        results.append({
+            'school': row[0],
+            'current_year_sales': float(row[1] or 0),
+            'current_year_item': row[2] or 'N/A',
+            'current_year_qty': float(row[3] or 0),
+            'last_year_sales': float(row[4] or 0),
+            'last_year_item': row[5] or 'N/A',
+            'last_year_qty': float(row[6] or 0),
+            'year_before_sales': float(row[7] or 0),
+            'year_before_item': row[8] or 'N/A',
+            'year_before_qty': float(row[9] or 0),
+            'current_year': current_year,
+            'last_year': last_year,
+            'year_before': year_before
+        })
+
+    return results
+def calculate_slow_moving_schools(start_date=None, end_date=None, limit=10):
+    """
+    Calculate slow-moving schools with least/no sales
+
+    Returns:
+        List of schools with:
+        - School name
+        - Total sales volume (could be 0)
+        - Last sale date (could be NULL)
+    """
+    from django.db import connection
+
+    start = start_date or BTS_START_DATE
+    end = end_date or BTS_END_DATE
+
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            WITH all_schools AS (
+                SELECT DISTINCT p.sub_category as school
+                FROM cin7_sync_product p
+                WHERE (p.category_name = 'Wholesale Schools' OR p.category_name LIKE %s)
+                  AND p.sub_category IS NOT NULL
+                  AND p.sub_category <> ''
+                  AND p.sub_category NOT LIKE %s
+            ),
+            school_sales AS (
+                SELECT
+                    p.sub_category as school,
+                    SUM(COALESCE(soli.qty, 0) * COALESCE(soli.unit_price, 0)) as total_sales,
+                    MAX(so.invoice_date) as last_sale_date
+                FROM cin7_sync_salesorder so
+                JOIN cin7_sync_salesorderlineitem soli ON CAST(so.cin7_id AS CHAR) = soli.cin7_sales_order_id
+                JOIN cin7_sync_product p ON soli.cin7_product_id = p.cin7_id
+                WHERE (p.category_name = 'Wholesale Schools' OR p.category_name LIKE %s)
+                  AND so.invoice_date >= %s
+                  AND so.invoice_date <= %s
+                  AND p.sub_category IS NOT NULL
+                  AND p.sub_category <> ''
+                  AND p.sub_category NOT LIKE %s
+                GROUP BY p.sub_category
+            )
+            SELECT
+                a.school,
+                COALESCE(ss.total_sales, 0) as total_sales,
+                ss.last_sale_date
+            FROM all_schools a
+            LEFT JOIN school_sales ss ON a.school = ss.school
+            ORDER BY COALESCE(ss.total_sales, 0) ASC, ss.last_sale_date ASC
+            LIMIT %s
+        """, ['% Shop', '%Shop%', '% Shop', start, end, '%Shop%', limit])
+
+        rows = cursor.fetchall()
+
+    results = []
+    for row in rows:
+        results.append({
+            'school': row[0],
+            'total_sales': float(row[1] or 0),
+            'last_sale_date': row[2]
+        })
+
+    return results
+
+
 @require_http_methods(["GET"])
 def dashboard_home(request):
     """
     Main dashboard view with summary metrics and customer rankings
     """
+    from django.core.cache import cache
+
     # Check if user is authenticated
     if not auth_backend.is_authenticated(request):
         return redirect('users:login')
@@ -705,17 +961,38 @@ def dashboard_home(request):
     start_date = request.GET.get('start_date', BTS_START_DATE)
     end_date = request.GET.get('end_date', BTS_END_DATE)
 
-    # Calculate summary metrics with custom date range
-    summary = calculate_summary_metrics(start_date, end_date)
+    # Create a cache key based on the date range
+    cache_key = f'dashboard_data_{start_date}_{end_date}'
 
-    # Calculate customer rankings
-    customer_rankings_data = calculate_customer_rankings(start_date, end_date)
+    # Try to get cached data
+    cached_data = cache.get(cache_key)
 
-    # Calculate product rankings
-    product_rankings_data = calculate_product_rankings(start_date, end_date)
+    if cached_data:
+        # Use cached data
+        summary = cached_data['summary']
+        customer_rankings_data = cached_data['customer_rankings_data']
+        product_rankings_data = cached_data['product_rankings_data']
+        heatmap_data = cached_data['heatmap_data']
+        top_performing_schools = cached_data['top_performing_schools']
+        slow_moving_schools = cached_data['slow_moving_schools']
+    else:
+        # Calculate fresh data
+        summary = calculate_summary_metrics(start_date, end_date)
+        customer_rankings_data = calculate_customer_rankings(start_date, end_date)
+        product_rankings_data = calculate_product_rankings(start_date, end_date)
+        heatmap_data = calculate_heatmap_data(start_date, end_date, top_n_products=10)
+        top_performing_schools = calculate_top_performing_schools(start_date, end_date, limit=10)
+        slow_moving_schools = calculate_slow_moving_schools(start_date, end_date, limit=10)
 
-    # Calculate heatmap data
-    heatmap_data = calculate_heatmap_data(start_date, end_date, top_n_products=10)
+        # Cache the results for 10 minutes (600 seconds)
+        cache.set(cache_key, {
+            'summary': summary,
+            'customer_rankings_data': customer_rankings_data,
+            'product_rankings_data': product_rankings_data,
+            'heatmap_data': heatmap_data,
+            'top_performing_schools': top_performing_schools,
+            'slow_moving_schools': slow_moving_schools,
+        }, 600)
 
     # Serialize heatmap data as JSON for JavaScript
     import json
@@ -738,6 +1015,8 @@ def dashboard_home(request):
         'product_last_sale_date': product_rankings_data['last_sale_date'],
         'heatmap_data': heatmap_data,
         'heatmap_json': heatmap_json,
+        'top_performing_schools': top_performing_schools,
+        'slow_moving_schools': slow_moving_schools,
         'bts_period': f"{start_date} to {end_date}",
         'start_date': start_date,
         'end_date': end_date

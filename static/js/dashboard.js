@@ -281,4 +281,21 @@ $(document).ready(function() {
     if (heatmapDataElement && window.heatmapData) {
         renderHeatmap(window.heatmapData);
     }
+
+    // Initialize Top Performing Schools DataTable
+    if ($('#performanceTable').length) {
+        $('#performanceTable').DataTable({
+            dom: 't', // Only show table, no other controls
+            order: [[1, 'desc']], // Sort by current year sales descending
+            paging: false, // Disable pagination
+            searching: false, // Disable search
+            info: false, // Disable info display
+            columnDefs: [
+                { className: "text-start", targets: [0, 2, 5, 8] }, // Left align School and Top Item columns
+                { className: "text-end", targets: [1, 3, 4, 6, 7, 9] } // Right align Sales and Qty columns
+            ],
+            responsive: true,
+            autoWidth: false
+        });
+    }
 });

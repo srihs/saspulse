@@ -222,7 +222,19 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # Redis Configuration (will be enabled when redis is installed)
 REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
 
-# Cache Configuration (commented out - will enable when django_redis is installed)
+# Cache Configuration - Using LocMemCache for fast in-memory caching
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'saspulse-cache',
+        'TIMEOUT': 600,  # 10 minutes default cache timeout
+        'OPTIONS': {
+            'MAX_ENTRIES': 1000
+        }
+    }
+}
+
+# Redis Cache Configuration (commented out - will enable when django_redis is installed)
 # CACHES = {
 #     'default': {
 #         'BACKEND': 'django_redis.cache.RedisCache',
