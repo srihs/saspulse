@@ -149,6 +149,19 @@
     line-height: 1.5;
 }
 
+/* Ensure first column (Customer Name / School) has proper left alignment and padding */
+.ranking-table tbody td:first-child,
+.ranking-table thead th:first-child {
+    text-align: left !important;
+    padding-left: 1.25rem !important;
+}
+
+/* Ensure school name column in product rankings is left aligned */
+.ranking-table .school-name,
+.ranking-table .customer-name {
+    text-align: left !important;
+}
+
 .ranking-table tbody tr:hover {
     background-color: #f8f9fa;
 }
@@ -412,4 +425,207 @@ div.dataTables_wrapper div.dataTables_paginate {
     z-index: 1000;
     white-space: nowrap;
     display: none;
+}
+
+/* Risk Band Tiles */
+.risk-band-tile {
+    background: white;
+    border-radius: 0.5rem;
+    padding: 1.25rem;
+    text-align: center;
+    border: 2px solid;
+    transition: transform 0.2s, box-shadow 0.2s;
+    height: 100%;
+}
+
+.risk-band-tile:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0.25rem 0.75rem rgba(0,0,0,0.1);
+}
+
+.critical-tile {
+    border-color: #ef4444;
+    background: linear-gradient(135deg, #fff 0%, #fef2f2 100%);
+}
+
+.warning-tile {
+    border-color: #f59e0b;
+    background: linear-gradient(135deg, #fff 0%, #fffbeb 100%);
+}
+
+.healthy-tile {
+    border-color: #10b981;
+    background: linear-gradient(135deg, #fff 0%, #f0fdf4 100%);
+}
+
+.risk-band-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.risk-band-icon {
+    font-size: 1.25rem;
+}
+
+.risk-band-title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #6c757d;
+}
+
+.risk-band-count {
+    font-size: 2.5rem;
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: 0.5rem;
+}
+
+.critical-tile .risk-band-count {
+    color: #ef4444;
+}
+
+.warning-tile .risk-band-count {
+    color: #f59e0b;
+}
+
+.healthy-tile .risk-band-count {
+    color: #10b981;
+}
+
+.risk-band-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #6c757d;
+    margin-bottom: 0.25rem;
+}
+
+.risk-band-stock {
+    font-size: 1.125rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    color: #1a1a1a;
+}
+
+.risk-band-description {
+    font-size: 0.6875rem;
+    color: #9ca3af;
+}
+
+/* Product Summary Tiles */
+.product-summary-tile {
+    background: white;
+    border-radius: 0.5rem;
+    padding: 1.5rem;
+    text-align: center;
+    border: 2px solid #e5e7eb;
+    transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+    height: 100%;
+}
+
+.product-summary-tile:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0.25rem 0.75rem rgba(0,0,0,0.1);
+}
+
+.school-tile:hover {
+    border-color: #3b82f6;
+}
+
+.value-tile:hover {
+    border-color: #ef4444;
+}
+
+.date-tile:hover {
+    border-color: #10b981;
+}
+
+.product-summary-icon {
+    font-size: 2rem;
+    margin-bottom: 0.75rem;
+}
+
+.product-summary-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #6c757d;
+    margin-bottom: 0.75rem;
+}
+
+.product-summary-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #1a1a1a;
+    margin-bottom: 0.5rem;
+    line-height: 1.2;
+    word-break: break-word;
+}
+
+.product-summary-count {
+    font-size: 0.75rem;
+    color: #9ca3af;
+}
+
+/* Grouped Product Rankings Styles */
+.school-row {
+    font-weight: 600;
+    background: #f9fafb;
+    transition: background-color 0.2s ease;
+}
+
+.school-row:hover {
+    background: #f3f4f6 !important;
+}
+
+.school-row .expand-icon {
+    color: #6b7280;
+    transition: transform 0.2s ease;
+}
+
+.school-row .expand-icon i {
+    transition: transform 0.2s ease;
+}
+
+.product-detail-row {
+    background: #ffffff;
+    border-left: 3px solid transparent;
+    transition: all 0.2s ease;
+}
+
+.product-detail-row:hover {
+    background: #f9fafb;
+}
+
+.product-detail-row.critical {
+    border-left-color: #ef4444;
+    background: #fef2f2;
+}
+
+.product-detail-row.warning {
+    border-left-color: #f59e0b;
+    background: #fffbeb;
+}
+
+.product-detail-row.healthy {
+    border-left-color: #10b981;
+    background: #f0fdf4;
+}
+
+.product-detail-row td {
+    padding: 0.5rem;
+    vertical-align: middle;
+}
+
+.product-detail-row .product-name {
+    color: #374151;
+}
+
+.product-detail-row small {
+    font-size: 0.875rem;
 }

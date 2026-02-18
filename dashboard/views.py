@@ -223,23 +223,27 @@ def calculate_customer_rankings(start_date=None, end_date=None):
         if stock_value == 0 and bts_sales == 0:
             continue
 
-        # Determine risk band
+        # Determine risk band and sort priority
         if ratio >= 999999:  # No sales - infinite ratio
             risk_band = 'critical'
             risk_label = 'Critical'
             ratio_display = '∞'
+            sort_priority = 1  # Critical = 1 (highest priority)
         elif ratio > 3:
             risk_band = 'critical'
             risk_label = 'Critical'
             ratio_display = round(ratio, 2)
+            sort_priority = 1  # Critical = 1 (highest priority)
         elif ratio > 2:
             risk_band = 'warning'
             risk_label = 'Monitor'
             ratio_display = round(ratio, 2)
+            sort_priority = 2  # Warning = 2
         else:
             risk_band = 'healthy'
             risk_label = 'Healthy'
             ratio_display = round(ratio, 2)
+            sort_priority = 3  # Healthy = 3 (lowest priority)
 
         rankings.append({
             'customer_name': customer_name,
@@ -248,10 +252,28 @@ def calculate_customer_rankings(start_date=None, end_date=None):
             'ratio': ratio,
             'ratio_display': ratio_display,
             'risk_band': risk_band,
-            'risk_label': risk_label
+            'risk_label': risk_label,
+            'sort_priority': sort_priority
         })
 
-    return rankings
+    # Calculate risk band counts and stock values
+    critical_count = sum(1 for r in rankings if r['risk_band'] == 'critical')
+    warning_count = sum(1 for r in rankings if r['risk_band'] == 'warning')
+    healthy_count = sum(1 for r in rankings if r['risk_band'] == 'healthy')
+
+    critical_stock = sum(r['stock_value'] for r in rankings if r['risk_band'] == 'critical')
+    warning_stock = sum(r['stock_value'] for r in rankings if r['risk_band'] == 'warning')
+    healthy_stock = sum(r['stock_value'] for r in rankings if r['risk_band'] == 'healthy')
+
+    return {
+        'rankings': rankings,
+        'critical_count': critical_count,
+        'warning_count': warning_count,
+        'healthy_count': healthy_count,
+        'critical_stock': critical_stock,
+        'warning_stock': warning_stock,
+        'healthy_stock': healthy_stock
+    }
 
 
 def calculate_product_rankings(start_date=None, end_date=None):
@@ -361,23 +383,27 @@ def calculate_product_rankings(start_date=None, end_date=None):
         if stock_value == 0 and bts_sales == 0:
             continue
 
-        # Determine risk band
+        # Determine risk band and sort priority
         if ratio >= 999999:  # No sales - infinite ratio
             risk_band = 'critical'
             risk_label = 'Critical'
             ratio_display = '∞'
+            sort_priority = 1  # Critical = 1 (highest priority)
         elif ratio > 3:
             risk_band = 'critical'
             risk_label = 'Critical'
             ratio_display = round(ratio, 2)
+            sort_priority = 1  # Critical = 1 (highest priority)
         elif ratio > 2:
             risk_band = 'warning'
             risk_label = 'Monitor'
             ratio_display = round(ratio, 2)
+            sort_priority = 2  # Warning = 2
         else:
             risk_band = 'healthy'
             risk_label = 'Healthy'
             ratio_display = round(ratio, 2)
+            sort_priority = 3  # Healthy = 3 (lowest priority)
 
         rankings.append({
             'school': school,
@@ -388,10 +414,121 @@ def calculate_product_rankings(start_date=None, end_date=None):
             'ratio': ratio,
             'ratio_display': ratio_display,
             'risk_band': risk_band,
-            'risk_label': risk_label
+            'risk_label': risk_label,
+            'sort_priority': sort_priority
         })
 
-    return rankings
+    # Calculate summary metrics: Find school with most critical products
+    from collections import defaultdict
+
+    school_critical_counts = defaultdict(lambda: {'count': 0, 'value': 0})
+    for ranking in rankings:
+        if ranking['risk_band'] == 'critical':
+            school = ranking['school']
+            school_critical_counts[school]['count'] += 1
+            school_critical_counts[school]['value'] += ranking['stock_value']
+
+    # Find the school with the most critical products
+    top_critical_school = None
+    top_critical_count = 0
+    top_critical_value = 0
+
+    if school_critical_counts:
+        top_critical_school = max(school_critical_counts.items(), key=lambda x: x[1]['count'])
+        top_critical_count = top_critical_school[1]['count']
+        top_critical_value = top_critical_school[1]['value']
+        top_critical_school = top_critical_school[0]
+
+    # Get last sale date for the top critical school
+    last_sale_date = None
+    if top_critical_school:
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT MAX(so.invoice_date) as last_sale
+                FROM cin7_sync_salesorder so
+                JOIN cin7_sync_salesorderlineitem soli ON CAST(so.cin7_id AS CHAR) = soli.cin7_sales_order_id
+                JOIN cin7_sync_product p ON soli.cin7_product_id = p.cin7_id
+                WHERE (p.category_name = 'Wholesale Schools' OR p.category_name LIKE %s)
+                  AND p.sub_category = %s
+                  AND p.sub_category NOT LIKE %s
+            """, ['% Shop', top_critical_school, '%Shop%'])
+
+            result = cursor.fetchone()
+            if result and result[0]:
+                last_sale_date = result[0]
+
+    # Group products by school for grouped view
+    from collections import defaultdict
+    school_groups = defaultdict(lambda: {
+        'products': [],
+        'product_count': 0,
+        'total_stock_value': 0,
+        'total_bts_sales': 0,
+        'worst_ratio': 0,
+        'risk_band': 'healthy'
+    })
+
+    for ranking in rankings:
+        school = ranking['school']
+        school_groups[school]['products'].append(ranking)
+        school_groups[school]['product_count'] += 1
+        school_groups[school]['total_stock_value'] += ranking['stock_value']
+        school_groups[school]['total_bts_sales'] += ranking['bts_sales']
+
+        # Track worst (highest) ratio for the school
+        if ranking['ratio'] > school_groups[school]['worst_ratio']:
+            school_groups[school]['worst_ratio'] = ranking['ratio']
+            school_groups[school]['risk_band'] = ranking['risk_band']
+
+    # Convert to list and sort by critical stock value descending
+    grouped_rankings = []
+    for school, data in school_groups.items():
+        # Calculate school-level ratio
+        if data['total_bts_sales'] > 0:
+            school_ratio = data['total_stock_value'] / data['total_bts_sales']
+        else:
+            school_ratio = 999999
+
+        # Determine school risk band based on school-level ratio
+        if school_ratio >= 999999:
+            school_risk_band = 'critical'
+            school_ratio_display = '∞'
+        elif school_ratio > 3:
+            school_risk_band = 'critical'
+            school_ratio_display = round(school_ratio, 2)
+        elif school_ratio > 2:
+            school_risk_band = 'warning'
+            school_ratio_display = round(school_ratio, 2)
+        else:
+            school_risk_band = 'healthy'
+            school_ratio_display = round(school_ratio, 2)
+
+        # Calculate critical stock value for this school
+        critical_stock_value = sum(p['stock_value'] for p in data['products'] if p['risk_band'] == 'critical')
+
+        grouped_rankings.append({
+            'school': school,
+            'product_count': data['product_count'],
+            'total_stock_value': data['total_stock_value'],
+            'total_bts_sales': data['total_bts_sales'],
+            'ratio': school_ratio,
+            'ratio_display': school_ratio_display,
+            'risk_band': school_risk_band,
+            'critical_stock_value': critical_stock_value,
+            'products': sorted(data['products'], key=lambda x: x['ratio'], reverse=True)
+        })
+
+    # Sort by critical stock value descending (schools with most critical stock first)
+    grouped_rankings.sort(key=lambda x: x['critical_stock_value'], reverse=True)
+
+    return {
+        'rankings': rankings,
+        'grouped_rankings': grouped_rankings,
+        'top_critical_school': top_critical_school,
+        'top_critical_count': top_critical_count,
+        'top_critical_value': top_critical_value,
+        'last_sale_date': last_sale_date
+    }
 
 
 def calculate_heatmap_data(start_date=None, end_date=None, top_n_products=10):
@@ -572,10 +709,10 @@ def dashboard_home(request):
     summary = calculate_summary_metrics(start_date, end_date)
 
     # Calculate customer rankings
-    customer_rankings = calculate_customer_rankings(start_date, end_date)
+    customer_rankings_data = calculate_customer_rankings(start_date, end_date)
 
     # Calculate product rankings
-    product_rankings = calculate_product_rankings(start_date, end_date)
+    product_rankings_data = calculate_product_rankings(start_date, end_date)
 
     # Calculate heatmap data
     heatmap_data = calculate_heatmap_data(start_date, end_date, top_n_products=10)
@@ -586,8 +723,19 @@ def dashboard_home(request):
 
     context = {
         'summary': summary,
-        'customer_rankings': customer_rankings,
-        'product_rankings': product_rankings,
+        'customer_rankings': customer_rankings_data['rankings'],
+        'customer_critical_count': customer_rankings_data['critical_count'],
+        'customer_warning_count': customer_rankings_data['warning_count'],
+        'customer_healthy_count': customer_rankings_data['healthy_count'],
+        'customer_critical_stock': customer_rankings_data['critical_stock'],
+        'customer_warning_stock': customer_rankings_data['warning_stock'],
+        'customer_healthy_stock': customer_rankings_data['healthy_stock'],
+        'product_rankings': product_rankings_data['rankings'],
+        'product_grouped_rankings': product_rankings_data['grouped_rankings'],
+        'product_top_critical_school': product_rankings_data['top_critical_school'],
+        'product_top_critical_count': product_rankings_data['top_critical_count'],
+        'product_top_critical_value': product_rankings_data['top_critical_value'],
+        'product_last_sale_date': product_rankings_data['last_sale_date'],
         'heatmap_data': heatmap_data,
         'heatmap_json': heatmap_json,
         'bts_period': f"{start_date} to {end_date}",

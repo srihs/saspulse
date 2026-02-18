@@ -16,7 +16,10 @@ $(document).ready(function() {
                     extend: 'csv',
                     className: 'btn btn-sm btn-success',
                     text: '<i class="fas fa-file-csv me-1"></i> CSV',
-                    filename: 'Customer_Rankings_' + startDate + '_to_' + endDate
+                    filename: 'Customer_Rankings_' + startDate + '_to_' + endDate,
+                    exportOptions: {
+                        columns: ':visible'
+                    }
                 },
                 {
                     extend: 'excel',
@@ -24,7 +27,10 @@ $(document).ready(function() {
                     text: '<i class="fas fa-file-excel me-1"></i> Excel',
                     filename: 'Customer_Rankings_' + startDate + '_to_' + endDate,
                     title: 'Customer Rankings - Stock vs BTS Sales',
-                    messageTop: 'Period: ' + btsPeriod
+                    messageTop: 'Period: ' + btsPeriod,
+                    exportOptions: {
+                        columns: ':visible'
+                    }
                 },
                 {
                     extend: 'pdf',
@@ -38,6 +44,9 @@ $(document).ready(function() {
                     customize: function(doc) {
                         doc.styles.tableHeader.fillColor = '#2c3e50';
                         doc.styles.tableHeader.color = 'white';
+                    },
+                    exportOptions: {
+                        columns: ':visible'
                     }
                 },
                 {
@@ -49,10 +58,13 @@ $(document).ready(function() {
                     customize: function(win) {
                         $(win.document.body).css('font-size', '10pt');
                         $(win.document.body).find('table').addClass('compact').css('font-size', 'inherit');
+                    },
+                    exportOptions: {
+                        columns: ':visible'
                     }
                 }
             ],
-            order: [[4, 'desc']], // Sort by ratio (column index 4) descending
+            order: [[5, 'asc'], [1, 'desc']], // Sort by priority first (1=critical first), then stock value descending
             pageLength: 10, // Show 10 rows per page by default
             lengthMenu: [[10, 20, 25, 50, 100, -1], [10, 20, 25, 50, 100, "All"]],
             language: {
@@ -70,9 +82,10 @@ $(document).ready(function() {
                 }
             },
             columnDefs: [
-                { orderable: false, targets: 0 }, // Disable sorting on # column
-                { className: "text-end", targets: [2, 3, 4] }, // Right align numeric columns
-                { className: "text-center", targets: [5] } // Center align risk band
+                { className: "text-start", targets: [0] }, // Left align Customer Name
+                { className: "text-end", targets: [1, 2, 3] }, // Right align numeric columns (Stock Value, BTS Sales, Ratio)
+                { className: "text-center", targets: [4] }, // Center align risk band
+                { visible: false, targets: [5] } // Hide sort priority column
             ],
             drawCallback: function() {
                 // Re-apply row colors after each draw
@@ -104,7 +117,10 @@ $(document).ready(function() {
                     extend: 'csv',
                     className: 'btn btn-sm btn-success',
                     text: '<i class="fas fa-file-csv me-1"></i> CSV',
-                    filename: 'Product_Rankings_' + startDate + '_to_' + endDate
+                    filename: 'Product_Rankings_' + startDate + '_to_' + endDate,
+                    exportOptions: {
+                        columns: ':visible'
+                    }
                 },
                 {
                     extend: 'excel',
@@ -112,7 +128,10 @@ $(document).ready(function() {
                     text: '<i class="fas fa-file-excel me-1"></i> Excel',
                     filename: 'Product_Rankings_' + startDate + '_to_' + endDate,
                     title: 'Product Rankings - Stock vs BTS Sales',
-                    messageTop: 'Period: ' + btsPeriod
+                    messageTop: 'Period: ' + btsPeriod,
+                    exportOptions: {
+                        columns: ':visible'
+                    }
                 },
                 {
                     extend: 'pdf',
@@ -126,6 +145,9 @@ $(document).ready(function() {
                     customize: function(doc) {
                         doc.styles.tableHeader.fillColor = '#2c3e50';
                         doc.styles.tableHeader.color = 'white';
+                    },
+                    exportOptions: {
+                        columns: ':visible'
                     }
                 },
                 {
@@ -137,10 +159,13 @@ $(document).ready(function() {
                     customize: function(win) {
                         $(win.document.body).css('font-size', '10pt');
                         $(win.document.body).find('table').addClass('compact').css('font-size', 'inherit');
+                    },
+                    exportOptions: {
+                        columns: ':visible'
                     }
                 }
             ],
-            order: [[6, 'desc']], // Sort by ratio (column index 6) descending
+            order: [[7, 'asc'], [3, 'desc']], // Sort by priority first (1=critical first), then stock value descending
             pageLength: 10, // Show 10 rows per page by default
             lengthMenu: [[10, 20, 25, 50, 100, -1], [10, 20, 25, 50, 100, "All"]],
             language: {
@@ -158,10 +183,10 @@ $(document).ready(function() {
                 }
             },
             columnDefs: [
-                { orderable: false, className: "text-center", targets: 0 }, // Disable sorting and center align # column
-                { className: "text-start", targets: [1, 2, 3] }, // Left align text columns (School, Style Code, Product Name)
-                { className: "text-end", targets: [4, 5, 6] }, // Right align numeric columns (Stock Value, BTS Sales, Ratio)
-                { className: "text-center", targets: [7] } // Center align risk band
+                { className: "text-start", targets: [0, 1, 2] }, // Left align text columns (School, Style Code, Product Name)
+                { className: "text-end", targets: [3, 4, 5] }, // Right align numeric columns (Stock Value, BTS Sales, Ratio)
+                { className: "text-center", targets: [6] }, // Center align risk band
+                { visible: false, targets: [7] } // Hide sort priority column
             ],
             drawCallback: function() {
                 // Re-apply row colors after each draw

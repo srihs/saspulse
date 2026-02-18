@@ -93,6 +93,61 @@
                     </div>
 
                     {% if customer_rankings %}
+                    <!-- Risk Band Summary Tiles -->
+                    <div class="p-4 pb-0">
+                        <div class="row g-3 mb-3">
+                            <!-- Critical Risk Tile -->
+                            <div class="col-md-4">
+                                <div class="risk-band-tile critical-tile">
+                                    <div class="risk-band-header">
+                                        <span class="risk-band-icon">🔴</span>
+                                        <span class="risk-band-title">Critical</span>
+                                    </div>
+                                    <div class="risk-band-count">
+                                        {{ customer_critical_count }}
+                                    </div>
+                                    <div class="risk-band-label">Ratio > 3.0</div>
+                                    <div class="risk-band-stock">${{ customer_critical_stock|floatformat:0|intcomma }}</div>
+                                    <div class="risk-band-description">Urgent action required</div>
+                                </div>
+                            </div>
+
+                            <!-- Monitor Risk Tile -->
+                            <div class="col-md-4">
+                                <div class="risk-band-tile warning-tile">
+                                    <div class="risk-band-header">
+                                        <span class="risk-band-icon">🟡</span>
+                                        <span class="risk-band-title">Monitor</span>
+                                    </div>
+                                    <div class="risk-band-count">
+                                        {{ customer_warning_count }}
+                                    </div>
+                                    <div class="risk-band-label">Ratio 2.0 - 3.0</div>
+                                    <div class="risk-band-stock">${{ customer_warning_stock|floatformat:0|intcomma }}</div>
+                                    <div class="risk-band-description">Watch closely</div>
+                                </div>
+                            </div>
+
+                            <!-- Healthy Tile -->
+                            <div class="col-md-4">
+                                <div class="risk-band-tile healthy-tile">
+                                    <div class="risk-band-header">
+                                        <span class="risk-band-icon">🟢</span>
+                                        <span class="risk-band-title">Healthy</span>
+                                    </div>
+                                    <div class="risk-band-count">
+                                        {{ customer_healthy_count }}
+                                    </div>
+                                    <div class="risk-band-label">Ratio ≤ 2.0</div>
+                                    <div class="risk-band-stock">${{ customer_healthy_stock|floatformat:0|intcomma }}</div>
+                                    <div class="risk-band-description">Good stock levels</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {% if customer_rankings %}
                     <div class="table-responsive p-0">
                         <table id="customerRankingsTable" class="ranking-table table table-hover mb-0"
                                data-start-date="{{ start_date }}"
@@ -100,18 +155,17 @@
                                data-bts-period="{{ bts_period }}">
                             <thead>
                                 <tr>
-                                    <th>#</th>
                                     <th>Customer Name</th>
                                     <th class="text-end">Stock Value</th>
                                     <th class="text-end">BTS Sales</th>
                                     <th class="text-end">Ratio</th>
                                     <th class="text-center">Risk Band</th>
+                                    <th style="display: none;">Sort Priority</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for customer in customer_rankings %}
                                 <tr class="{{ customer.risk_band }}">
-                                    <td>{{ forloop.counter }}</td>
                                     <td class="customer-name">{{ customer.customer_name }}</td>
                                     <td class="text-end" data-order="{{ customer.stock_value }}">${{ customer.stock_value|floatformat:2|intcomma }}</td>
                                     <td class="text-end" data-order="{{ customer.bts_sales }}">${{ customer.bts_sales|floatformat:2|intcomma }}</td>
@@ -121,6 +175,7 @@
                                     <td class="text-center" data-order="{{ customer.ratio }}">
                                         <span class="status-badge {{ customer.risk_band }}">{{ customer.risk_label }}</span>
                                     </td>
+                                    <td style="display: none;" data-order="{{ customer.sort_priority }}">{{ customer.sort_priority }}</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -154,7 +209,6 @@
                                data-bts-period="{{ bts_period }}">
                             <thead>
                                 <tr>
-                                    <th class="text-center">#</th>
                                     <th>School</th>
                                     <th>Style Code</th>
                                     <th>Product Name</th>
@@ -162,12 +216,12 @@
                                     <th class="text-end">BTS Sales</th>
                                     <th class="text-end">Ratio</th>
                                     <th class="text-center">Risk Band</th>
+                                    <th style="display: none;">Sort Priority</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for product in product_rankings %}
                                 <tr class="{{ product.risk_band }}">
-                                    <td>{{ forloop.counter }}</td>
                                     <td class="school-name">{{ product.school }}</td>
                                     <td class="style-code">{{ product.style_code }}</td>
                                     <td class="product-name">{{ product.product_name }}</td>
@@ -179,6 +233,7 @@
                                     <td class="text-center" data-order="{{ product.ratio }}">
                                         <span class="status-badge {{ product.risk_band }}">{{ product.risk_label }}</span>
                                     </td>
+                                    <td style="display: none;" data-order="{{ product.sort_priority }}">{{ product.sort_priority }}</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
