@@ -1609,20 +1609,33 @@ def sales_forecasting(request):
     if not base_forecasts:
         # Fallback to legacy horizon-based approach
         # Auto-select the best horizon that covers the requested date range
+        # with fallback to shorter horizons if longer ones don't exist
         if num_days <= 30:
-            best_horizon = '30d'
+            horizon_priority = ['30d']
         elif num_days <= 90:
-            best_horizon = '90d'
+            horizon_priority = ['90d', '30d']
         elif num_days <= 180:
-            best_horizon = '180d'
+            horizon_priority = ['180d', '90d', '30d']
         else:
-            best_horizon = '365d'
+            horizon_priority = ['365d', '180d', '90d', '30d']
 
-        # Use the best horizon instead of the default
-        all_forecasts = SalesForecast.objects.filter(
-            horizon=best_horizon,
-            aggregation_level=level
-        ).order_by('entity_name', '-forecast_date')
+        # Try horizons in order of priority until we find data
+        all_forecasts = None
+        best_horizon = None
+        for horizon_attempt in horizon_priority:
+            all_forecasts = SalesForecast.objects.filter(
+                horizon=horizon_attempt,
+                aggregation_level=level
+            ).order_by('entity_name', '-forecast_date')
+
+            if all_forecasts.exists():
+                best_horizon = horizon_attempt
+                break
+
+        # If no forecasts found at all, set to empty queryset
+        if best_horizon is None:
+            all_forecasts = SalesForecast.objects.none()
+            best_horizon = horizon_priority[0]  # For display purposes
 
         # Keep only the latest forecast for each entity_name
         seen_entities = set()
