@@ -138,6 +138,9 @@ Makefile
 start_server.sh
 stop_server.sh
 
+# Exception: Allow automation scripts
+!scripts/*.sh
+
 # Gunicorn configuration
 gunicorn_config.py
 gunicorn.log

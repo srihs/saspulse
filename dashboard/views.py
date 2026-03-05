@@ -1824,7 +1824,8 @@ def sales_forecasting(request):
         'levels': SalesForecastBase.AGGREGATION_LEVELS,
         'use_date_range': True,
         'from_cache': False,
-        'generating_forecasts': generating_forecasts
+        'generating_forecasts': generating_forecasts,
+        'using_365d_base': not use_legacy  # Flag to indicate using new 365-day base system
     }
 
     # Cache the context only if we have data (don't cache empty state)
@@ -2338,6 +2339,108 @@ def dp_approve_replenishment(request, request_id):
         return JsonResponse({
             'success': True,
             'message': f'Request {action}ed successfully by DP team'
+        })
+
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=400)
+
+@login_required
+def forecast_health_dashboard(request):
+    """
+    Forecast Health Monitoring Dashboard
+
+    Shows the status of 365-day base forecasts and when they need regeneration
+    Enables scheduled maintenance and freshness tracking
+    """
+    from dashboard.models import SalesForecastBase, ForecastSchedule
+    from django.db.models import Count, Min, Max, Q
+    from datetime import timedelta
+    from django.utils import timezone
+
+    # Update all forecast statuses
+    for schedule in ForecastSchedule.objects.all():
+        schedule.update_status()
+
+    # Overall statistics
+    total_forecasts = SalesForecastBase.objects.count()
+    total_schedules = ForecastSchedule.objects.count()
+
+    # Status breakdown
+    current_count = ForecastSchedule.objects.filter(status='current').count()
+    due_count = ForecastSchedule.objects.filter(status='due').count()
+    overdue_count = ForecastSchedule.objects.filter(status='overdue').count()
+
+    # Aggregation level breakdown
+    level_stats = ForecastSchedule.objects.values('aggregation_level').annotate(
+        total=Count('id'),
+        current=Count('id', filter=Q(status='current')),
+        due=Count('id', filter=Q(status='due')),
+        overdue=Count('id', filter=Q(status='overdue'))
+    )
+
+    # Get oldest and newest forecasts
+    oldest_forecast = SalesForecastBase.objects.order_by('forecast_date').first()
+    newest_forecast = SalesForecastBase.objects.order_by('-forecast_date').first()
+
+    # Get forecasts due for regeneration (sorted by urgency)
+    due_forecasts = ForecastSchedule.objects.filter(
+        status__in=['due', 'overdue']
+    ).order_by('-status', 'next_generation_due')[:50]  # Limit to 50 most urgent
+
+    # Get recently generated forecasts
+    recent_forecasts = ForecastSchedule.objects.filter(
+        status='current'
+    ).order_by('-last_generated')[:20]
+
+    context = {
+        'total_forecasts': total_forecasts,
+        'total_schedules': total_schedules,
+        'current_count': current_count,
+        'due_count': due_count,
+        'overdue_count': overdue_count,
+        'level_stats': level_stats,
+        'oldest_forecast': oldest_forecast,
+        'newest_forecast': newest_forecast,
+        'due_forecasts': due_forecasts,
+        'recent_forecasts': recent_forecasts,
+    }
+
+    return render(request, 'dashboard/forecast_health.html', context)
+
+
+@require_http_methods(["POST"])
+@login_required
+def trigger_forecast_regeneration(request):
+    """
+    Trigger regeneration of forecasts that are due or overdue
+    Can be triggered manually from the forecast health dashboard
+    """
+    from django.core.management import call_command
+    from django.utils import timezone
+    import threading
+
+    try:
+        # Get filter parameters
+        level = request.POST.get('level', 'all')
+        force = request.POST.get('force') == 'true'
+
+        # Run forecast generation in background
+        def run_forecast_generation():
+            try:
+                call_command('generate_365d_forecasts', level=level, force=force)
+            except Exception as e:
+                print(f"Error in background forecast generation: {e}")
+
+        thread = threading.Thread(target=run_forecast_generation)
+        thread.daemon = True
+        thread.start()
+
+        return JsonResponse({
+            'success': True,
+            'message': f'Forecast regeneration started in background for level: {level}'
         })
 
     except Exception as e:

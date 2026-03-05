@@ -205,6 +205,75 @@ class SalesForecastBase(models.Model):
         }
 
 
+class ForecastSchedule(models.Model):
+    """
+    Track when forecasts were last generated and when they need regeneration
+    Enables scheduled maintenance and freshness monitoring of base forecasts
+    """
+
+    STATUS_CHOICES = [
+        ('current', 'Current'),
+        ('due', 'Due for Regeneration'),
+        ('overdue', 'Overdue'),
+    ]
+
+    # Entity identification (matches SalesForecastBase)
+    entity_name = models.CharField(max_length=255, db_index=True)
+    aggregation_level = models.CharField(max_length=20, db_index=True)
+
+    # Schedule tracking
+    last_generated = models.DateTimeField()
+    next_generation_due = models.DateTimeField(db_index=True)
+    generation_frequency_days = models.IntegerField(default=30)
+
+    # Status
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='current', db_index=True)
+
+    # Metadata
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['next_generation_due', 'entity_name']
+        indexes = [
+            models.Index(fields=['entity_name', 'aggregation_level']),
+            models.Index(fields=['status', 'next_generation_due']),
+            models.Index(fields=['aggregation_level', 'status']),
+        ]
+        unique_together = [['entity_name', 'aggregation_level']]
+
+    def __str__(self):
+        return f"{self.entity_name} ({self.aggregation_level}) - {self.get_status_display()}"
+
+    @property
+    def is_due(self):
+        """Check if forecast is due for regeneration"""
+        return timezone.now() >= self.next_generation_due
+
+    @property
+    def days_until_due(self):
+        """Calculate days until regeneration is due"""
+        delta = self.next_generation_due - timezone.now()
+        return delta.days
+
+    @property
+    def days_since_generated(self):
+        """Calculate days since last generation"""
+        delta = timezone.now() - self.last_generated
+        return delta.days
+
+    def update_status(self):
+        """Update status based on current date"""
+        now = timezone.now()
+        if now >= self.next_generation_due + timezone.timedelta(days=7):
+            self.status = 'overdue'
+        elif now >= self.next_generation_due:
+            self.status = 'due'
+        else:
+            self.status = 'current'
+        self.save()
+
+
 class SalesForecast(models.Model):
     """
     Store sales forecast results for different time periods
