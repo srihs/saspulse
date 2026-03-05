@@ -148,12 +148,42 @@
                     </div>
                 </div>
 
+                <!-- Loading Preloader (shown when forecasts are being generated) -->
+                {% if generating_forecasts %}
+                <div class="card">
+                    <div class="card-body">
+                        <div class="text-center py-5">
+                            <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <h4 class="mt-4">Generating Forecasts...</h4>
+                            <p class="text-muted mb-2">This may take a few minutes. The page will auto-refresh when ready.</p>
+                            <small class="text-muted">
+                                <i class="fas fa-robot me-1"></i>
+                                AI is analyzing historical sales data and creating predictions...
+                            </small>
+                            <div class="mt-4">
+                                <div class="progress" style="height: 5px; max-width: 400px; margin: 0 auto;">
+                                    <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 100%"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <script>
+                    // Auto-refresh every 10 seconds when forecasts are being generated
+                    setTimeout(function() {
+                        location.reload();
+                    }, 10000);
+                </script>
+                {% else %}
                 <!-- Forecasts Table -->
                 <div class="card">
                     <div class="card-header">
                         <h5 class="mb-0">Sales Forecasts - {{ summary.level_display }} ({{ summary.horizon_display }})</h5>
                     </div>
                     <div class="card-body">
+                        {% if forecasts %}
                         <div class="table-responsive">
                             <table id="forecastsTable" class="table table-sm table-striped">
                                 <thead>
@@ -308,8 +338,15 @@
                                 </tbody>
                             </table>
                         </div>
+                        {% else %}
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle me-2"></i>
+                            No forecast data available for the selected filters.
+                        </div>
+                        {% endif %}
                     </div>
                 </div>
+                {% endif %}
 
             </div>
         </div>

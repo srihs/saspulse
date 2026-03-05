@@ -1795,6 +1795,9 @@ def sales_forecasting(request):
         'end_date': end_date_str
     }
 
+    # Detect if forecasts are being generated (no data available)
+    generating_forecasts = len(forecast_list) == 0
+
     context = {
         'forecasts': forecast_list,
         'forecast_list_json': json.dumps(forecast_list, default=str),
@@ -1807,11 +1810,13 @@ def sales_forecasting(request):
         'horizons': SalesForecast.FORECAST_HORIZONS,  # For backward compatibility
         'levels': SalesForecastBase.AGGREGATION_LEVELS,
         'use_date_range': True,
-        'from_cache': False
+        'from_cache': False,
+        'generating_forecasts': generating_forecasts
     }
 
-    # Cache the context
-    cache.set(cache_key, context, cache_timeout)
+    # Cache the context only if we have data (don't cache empty state)
+    if not generating_forecasts:
+        cache.set(cache_key, context, cache_timeout)
 
     return render(request, 'dashboard/sales_forecasting.html', context)
 
