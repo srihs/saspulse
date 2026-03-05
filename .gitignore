@@ -131,7 +131,6 @@ Makefile
 # !**/migrations
 # !**/migrations/__init__.py
 
-docs/
 *.sqlite3
 
 # Server startup/shutdown scripts

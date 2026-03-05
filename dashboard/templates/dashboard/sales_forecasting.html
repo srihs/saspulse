@@ -131,27 +131,60 @@
                 <!-- Filters -->
                 <div class="card mb-4">
                     <div class="card-body">
-                        <form method="get" class="row g-3">
-                            <div class="col-md-4">
+                        <form method="get" id="forecastFilterForm" class="row g-3">
+                            <div class="col-md-3">
                                 <label class="form-label">Aggregation Level</label>
-                                <select name="level" class="form-select" onchange="this.form.submit()">
+                                <select name="level" class="form-select" id="levelSelect">
                                     {% for value, label in levels %}
                                     <option value="{{ value }}" {% if current_level == value %}selected{% endif %}>{{ label }}</option>
                                     {% endfor %}
                                 </select>
                             </div>
-                            <div class="col-md-4">
-                                <label class="form-label">Forecast Horizon</label>
-                                <select name="horizon" class="form-select" onchange="this.form.submit()">
-                                    {% for value, label in horizons %}
-                                    <option value="{{ value }}" {% if current_horizon == value %}selected{% endif %}>{{ label }}</option>
-                                    {% endfor %}
-                                </select>
+                            <div class="col-md-3">
+                                <label class="form-label">Start Date</label>
+                                <input type="date" name="start_date" id="startDate" class="form-control" value="{{ start_date }}" required>
                             </div>
-                            <div class="col-md-4 d-flex align-items-end">
-                                <button type="submit" class="btn btn-primary w-100">Apply Filters</button>
+                            <div class="col-md-3">
+                                <label class="form-label">End Date</label>
+                                <input type="date" name="end_date" id="endDate" class="form-control" value="{{ end_date }}" required>
+                            </div>
+                            <div class="col-md-3 d-flex align-items-end">
+                                <button type="submit" class="btn btn-primary w-100">
+                                    <i class="fas fa-search"></i> Apply Filters
+                                </button>
                             </div>
                         </form>
+
+                        <!-- Quick Select Buttons -->
+                        <div class="row mt-3">
+                            <div class="col-12">
+                                <label class="form-label fw-bold">Quick Select:</label>
+                                <div class="btn-group" role="group">
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="selectDateRange(7)">
+                                        Next 7 Days
+                                    </button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="selectDateRange(30)">
+                                        Next 30 Days
+                                    </button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="selectDateRange(90)">
+                                        Next 90 Days
+                                    </button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="selectThisMonth()">
+                                        This Month
+                                    </button>
+                                </div>
+                                <div class="text-muted mt-2" id="dateRangeInfo">
+                                    <i class="fas fa-calendar"></i>
+                                    Selected Range: <strong>{{ start_date }}</strong> to <strong>{{ end_date }}</strong>
+                                    (<strong>{{ num_days }}</strong> days)
+                                    {% if from_cache %}
+                                    <span class="badge bg-success ms-2">
+                                        <i class="fas fa-bolt"></i> Cached
+                                    </span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -479,7 +512,79 @@ $(document).ready(function() {
 
     // Log when DataTables is initialized
     console.log('Sales Forecasting Dashboard initialized. Level:', '{{ current_level }}');
+
+    // Date range validation
+    $('#startDate, #endDate').on('change', function() {
+        validateDateRange();
+    });
 });
+
+// Quick Select Functions
+function selectDateRange(days) {
+    const today = new Date();
+    const endDate = new Date(today);
+    endDate.setDate(today.getDate() + days);
+
+    document.getElementById('startDate').value = formatDate(today);
+    document.getElementById('endDate').value = formatDate(endDate);
+
+    validateDateRange();
+}
+
+function selectThisMonth() {
+    const today = new Date();
+    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+    const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+
+    document.getElementById('startDate').value = formatDate(firstDay);
+    document.getElementById('endDate').value = formatDate(lastDay);
+
+    validateDateRange();
+}
+
+function formatDate(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+function validateDateRange() {
+    const startDate = new Date(document.getElementById('startDate').value);
+    const endDate = new Date(document.getElementById('endDate').value);
+
+    if (startDate && endDate) {
+        if (endDate <= startDate) {
+            alert('End date must be after start date');
+            return false;
+        }
+
+        const daysDiff = Math.floor((endDate - startDate) / (1000 * 60 * 60 * 24));
+        if (daysDiff > 365) {
+            alert('Date range cannot exceed 365 days');
+            return false;
+        }
+
+        // Update the info display
+        updateDateRangeInfo(startDate, endDate, daysDiff);
+    }
+
+    return true;
+}
+
+function updateDateRangeInfo(startDate, endDate, days) {
+    const startStr = formatDate(startDate);
+    const endStr = formatDate(endDate);
+    const infoDiv = document.getElementById('dateRangeInfo');
+
+    if (infoDiv) {
+        infoDiv.innerHTML = `
+            <i class="fas fa-calendar"></i>
+            Selected Range: <strong>${startStr}</strong> to <strong>${endStr}</strong>
+            (<strong>${days}</strong> days)
+        `;
+    }
+}
 
 function viewProducts(schoolName) {
     try {

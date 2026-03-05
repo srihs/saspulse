@@ -59,9 +59,157 @@ class DashboardCache(models.Model):
         return cache
 
 
+class SalesForecastBase(models.Model):
+    """
+    Store base 365-day sales forecasts with flexible date range extraction
+    Generates once per day and allows querying any date range within the 365-day window
+    """
+    AGGREGATION_LEVELS = [
+        ('school', 'By School'),
+        ('product', 'By Product'),
+        ('shop', 'By Shop Location'),
+        ('category', 'By Category'),
+    ]
+
+    MODEL_TYPES = [
+        ('statistical', 'Statistical Model'),
+        ('ml', 'Machine Learning'),
+        ('hybrid', 'Hybrid (Statistical + ML)'),
+    ]
+
+    # Forecast identifiers
+    forecast_id = models.CharField(max_length=100, unique=True, db_index=True)
+    model_type = models.CharField(max_length=20, choices=MODEL_TYPES, default='statistical')
+    aggregation_level = models.CharField(max_length=20, choices=AGGREGATION_LEVELS)
+
+    # What is being forecasted
+    entity_name = models.CharField(max_length=255, db_index=True)  # School name, product name, etc.
+    entity_id = models.CharField(max_length=100, null=True, blank=True)  # Product ID, category ID, etc.
+
+    # Base 365-day forecast data (JSON)
+    # Structure: {"2026-03-05": {"quantity": 0.6, "confidence_lower": 0.5, "confidence_upper": 0.7}, ...}
+    daily_forecasts = models.JSONField(default=dict)
+
+    # Metadata
+    forecast_date = models.DateField(db_index=True)  # Date forecast was generated
+    training_data_start = models.DateField()
+    training_data_end = models.DateField()
+
+    # Accuracy metrics
+    mae = models.FloatField(null=True, blank=True)  # Mean Absolute Error
+    mape = models.FloatField(null=True, blank=True)  # Mean Absolute Percentage Error
+    rmse = models.FloatField(null=True, blank=True)  # Root Mean Square Error
+    accuracy_score = models.FloatField(null=True, blank=True)  # Overall accuracy (0-100)
+
+    # Model configuration
+    model_params = models.JSONField(default=dict)  # Model hyperparameters
+
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-forecast_date', 'entity_name']
+        indexes = [
+            models.Index(fields=['forecast_id']),
+            models.Index(fields=['aggregation_level']),
+            models.Index(fields=['entity_name', 'forecast_date']),
+            models.Index(fields=['forecast_date']),
+        ]
+        unique_together = [['entity_name', 'aggregation_level', 'forecast_date']]
+
+    def __str__(self):
+        return f"{self.entity_name} - 365d Base ({self.forecast_date})"
+
+    def get_date_range_forecast(self, start_date, end_date):
+        """
+        Extract forecast data for a specific date range
+
+        Args:
+            start_date: datetime.date or string 'YYYY-MM-DD'
+            end_date: datetime.date or string 'YYYY-MM-DD'
+
+        Returns:
+            dict: {date: {quantity, confidence_lower, confidence_upper}, ...}
+        """
+        from datetime import datetime, date
+
+        # Convert to date objects if strings
+        if isinstance(start_date, str):
+            start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+        if isinstance(end_date, str):
+            end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
+
+        # Filter daily_forecasts for the date range
+        result = {}
+        for date_str, forecast_data in self.daily_forecasts.items():
+            forecast_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+            if start_date <= forecast_date <= end_date:
+                result[date_str] = forecast_data
+
+        return result
+
+    def get_total_quantity(self, start_date, end_date):
+        """
+        Calculate total forecasted quantity for a date range
+
+        Args:
+            start_date: datetime.date or string 'YYYY-MM-DD'
+            end_date: datetime.date or string 'YYYY-MM-DD'
+
+        Returns:
+            float: Total quantity forecasted
+        """
+        date_range_data = self.get_date_range_forecast(start_date, end_date)
+        return sum(day_data.get('quantity', 0) for day_data in date_range_data.values())
+
+    def get_date_stats(self, start_date, end_date):
+        """
+        Get comprehensive statistics for a date range
+
+        Args:
+            start_date: datetime.date or string 'YYYY-MM-DD'
+            end_date: datetime.date or string 'YYYY-MM-DD'
+
+        Returns:
+            dict: {
+                'total': float,
+                'average': float,
+                'min': float,
+                'max': float,
+                'days': int,
+                'daily_data': dict
+            }
+        """
+        date_range_data = self.get_date_range_forecast(start_date, end_date)
+
+        if not date_range_data:
+            return {
+                'total': 0,
+                'average': 0,
+                'min': 0,
+                'max': 0,
+                'days': 0,
+                'daily_data': {}
+            }
+
+        quantities = [day_data.get('quantity', 0) for day_data in date_range_data.values()]
+
+        return {
+            'total': sum(quantities),
+            'average': sum(quantities) / len(quantities) if quantities else 0,
+            'min': min(quantities) if quantities else 0,
+            'max': max(quantities) if quantities else 0,
+            'days': len(date_range_data),
+            'daily_data': date_range_data
+        }
+
+
 class SalesForecast(models.Model):
     """
     Store sales forecast results for different time periods
+    DEPRECATED: Use SalesForecastBase for new implementations
+    Kept for backward compatibility
     """
     FORECAST_HORIZONS = [
         ('30d', '30 Days'),

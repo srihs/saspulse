@@ -1502,11 +1502,14 @@ def extract_size_from_sku(sku_code):
 def sales_forecasting(request):
     """
     Main sales forecasting dashboard with AI/ML predictions
-    Shows forecasts for 30/90/180/365 days across schools, products, and shops
+    Supports flexible date range selection (default: today + 30 days)
+    Falls back to legacy fixed horizons if no base forecasts available
     """
-    from dashboard.models import SalesForecast
+    from dashboard.models import SalesForecast, SalesForecastBase
     from django.db.models import Count, Avg, Sum
+    from django.core.cache import cache
     from collections import defaultdict
+    from datetime import datetime, timedelta, date as datetime_date
     import json
 
     # Helper function to get stock data for a SKU
@@ -1530,28 +1533,100 @@ def sales_forecasting(request):
         }
 
     # Get parameters
-    horizon = request.GET.get('horizon', '30d')
     level = request.GET.get('level', 'school')
 
-    # Get forecasts - get only the latest forecast for each entity (avoid duplicates)
-    from django.db.models import Max
-    from collections import defaultdict
+    # Date range parameters (new approach)
+    start_date_str = request.GET.get('start_date')
+    end_date_str = request.GET.get('end_date')
 
-    # Get all forecasts for this level/horizon
-    all_forecasts = SalesForecast.objects.filter(
-        horizon=horizon,
+    # Legacy horizon parameter (for backward compatibility)
+    horizon = request.GET.get('horizon', '30d')
+
+    # Determine if using new date range approach or legacy horizon
+    use_date_range = start_date_str and end_date_str
+
+    # Parse and validate date ranges
+    today = datetime_date.today()
+
+    if use_date_range:
+        try:
+            start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+            end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+
+            # Validation
+            if end_date <= start_date:
+                return JsonResponse({'error': 'End date must be after start date'}, status=400)
+
+            date_diff = (end_date - start_date).days
+            if date_diff > 365:
+                return JsonResponse({'error': 'Date range cannot exceed 365 days'}, status=400)
+
+        except ValueError:
+            return JsonResponse({'error': 'Invalid date format. Use YYYY-MM-DD'}, status=400)
+    else:
+        # Default: today + 30 days
+        start_date = today
+        end_date = today + timedelta(days=30)
+        start_date_str = start_date.strftime('%Y-%m-%d')
+        end_date_str = end_date.strftime('%Y-%m-%d')
+
+    # Calculate number of days in range
+    num_days = (end_date - start_date).days
+
+    # Check cache first
+    cache_key = f'forecast_{level}_{start_date_str}_{end_date_str}'
+
+    # Determine cache timeout based on range
+    common_ranges = [7, 30, 90]
+    is_common_range = num_days in common_ranges and start_date == today
+    cache_timeout = 1800 if is_common_range else 600  # 30 min for common, 10 min for custom
+
+    cached_data = cache.get(cache_key)
+    if cached_data:
+        context = cached_data
+        context['from_cache'] = True
+        return render(request, 'dashboard/sales_forecasting.html', context)
+
+    # Try to use new SalesForecastBase model
+    from django.db.models import Max
+
+    # Get all base forecasts for this level (latest forecast for each entity)
+    all_base_forecasts = SalesForecastBase.objects.filter(
         aggregation_level=level
     ).order_by('entity_name', '-forecast_date')
 
     # Keep only the latest forecast for each entity_name
     seen_entities = set()
-    forecasts = []
-    for f in all_forecasts:
+    base_forecasts = []
+    for f in all_base_forecasts:
         if f.entity_name not in seen_entities:
-            forecasts.append(f)
+            base_forecasts.append(f)
             seen_entities.add(f.entity_name)
-        if len(forecasts) >= 500:  # Limit to 500 unique products
+        if len(base_forecasts) >= 500:  # Limit to 500 unique entities
             break
+
+    # If no base forecasts, fall back to legacy SalesForecast model
+    if not base_forecasts:
+        # Fallback to legacy horizon-based approach
+        all_forecasts = SalesForecast.objects.filter(
+            horizon=horizon,
+            aggregation_level=level
+        ).order_by('entity_name', '-forecast_date')
+
+        # Keep only the latest forecast for each entity_name
+        seen_entities = set()
+        forecasts = []
+        for f in all_forecasts:
+            if f.entity_name not in seen_entities:
+                forecasts.append(f)
+                seen_entities.add(f.entity_name)
+            if len(forecasts) >= 500:  # Limit to 500 unique products
+                break
+
+        use_legacy = True
+    else:
+        forecasts = base_forecasts
+        use_legacy = False
 
     # Check if we need to group by parent product
     if level == 'product':
@@ -1562,17 +1637,25 @@ def sales_forecasting(request):
             parent_name = extract_parent_product_from_sku(f.entity_name)
             size = extract_size_from_sku(f.entity_name)
 
-            # Calculate total quantity for this SKU
-            total_qty = sum([day['quantity'] for day in f.forecast_data.values()])
+            # Extract forecast data for the selected date range
+            if use_legacy:
+                # Legacy: use entire forecast_data
+                date_range_data = f.forecast_data
+            else:
+                # New: extract date range from base forecast
+                date_range_data = f.get_date_range_forecast(start_date, end_date)
+
+            # Calculate total quantity for this SKU within the date range
+            total_qty = sum([day['quantity'] for day in date_range_data.values()])
 
             # Get first 7 days detail
-            forecast_dates = sorted(f.forecast_data.keys())[:7]
+            forecast_dates = sorted(date_range_data.keys())[:7]
             next_7_days = [
                 {
                     'date': date,
-                    'quantity': f.forecast_data[date]['quantity'],
-                    'confidence_lower': f.forecast_data[date].get('confidence_lower', 0),
-                    'confidence_upper': f.forecast_data[date].get('confidence_upper', 0)
+                    'quantity': date_range_data[date]['quantity'],
+                    'confidence_lower': date_range_data[date].get('confidence_lower', 0),
+                    'confidence_upper': date_range_data[date].get('confidence_upper', 0)
                 }
                 for date in forecast_dates
             ]
@@ -1594,7 +1677,7 @@ def sales_forecasting(request):
                 'accuracy_score': round(f.accuracy_score, 1) if f.accuracy_score else 'N/A',
                 'model': f.model_params.get('model', 'Unknown'),
                 'next_7_days': next_7_days,
-                'forecast_data': f.forecast_data,
+                'forecast_data': date_range_data,
                 'training_days': f.model_params.get('training_days', 0),
                 'mae': round(f.mae, 2) if f.mae else None,
                 'mape': round(f.mape, 2) if f.mape else None
@@ -1633,17 +1716,25 @@ def sales_forecasting(request):
         # Regular flat view for school/shop/category
         forecast_list = []
         for f in forecasts:
-            # Calculate total forecasted quantity and revenue
-            total_qty = sum([day['quantity'] for day in f.forecast_data.values()])
+            # Extract forecast data for the selected date range
+            if use_legacy:
+                # Legacy: use entire forecast_data
+                date_range_data = f.forecast_data
+            else:
+                # New: extract date range from base forecast
+                date_range_data = f.get_date_range_forecast(start_date, end_date)
+
+            # Calculate total forecasted quantity
+            total_qty = sum([day['quantity'] for day in date_range_data.values()])
 
             # Get first 7 days detail
-            forecast_dates = sorted(f.forecast_data.keys())[:7]
+            forecast_dates = sorted(date_range_data.keys())[:7]
             next_7_days = [
                 {
                     'date': date,
-                    'quantity': f.forecast_data[date]['quantity'],
-                    'confidence_lower': f.forecast_data[date].get('confidence_lower', 0),
-                    'confidence_upper': f.forecast_data[date].get('confidence_upper', 0)
+                    'quantity': date_range_data[date]['quantity'],
+                    'confidence_lower': date_range_data[date].get('confidence_lower', 0),
+                    'confidence_upper': date_range_data[date].get('confidence_upper', 0)
                 }
                 for date in forecast_dates
             ]
@@ -1654,7 +1745,7 @@ def sales_forecasting(request):
                 'accuracy_score': round(f.accuracy_score, 1) if f.accuracy_score else 'N/A',
                 'model': f.model_params.get('model', 'Unknown'),
                 'next_7_days': next_7_days,
-                'forecast_data': f.forecast_data,
+                'forecast_data': date_range_data,
                 'training_days': f.model_params.get('training_days', 0),
                 'mae': round(f.mae, 2) if f.mae else None,
                 'mape': round(f.mape, 2) if f.mape else None,
@@ -1668,25 +1759,40 @@ def sales_forecasting(request):
         accuracy_scores = [f.accuracy_score for f in forecasts if f.accuracy_score is not None]
         avg_accuracy = round(sum(accuracy_scores) / len(accuracy_scores), 1) if accuracy_scores else 0
     else:
-        # For other levels, forecasts is a QuerySet
-        avg_accuracy = round(forecasts.aggregate(Avg('accuracy_score'))['accuracy_score__avg'] or 0, 1)
+        # For other levels, forecasts is a list (not QuerySet)
+        accuracy_scores = [f.accuracy_score for f in forecasts if f.accuracy_score is not None]
+        avg_accuracy = round(sum(accuracy_scores) / len(accuracy_scores), 1) if accuracy_scores else 0
+
+    # Calculate date range display
+    date_range_display = f"{start_date_str} to {end_date_str} ({num_days} days)"
 
     summary = {
         'total_forecasts': len(forecast_list),
         'avg_accuracy': avg_accuracy,
-        'horizon_display': dict(SalesForecast.FORECAST_HORIZONS).get(horizon, horizon),
-        'level_display': dict(SalesForecast.AGGREGATION_LEVELS).get(level, level)
+        'horizon_display': date_range_display,
+        'level_display': dict(SalesForecastBase.AGGREGATION_LEVELS).get(level, level),
+        'num_days': num_days,
+        'start_date': start_date_str,
+        'end_date': end_date_str
     }
 
     context = {
         'forecasts': forecast_list,
         'forecast_list_json': json.dumps(forecast_list, default=str),
         'summary': summary,
-        'current_horizon': horizon,
+        'current_horizon': horizon,  # For backward compatibility
         'current_level': level,
-        'horizons': SalesForecast.FORECAST_HORIZONS,
-        'levels': SalesForecast.AGGREGATION_LEVELS
+        'start_date': start_date_str,
+        'end_date': end_date_str,
+        'num_days': num_days,
+        'horizons': SalesForecast.FORECAST_HORIZONS,  # For backward compatibility
+        'levels': SalesForecastBase.AGGREGATION_LEVELS,
+        'use_date_range': True,
+        'from_cache': False
     }
+
+    # Cache the context
+    cache.set(cache_key, context, cache_timeout)
 
     return render(request, 'dashboard/sales_forecasting.html', context)
 
