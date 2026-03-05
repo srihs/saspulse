@@ -1608,8 +1608,19 @@ def sales_forecasting(request):
     # If no base forecasts, fall back to legacy SalesForecast model
     if not base_forecasts:
         # Fallback to legacy horizon-based approach
+        # Auto-select the best horizon that covers the requested date range
+        if num_days <= 30:
+            best_horizon = '30d'
+        elif num_days <= 90:
+            best_horizon = '90d'
+        elif num_days <= 180:
+            best_horizon = '180d'
+        else:
+            best_horizon = '365d'
+
+        # Use the best horizon instead of the default
         all_forecasts = SalesForecast.objects.filter(
-            horizon=horizon,
+            horizon=best_horizon,
             aggregation_level=level
         ).order_by('entity_name', '-forecast_date')
 
@@ -1639,8 +1650,12 @@ def sales_forecasting(request):
 
             # Extract forecast data for the selected date range
             if use_legacy:
-                # Legacy: use entire forecast_data
-                date_range_data = f.forecast_data
+                # Legacy: filter forecast_data by date range
+                date_range_data = {}
+                for date_str, forecast_data in f.forecast_data.items():
+                    forecast_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+                    if start_date <= forecast_date <= end_date:
+                        date_range_data[date_str] = forecast_data
             else:
                 # New: extract date range from base forecast
                 date_range_data = f.get_date_range_forecast(start_date, end_date)
@@ -1718,8 +1733,12 @@ def sales_forecasting(request):
         for f in forecasts:
             # Extract forecast data for the selected date range
             if use_legacy:
-                # Legacy: use entire forecast_data
-                date_range_data = f.forecast_data
+                # Legacy: filter forecast_data by date range
+                date_range_data = {}
+                for date_str, forecast_data in f.forecast_data.items():
+                    forecast_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+                    if start_date <= forecast_date <= end_date:
+                        date_range_data[date_str] = forecast_data
             else:
                 # New: extract date range from base forecast
                 date_range_data = f.get_date_range_forecast(start_date, end_date)
