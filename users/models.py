@@ -285,6 +285,22 @@ class CustomUser(models.Model):
             all_permissions.update(role.permissions)
         return all_permissions
 
+    @property
+    def is_authenticated(self):
+        """
+        Always return True for authenticated users.
+        This is required by Django's authentication system.
+        """
+        return True
+
+    @property
+    def is_anonymous(self):
+        """
+        Always return False for authenticated users.
+        This is required by Django's authentication system.
+        """
+        return False
+
 
 class UserSession(models.Model):
     """

@@ -1,0 +1,294 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}DP Team - Replenishment Review{% endblock %}
+
+{% block extra_css %}
+<link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet">
+<style>
+    .urgency-critical { background-color: #dc3545; color: white; }
+    .urgency-high { background-color: #fd7e14; color: white; }
+    .urgency-medium { background-color: #ffc107; color: #000; }
+    .urgency-low { background-color: #28a745; color: white; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="content">
+    <div class="pb-5">
+        <div class="row g-4">
+            <div class="col-12">
+                <div class="mb-8">
+                    <h2 class="mb-2">Replenishment Review - Demand Planning Team</h2>
+                    <h5 class="text-body-tertiary fw-semibold">
+                        Review and approve store-approved replenishment requests
+                    </h5>
+                </div>
+
+                <!-- Summary Cards -->
+                <div class="row mb-4">
+                    <div class="col-md-2">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6 class="text-muted">Pending Review</h6>
+                                <h3 class="text-warning">{{ summary.pending_review }}</h3>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6 class="text-muted">DP Approved</h6>
+                                <h3 class="text-success">{{ summary.dp_approved }}</h3>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6 class="text-muted">Critical Items</h6>
+                                <h3 class="text-danger">{{ summary.critical_count }}</h3>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6 class="text-muted">Total Units</h6>
+                                <h3>{{ summary.total_units|floatformat:0 }}</h3>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6 class="text-muted">Products</h6>
+                                <h3>{{ summary.unique_products }}</h3>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6 class="text-muted">Branches</h6>
+                                <h3>{{ summary.unique_branches }}</h3>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Filters -->
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <form method="get" class="row g-3">
+                            <div class="col-md-4">
+                                <label class="form-label">Urgency</label>
+                                <select name="urgency" class="form-select" onchange="this.form.submit()">
+                                    <option value="all" {% if current_urgency == 'all' %}selected{% endif %}>All Urgency</option>
+                                    {% for value, label in urgency_choices %}
+                                    <option value="{{ value }}" {% if current_urgency == value %}selected{% endif %}>{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Week</label>
+                                <select name="week" class="form-select" onchange="this.form.submit()">
+                                    <option value="current" {% if current_week == 'current' %}selected{% endif %}>Current Week</option>
+                                    <option value="all" {% if current_week == 'all' %}selected{% endif %}>All Weeks</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4 d-flex align-items-end">
+                                <button type="button" class="btn btn-success w-100" onclick="bulkApprove()">
+                                    <i class="fas fa-check-double"></i> Bulk Approve Selected
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Requests Table -->
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">Store-Approved Requests ({{ requests|length }} showing)</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table id="requestsTable" class="table table-sm table-striped">
+                                <thead>
+                                    <tr>
+                                        <th><input type="checkbox" id="selectAll"></th>
+                                        <th>Request ID</th>
+                                        <th>School</th>
+                                        <th>Product</th>
+                                        <th>Branch</th>
+                                        <th>Stock Gap</th>
+                                        <th>AI Suggested</th>
+                                        <th>Store Approved</th>
+                                        <th>DP Final</th>
+                                        <th>Urgency</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for req in requests %}
+                                    <tr>
+                                        <td><input type="checkbox" class="request-checkbox" value="{{ req.id }}"></td>
+                                        <td><small>{{ req.request_id }}</small></td>
+                                        <td><small>{{ req.school_name }}</small></td>
+                                        <td><small>{{ req.product_name|truncatechars:30 }}</small></td>
+                                        <td><small>{{ req.branch_name|truncatechars:20 }}</small></td>
+                                        <td class="fw-bold">{{ req.stock_gap }}</td>
+                                        <td>{{ req.suggested_quantity }}</td>
+                                        <td class="fw-bold text-primary">{{ req.store_approved_quantity|default:req.suggested_quantity }}</td>
+                                        <td class="fw-bold text-success">{{ req.dp_approved_quantity|default:"-" }}</td>
+                                        <td>
+                                            <span class="badge urgency-{{ req.urgency }}">{{ req.urgency|upper }}</span>
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-secondary">{{ req.status }}</span>
+                                        </td>
+                                        <td>
+                                            {% if req.status in 'approved,modified' %}
+                                            <button class="btn btn-sm btn-success" onclick="dpApprove({{ req.id }})">
+                                                <i class="fas fa-check"></i> Approve
+                                            </button>
+                                            <button class="btn btn-sm btn-warning" onclick="dpModify({{ req.id }}, '{{ req.store_approved_quantity|default:req.suggested_quantity }}', '{{ req.product_name }}')">
+                                                <i class="fas fa-edit"></i> Override
+                                            </button>
+                                            {% else %}
+                                            <span class="text-success">Approved</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modify Modal -->
+<div class="modal fade" id="modifyModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Override Quantity - DP Team</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p id="modalProduct"></p>
+                <div class="mb-3">
+                    <label class="form-label">Final Approved Quantity</label>
+                    <input type="number" class="form-control" id="modifyQuantity" step="1" min="0">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">DP Team Comment</label>
+                    <textarea class="form-control" id="modifyComment" rows="3"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="submitModify()">Save Override</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+<script>
+$(document).ready(function() {
+    $('#requestsTable').DataTable({
+        order: [[9, 'asc'], [5, 'desc']],
+        pageLength: 50
+    });
+
+    $('#selectAll').click(function() {
+        $('.request-checkbox').prop('checked', this.checked);
+    });
+});
+
+let currentRequestId = null;
+
+function dpApprove(requestId) {
+    if (confirm('Approve this request as submitted by store manager?')) {
+        submitAction(requestId, 'approve', null, '');
+    }
+}
+
+function dpModify(requestId, currentQty, productName) {
+    currentRequestId = requestId;
+    document.getElementById('modalProduct').textContent = 'Product: ' + productName;
+    document.getElementById('modifyQuantity').value = currentQty;
+    document.getElementById('modifyComment').value = '';
+    new bootstrap.Modal(document.getElementById('modifyModal')).show();
+}
+
+function submitModify() {
+    const quantity = document.getElementById('modifyQuantity').value;
+    const comment = document.getElementById('modifyComment').value;
+    submitAction(currentRequestId, 'modify', quantity, comment);
+    bootstrap.Modal.getInstance(document.getElementById('modifyModal')).hide();
+}
+
+function bulkApprove() {
+    const selected = $('.request-checkbox:checked').map(function() { return this.value; }).get();
+    if (selected.length === 0) {
+        alert('Please select at least one request');
+        return;
+    }
+    if (confirm(`Approve ${selected.length} selected requests?`)) {
+        let completed = 0;
+        selected.forEach(id => {
+            submitAction(id, 'approve', null, '', function() {
+                completed++;
+                if (completed === selected.length) {
+                    alert('All requests approved!');
+                    location.reload();
+                }
+            });
+        });
+    }
+}
+
+function submitAction(requestId, action, quantity, comment, callback) {
+    fetch(`/dashboard/replenishment/dp/approve/${requestId}/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: JSON.stringify({
+            action: action,
+            quantity: quantity,
+            comment: comment
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            if (!callback) {
+                alert(data.message);
+                location.reload();
+            } else {
+                callback();
+            }
+        } else {
+            alert('Error: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('An error occurred');
+    });
+}
+</script>
+{% endblock %}

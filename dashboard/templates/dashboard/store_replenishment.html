@@ -1,0 +1,292 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Store Replenishment Requests{% endblock %}
+
+{% block extra_css %}
+<link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet">
+<style>
+    .urgency-badge {
+        font-size: 0.85rem;
+        padding: 0.35rem 0.65rem;
+    }
+    .urgency-critical {
+        background-color: #dc3545;
+        color: white;
+    }
+    .urgency-high {
+        background-color: #fd7e14;
+        color: white;
+    }
+    .urgency-medium {
+        background-color: #ffc107;
+        color: #000;
+    }
+    .urgency-low {
+        background-color: #28a745;
+        color: white;
+    }
+    .stock-info {
+        font-size: 0.9rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="content">
+    <div class="pb-5">
+        <div class="row g-4">
+            <div class="col-12 col-xxl-12">
+                <div class="mb-8">
+                    <h2 class="mb-2">Replenishment Requests - Store Manager</h2>
+                    <h5 class="text-body-tertiary fw-semibold">
+                        AI-Generated Stock Replenishment Recommendations
+                    </h5>
+                </div>
+
+                <!-- Summary Cards -->
+                <div class="row mb-4">
+                    <div class="col-md-3">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6 class="text-muted">Total Requests</h6>
+                                <h3>{{ summary.total_requests }}</h3>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6 class="text-muted">Pending Review</h6>
+                                <h3 class="text-warning">{{ summary.pending_count }}</h3>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6 class="text-muted">Critical Urgency</h6>
+                                <h3 class="text-danger">{{ summary.critical_count }}</h3>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6 class="text-muted">Total Units Needed</h6>
+                                <h3>{{ summary.total_units|floatformat:0 }}</h3>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Filters -->
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <form method="get" class="row g-3">
+                            <div class="col-md-3">
+                                <label class="form-label">Status</label>
+                                <select name="status" class="form-select" onchange="this.form.submit()">
+                                    <option value="all" {% if current_status == 'all' %}selected{% endif %}>All Status</option>
+                                    {% for value, label in status_choices %}
+                                    <option value="{{ value }}" {% if current_status == value %}selected{% endif %}>{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Urgency</label>
+                                <select name="urgency" class="form-select" onchange="this.form.submit()">
+                                    <option value="all" {% if current_urgency == 'all' %}selected{% endif %}>All Urgency</option>
+                                    {% for value, label in urgency_choices %}
+                                    <option value="{{ value }}" {% if current_urgency == value %}selected{% endif %}>{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Week</label>
+                                <select name="week" class="form-select" onchange="this.form.submit()">
+                                    <option value="current" {% if current_week == 'current' %}selected{% endif %}>Current Week</option>
+                                    <option value="all" {% if current_week == 'all' %}selected{% endif %}>All Weeks</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3 d-flex align-items-end">
+                                <button type="submit" class="btn btn-primary w-100">Apply Filters</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Requests Table -->
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">Replenishment Requests ({{ requests|length }} showing)</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table id="requestsTable" class="table table-sm table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Request ID</th>
+                                        <th>School</th>
+                                        <th>Product</th>
+                                        <th>Branch</th>
+                                        <th>Current Stock</th>
+                                        <th>Forecast (30d)</th>
+                                        <th>Gap</th>
+                                        <th>AI Suggested</th>
+                                        <th>Days Left</th>
+                                        <th>Urgency</th>
+                                        <th>Confidence</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for req in requests %}
+                                    <tr>
+                                        <td><small>{{ req.request_id }}</small></td>
+                                        <td><small>{{ req.school_name }}</small></td>
+                                        <td><small>{{ req.product_name|truncatechars:30 }}</small></td>
+                                        <td><small>{{ req.branch_name|truncatechars:20 }}</small></td>
+                                        <td>{{ req.current_stock }}</td>
+                                        <td>{{ req.forecasted_demand }}</td>
+                                        <td class="fw-bold">{{ req.stock_gap }}</td>
+                                        <td class="fw-bold text-primary">{{ req.suggested_quantity }}</td>
+                                        <td>{{ req.days_of_stock|floatformat:1 }}</td>
+                                        <td>
+                                            <span class="badge urgency-badge urgency-{{ req.urgency }}">
+                                                {{ req.urgency|upper }}
+                                            </span>
+                                        </td>
+                                        <td>{{ req.ai_confidence }}%</td>
+                                        <td>
+                                            <span class="badge bg-secondary">{{ req.status }}</span>
+                                        </td>
+                                        <td>
+                                            {% if req.status == 'pending' %}
+                                            <button class="btn btn-sm btn-success" onclick="approveRequest({{ req.id }}, '{{ req.suggested_quantity }}')">
+                                                <i class="fas fa-check"></i> Approve
+                                            </button>
+                                            <button class="btn btn-sm btn-warning" onclick="modifyRequest({{ req.id }}, '{{ req.suggested_quantity }}', '{{ req.product_name }}')">
+                                                <i class="fas fa-edit"></i> Modify
+                                            </button>
+                                            <button class="btn btn-sm btn-danger" onclick="rejectRequest({{ req.id }})">
+                                                <i class="fas fa-times"></i> Reject
+                                            </button>
+                                            {% else %}
+                                            <span class="text-muted">{{ req.status|title }}</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modify Modal -->
+<div class="modal fade" id="modifyModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Modify Replenishment Request</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p id="modalProduct"></p>
+                <div class="mb-3">
+                    <label class="form-label">Approved Quantity</label>
+                    <input type="number" class="form-control" id="modifyQuantity" step="1" min="0">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Comment (Optional)</label>
+                    <textarea class="form-control" id="modifyComment" rows="3"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="submitModify()">Save Changes</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+<script>
+$(document).ready(function() {
+    $('#requestsTable').DataTable({
+        order: [[9, 'asc'], [6, 'desc']], // Sort by urgency then gap
+        pageLength: 50,
+        dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>rtip'
+    });
+});
+
+let currentRequestId = null;
+
+function approveRequest(requestId, suggestedQty) {
+    if (confirm('Approve this replenishment request with quantity: ' + suggestedQty + '?')) {
+        submitAction(requestId, 'approve', null, '');
+    }
+}
+
+function modifyRequest(requestId, suggestedQty, productName) {
+    currentRequestId = requestId;
+    document.getElementById('modalProduct').textContent = 'Product: ' + productName;
+    document.getElementById('modifyQuantity').value = suggestedQty;
+    document.getElementById('modifyComment').value = '';
+    new bootstrap.Modal(document.getElementById('modifyModal')).show();
+}
+
+function submitModify() {
+    const quantity = document.getElementById('modifyQuantity').value;
+    const comment = document.getElementById('modifyComment').value;
+    submitAction(currentRequestId, 'modify', quantity, comment);
+    bootstrap.Modal.getInstance(document.getElementById('modifyModal')).hide();
+}
+
+function rejectRequest(requestId) {
+    const comment = prompt('Please provide a reason for rejection:');
+    if (comment !== null) {
+        submitAction(requestId, 'reject', null, comment);
+    }
+}
+
+function submitAction(requestId, action, quantity, comment) {
+    fetch(`/dashboard/replenishment/store/approve/${requestId}/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: JSON.stringify({
+            action: action,
+            quantity: quantity,
+            comment: comment
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+            location.reload();
+        } else {
+            alert('Error: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('An error occurred');
+    });
+}
+</script>
+{% endblock %}

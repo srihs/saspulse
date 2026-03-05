@@ -133,3 +133,13 @@ Makefile
 
 docs/
 *.sqlite3
+
+# Server startup/shutdown scripts
+*.sh
+start_server.sh
+stop_server.sh
+
+# Gunicorn configuration
+gunicorn_config.py
+gunicorn.log
+*.pid

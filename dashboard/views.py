@@ -7,6 +7,7 @@ Stock Value vs BTS Sales Analysis Dashboard
 from django.shortcuts import render, redirect
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
+from django.contrib.auth.decorators import login_required
 from django.db.models import Sum, Count, F, DecimalField, Value
 from django.db.models.functions import Coalesce
 from decimal import Decimal
@@ -1462,3 +1463,742 @@ def bts_forecasting(request):
     }
 
     return render(request, 'dashboard/bts_forecasting.html', context)
+
+
+def extract_parent_product_from_sku(sku_code):
+    """
+    Extract parent product name from SKU code by removing size suffix
+
+    Examples:
+    - "BFLC 01 CL NAVY RUC-M" -> "BFLC 01 CL NAVY RUC"
+    - "BFLC 05 CL RC -L" -> "BFLC 05 CL RC"
+    - "BL 170J JCHS -10" -> "BL 170J JCHS"
+    - "US SH 703L LBC -80" -> "US SH 703L LBC"
+    """
+    import re
+    # Remove size suffix pattern like "-M", "-L", "-10", "-80", etc.
+    # Pattern: space followed by dash and size indicator at the end
+    parent_name = re.sub(r'\s*-\s*[\dA-Z]+$', '', sku_code)
+    return parent_name
+
+
+def extract_size_from_sku(sku_code):
+    """
+    Extract size from SKU code
+
+    Examples:
+    - "BFLC 01 CL NAVY RUC-M" -> "M"
+    - "BL 170J JCHS -10" -> "10"
+    - "US SH 703L LBC -80" -> "80"
+    """
+    import re
+    match = re.search(r'-\s*([\dA-Z]+)$', sku_code)
+    if match:
+        return match.group(1)
+    return 'N/A'
+
+
+@login_required
+def sales_forecasting(request):
+    """
+    Main sales forecasting dashboard with AI/ML predictions
+    Shows forecasts for 30/90/180/365 days across schools, products, and shops
+    """
+    from dashboard.models import SalesForecast
+    from django.db.models import Count, Avg, Sum
+    from collections import defaultdict
+    import json
+
+    # Helper function to get stock data for a SKU
+    def get_stock_data(sku_code):
+        """Get aggregated stock data for a SKU across all branches using raw SQL"""
+        from django.db import connection
+
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT
+                    COALESCE(SUM(stock_on_hand), 0) as total_stock_on_hand,
+                    COALESCE(SUM(incoming), 0) as total_incoming
+                FROM cin7_sync_stock
+                WHERE code = %s
+            """, [sku_code])
+            row = cursor.fetchone()
+
+        return {
+            'stock_on_hand': float(row[0] or 0),
+            'incoming': float(row[1] or 0)
+        }
+
+    # Get parameters
+    horizon = request.GET.get('horizon', '30d')
+    level = request.GET.get('level', 'school')
+
+    # Get forecasts - get only the latest forecast for each entity (avoid duplicates)
+    from django.db.models import Max
+    from collections import defaultdict
+
+    # Get all forecasts for this level/horizon
+    all_forecasts = SalesForecast.objects.filter(
+        horizon=horizon,
+        aggregation_level=level
+    ).order_by('entity_name', '-forecast_date')
+
+    # Keep only the latest forecast for each entity_name
+    seen_entities = set()
+    forecasts = []
+    for f in all_forecasts:
+        if f.entity_name not in seen_entities:
+            forecasts.append(f)
+            seen_entities.add(f.entity_name)
+        if len(forecasts) >= 500:  # Limit to 500 unique products
+            break
+
+    # Check if we need to group by parent product
+    if level == 'product':
+        # Group SKU variations by parent product
+        grouped_products = defaultdict(list)
+
+        for f in forecasts:
+            parent_name = extract_parent_product_from_sku(f.entity_name)
+            size = extract_size_from_sku(f.entity_name)
+
+            # Calculate total quantity for this SKU
+            total_qty = sum([day['quantity'] for day in f.forecast_data.values()])
+
+            # Get first 7 days detail
+            forecast_dates = sorted(f.forecast_data.keys())[:7]
+            next_7_days = [
+                {
+                    'date': date,
+                    'quantity': f.forecast_data[date]['quantity'],
+                    'confidence_lower': f.forecast_data[date].get('confidence_lower', 0),
+                    'confidence_upper': f.forecast_data[date].get('confidence_upper', 0)
+                }
+                for date in forecast_dates
+            ]
+
+            # Get stock data for this SKU
+            stock_info = get_stock_data(f.entity_name)
+            stock_on_hand = stock_info['stock_on_hand']
+            incoming_stock = stock_info['incoming']
+            forecasted_stock = round(total_qty, 1)
+            stock_gap = (stock_on_hand + incoming_stock) - forecasted_stock
+
+            variation_data = {
+                'sku_code': f.entity_name,
+                'size': size,
+                'total_quantity': forecasted_stock,
+                'stock_on_hand': int(stock_on_hand),
+                'incoming_stock': int(incoming_stock),
+                'stock_gap': round(stock_gap, 1),
+                'accuracy_score': round(f.accuracy_score, 1) if f.accuracy_score else 'N/A',
+                'model': f.model_params.get('model', 'Unknown'),
+                'next_7_days': next_7_days,
+                'forecast_data': f.forecast_data,
+                'training_days': f.model_params.get('training_days', 0),
+                'mae': round(f.mae, 2) if f.mae else None,
+                'mape': round(f.mape, 2) if f.mape else None
+            }
+
+            grouped_products[parent_name].append(variation_data)
+
+        # Create product summaries
+        forecast_list = []
+        for parent_name, variations in sorted(grouped_products.items()):
+            # Calculate totals across all variations
+            total_forecast = sum([v['total_quantity'] for v in variations])
+            avg_accuracy = sum([v['accuracy_score'] for v in variations if v['accuracy_score'] != 'N/A']) / len([v for v in variations if v['accuracy_score'] != 'N/A']) if any([v['accuracy_score'] != 'N/A' for v in variations]) else 'N/A'
+
+            # Sort variations by size
+            variations_sorted = sorted(variations, key=lambda x: (
+                # Sort numeric sizes numerically
+                int(x['size']) if x['size'].isdigit() else 999,
+                # Then sort text sizes alphabetically
+                x['size']
+            ))
+
+            forecast_list.append({
+                'parent_name': parent_name,
+                'variations': variations_sorted,
+                'total_quantity': round(total_forecast, 1),
+                'variation_count': len(variations),
+                'avg_accuracy': round(avg_accuracy, 1) if avg_accuracy != 'N/A' else 'N/A',
+                'is_grouped': True
+            })
+
+        # Sort by total quantity descending
+        forecast_list = sorted(forecast_list, key=lambda x: x['total_quantity'], reverse=True)[:200]  # Increased limit to show more products
+
+    else:
+        # Regular flat view for school/shop/category
+        forecast_list = []
+        for f in forecasts:
+            # Calculate total forecasted quantity and revenue
+            total_qty = sum([day['quantity'] for day in f.forecast_data.values()])
+
+            # Get first 7 days detail
+            forecast_dates = sorted(f.forecast_data.keys())[:7]
+            next_7_days = [
+                {
+                    'date': date,
+                    'quantity': f.forecast_data[date]['quantity'],
+                    'confidence_lower': f.forecast_data[date].get('confidence_lower', 0),
+                    'confidence_upper': f.forecast_data[date].get('confidence_upper', 0)
+                }
+                for date in forecast_dates
+            ]
+
+            forecast_list.append({
+                'entity_name': f.entity_name,
+                'total_quantity': round(total_qty, 1),
+                'accuracy_score': round(f.accuracy_score, 1) if f.accuracy_score else 'N/A',
+                'model': f.model_params.get('model', 'Unknown'),
+                'next_7_days': next_7_days,
+                'forecast_data': f.forecast_data,
+                'training_days': f.model_params.get('training_days', 0),
+                'mae': round(f.mae, 2) if f.mae else None,
+                'mape': round(f.mape, 2) if f.mape else None,
+                'is_grouped': False
+            })
+
+    # Get summary statistics
+    # Calculate average accuracy from the forecasts list
+    if level == 'product':
+        # For product level, forecasts is a list, calculate manually
+        accuracy_scores = [f.accuracy_score for f in forecasts if f.accuracy_score is not None]
+        avg_accuracy = round(sum(accuracy_scores) / len(accuracy_scores), 1) if accuracy_scores else 0
+    else:
+        # For other levels, forecasts is a QuerySet
+        avg_accuracy = round(forecasts.aggregate(Avg('accuracy_score'))['accuracy_score__avg'] or 0, 1)
+
+    summary = {
+        'total_forecasts': len(forecast_list),
+        'avg_accuracy': avg_accuracy,
+        'horizon_display': dict(SalesForecast.FORECAST_HORIZONS).get(horizon, horizon),
+        'level_display': dict(SalesForecast.AGGREGATION_LEVELS).get(level, level)
+    }
+
+    context = {
+        'forecasts': forecast_list,
+        'forecast_list_json': json.dumps(forecast_list, default=str),
+        'summary': summary,
+        'current_horizon': horizon,
+        'current_level': level,
+        'horizons': SalesForecast.FORECAST_HORIZONS,
+        'levels': SalesForecast.AGGREGATION_LEVELS
+    }
+
+    return render(request, 'dashboard/sales_forecasting.html', context)
+
+
+@login_required
+def forecast_product_breakdown(request, school_name):
+    """
+    Get product-level breakdown for a specific school
+    Returns JSON with all products forecasted for that school
+    """
+    from dashboard.models import SalesForecast
+    from django.db import connection
+    import json
+
+    horizon = request.GET.get('horizon', '30d')
+
+    # Get product-level forecasts for this school
+    # We need to query products that belong to this school's sub_category
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            SELECT
+                sf.entity_name as product_name,
+                sf.forecast_data,
+                sf.accuracy_score,
+                sf.model_params,
+                p.code as product_code,
+                p.sub_category
+            FROM dashboard_salesforecast sf
+            JOIN cin7_sync_product p ON p.name COLLATE utf8mb4_unicode_ci = sf.entity_name COLLATE utf8mb4_unicode_ci
+            WHERE sf.aggregation_level = 'product'
+              AND sf.horizon = %s
+              AND p.sub_category COLLATE utf8mb4_unicode_ci = %s
+              AND (p.category_name LIKE '%%Shop' OR p.category_name = 'Wholesale Schools')
+            ORDER BY sf.entity_name
+            LIMIT 500
+        """, [horizon, school_name])
+
+        products = []
+        for row in cursor.fetchall():
+            product_name, forecast_data_json, accuracy, model_params_json, product_code, sub_category = row
+
+            # Parse JSON fields
+            import json as json_lib
+            forecast_data = json_lib.loads(forecast_data_json) if isinstance(forecast_data_json, str) else forecast_data_json
+            model_params = json_lib.loads(model_params_json) if isinstance(model_params_json, str) else model_params_json
+
+            # Calculate totals
+            total_qty = sum([day.get('quantity', 0) for day in forecast_data.values()])
+
+            # Get next 7 days
+            forecast_dates = sorted(forecast_data.keys())[:7]
+            next_7_days = []
+            for date in forecast_dates:
+                day_data = forecast_data.get(date, {})
+                next_7_days.append({
+                    'date': date,
+                    'quantity': round(day_data.get('quantity', 0), 1)
+                })
+
+            products.append({
+                'product_name': product_name,
+                'product_code': product_code or 'N/A',
+                'total_quantity': round(total_qty, 1),
+                'accuracy_score': round(accuracy, 1) if accuracy else 'N/A',
+                'model': model_params.get('model', 'Unknown'),
+                'next_7_days': next_7_days
+            })
+
+    return JsonResponse({
+        'school_name': school_name,
+        'horizon': horizon,
+        'products': products,
+        'total_products': len(products),
+        'total_units': sum([p['total_quantity'] for p in products])
+    })
+
+
+@login_required
+def store_manager_replenishment(request):
+    """
+    Store Manager Replenishment Dashboard
+    Shows replenishment requests for the manager's assigned branches
+    """
+    from dashboard.models import ReplenishmentRequest
+    from django.db.models import Q, Count, Sum, Avg
+    from django.db import connection
+    import json
+
+    user = request.user
+
+    # Get filter parameters
+    status_filter = request.GET.get('status', 'pending')
+    urgency_filter = request.GET.get('urgency', 'all')
+    week_filter = request.GET.get('week', 'current')
+
+    # Base query - for now, show all requests (later filter by user's branches)
+    # TODO: Add branch assignment to users
+    requests_query = ReplenishmentRequest.objects.all()
+
+    # Apply filters
+    if status_filter != 'all':
+        requests_query = requests_query.filter(status=status_filter)
+
+    if urgency_filter != 'all':
+        requests_query = requests_query.filter(urgency=urgency_filter)
+
+    # Get current week number
+    from datetime import datetime
+    current_week = datetime.now().isocalendar()[1]
+
+    if week_filter == 'current':
+        requests_query = requests_query.filter(week_number=current_week)
+    elif week_filter != 'all':
+        try:
+            requests_query = requests_query.filter(week_number=int(week_filter))
+        except ValueError:
+            pass
+
+    # Get requests with related data using raw SQL to avoid ORM issues
+    requests_list = []
+
+    with connection.cursor() as cursor:
+        query = """
+        SELECT
+            rr.id,
+            rr.request_id,
+            rr.school_name,
+            p.name as product_name,
+            p.code as product_code,
+            b.company as branch_name,
+            rr.current_stock,
+            rr.forecasted_demand_30d,
+            rr.stock_gap,
+            rr.suggested_quantity,
+            rr.urgency,
+            rr.ai_confidence,
+            rr.status,
+            rr.store_approved_quantity,
+            rr.store_manager_comment,
+            rr.week_number,
+            rr.year,
+            rr.created_at
+        FROM dashboard_replenishmentrequest rr
+        JOIN cin7_sync_product p ON p.id = rr.product_id
+        JOIN cin7_sync_branch b ON b.id = rr.branch_id
+        WHERE 1=1
+        """
+
+        params = []
+
+        if status_filter != 'all':
+            query += " AND rr.status = %s"
+            params.append(status_filter)
+
+        if urgency_filter != 'all':
+            query += " AND rr.urgency = %s"
+            params.append(urgency_filter)
+
+        if week_filter == 'current':
+            query += " AND rr.week_number = %s"
+            params.append(current_week)
+        elif week_filter != 'all':
+            try:
+                query += " AND rr.week_number = %s"
+                params.append(int(week_filter))
+            except ValueError:
+                pass
+
+        query += " ORDER BY FIELD(rr.urgency, 'critical', 'high', 'medium', 'low'), rr.stock_gap DESC LIMIT 500"
+
+        cursor.execute(query, params)
+        columns = [col[0] for col in cursor.description]
+
+        for row in cursor.fetchall():
+            row_dict = dict(zip(columns, row))
+            # Calculate days of stock
+            daily_demand = row_dict['forecasted_demand_30d'] / 30 if row_dict['forecasted_demand_30d'] > 0 else 0
+            days_of_stock = row_dict['current_stock'] / daily_demand if daily_demand > 0 else 999
+
+            requests_list.append({
+                'id': row_dict['id'],
+                'request_id': row_dict['request_id'],
+                'school_name': row_dict['school_name'],
+                'product_name': row_dict['product_name'],
+                'product_code': row_dict['product_code'],
+                'branch_name': row_dict['branch_name'],
+                'current_stock': round(row_dict['current_stock'], 1),
+                'forecasted_demand': round(row_dict['forecasted_demand_30d'], 1),
+                'stock_gap': round(row_dict['stock_gap'], 1),
+                'suggested_quantity': round(row_dict['suggested_quantity'], 1),
+                'approved_quantity': round(row_dict['store_approved_quantity'], 1) if row_dict['store_approved_quantity'] else None,
+                'urgency': row_dict['urgency'],
+                'ai_confidence': round(row_dict['ai_confidence'], 1),
+                'status': row_dict['status'],
+                'comment': row_dict['store_manager_comment'],
+                'days_of_stock': round(days_of_stock, 1),
+                'week_number': row_dict['week_number'],
+                'year': row_dict['year'],
+                'created_at': row_dict['created_at'].strftime('%Y-%m-%d %H:%M') if row_dict['created_at'] else ''
+            })
+
+    # Calculate summary statistics
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            SELECT
+                COUNT(*) as total_requests,
+                SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending_count,
+                SUM(CASE WHEN urgency = 'critical' THEN 1 ELSE 0 END) as critical_count,
+                SUM(suggested_quantity) as total_units_needed,
+                AVG(ai_confidence) as avg_confidence
+            FROM dashboard_replenishmentrequest
+            WHERE 1=1
+        """)
+
+        row = cursor.fetchone()
+        summary = {
+            'total_requests': row[0] or 0,
+            'pending_count': row[1] or 0,
+            'critical_count': row[2] or 0,
+            'total_units': round(row[3] or 0, 0),
+            'avg_confidence': round(row[4] or 0, 1)
+        }
+
+    context = {
+        'requests': requests_list,
+        'requests_json': json.dumps(requests_list, default=str),
+        'summary': summary,
+        'current_status': status_filter,
+        'current_urgency': urgency_filter,
+        'current_week': week_filter,
+        'status_choices': ReplenishmentRequest.STATUS_CHOICES,
+        'urgency_choices': ReplenishmentRequest.URGENCY_LEVELS,
+    }
+
+    return render(request, 'dashboard/store_replenishment.html', context)
+
+
+@login_required
+@require_http_methods(["POST"])
+def approve_replenishment(request, request_id):
+    """
+    Approve/Modify/Reject a replenishment request (Store Manager action)
+    """
+    from dashboard.models import ReplenishmentRequest
+    from django.db import connection
+    from django.utils import timezone
+    import json
+
+    try:
+        data = json.loads(request.body)
+        action = data.get('action')  # 'approve', 'modify', 'reject'
+        approved_quantity = data.get('quantity')
+        comment = data.get('comment', '')
+
+        # Update using raw SQL to avoid ORM issues
+        with connection.cursor() as cursor:
+            if action == 'approve':
+                cursor.execute("""
+                    UPDATE dashboard_replenishmentrequest
+                    SET status = 'approved',
+                        store_approved_quantity = suggested_quantity,
+                        store_manager_comment = %s,
+                        store_manager_id = %s,
+                        store_approved_at = NOW(),
+                        updated_at = NOW()
+                    WHERE id = %s
+                """, [comment, request.user.id, request_id])
+
+            elif action == 'modify':
+                cursor.execute("""
+                    UPDATE dashboard_replenishmentrequest
+                    SET status = 'modified',
+                        store_approved_quantity = %s,
+                        store_manager_comment = %s,
+                        store_manager_id = %s,
+                        store_approved_at = NOW(),
+                        updated_at = NOW()
+                    WHERE id = %s
+                """, [float(approved_quantity), comment, request.user.id, request_id])
+
+            elif action == 'reject':
+                cursor.execute("""
+                    UPDATE dashboard_replenishmentrequest
+                    SET status = 'rejected',
+                        store_approved_quantity = 0,
+                        store_manager_comment = %s,
+                        store_manager_id = %s,
+                        store_approved_at = NOW(),
+                        updated_at = NOW()
+                    WHERE id = %s
+                """, [comment, request.user.id, request_id])
+
+        return JsonResponse({
+            'success': True,
+            'message': f'Request {action}ed successfully'
+        })
+
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=400)
+
+
+@login_required
+def dp_team_replenishment(request):
+    """
+    Demand Planning Team Dashboard
+    Shows all approved replenishment requests from all stores
+    """
+    from dashboard.models import ReplenishmentRequest
+    from django.db import connection
+    import json
+
+    # Get filter parameters
+    status_filter = request.GET.get('status', 'approved,modified')
+    urgency_filter = request.GET.get('urgency', 'all')
+    week_filter = request.GET.get('week', 'current')
+
+    # Get current week number
+    from datetime import datetime
+    current_week = datetime.now().isocalendar()[1]
+
+    # Get requests using raw SQL
+    requests_list = []
+
+    with connection.cursor() as cursor:
+        query = """
+        SELECT
+            rr.id,
+            rr.request_id,
+            rr.school_name,
+            p.name as product_name,
+            p.code as product_code,
+            b.company as branch_name,
+            rr.current_stock,
+            rr.forecasted_demand_30d,
+            rr.stock_gap,
+            rr.suggested_quantity,
+            rr.store_approved_quantity,
+            rr.dp_approved_quantity,
+            rr.urgency,
+            rr.ai_confidence,
+            rr.status,
+            rr.store_manager_comment,
+            rr.dp_team_comment,
+            rr.week_number,
+            rr.year,
+            rr.created_at,
+            rr.store_approved_at
+        FROM dashboard_replenishmentrequest rr
+        JOIN cin7_sync_product p ON p.id = rr.product_id
+        JOIN cin7_sync_branch b ON b.id = rr.branch_id
+        WHERE rr.status IN ('approved', 'modified', 'dp_review', 'dp_approved')
+        """
+
+        params = []
+
+        if urgency_filter != 'all':
+            query += " AND rr.urgency = %s"
+            params.append(urgency_filter)
+
+        if week_filter == 'current':
+            query += " AND rr.week_number = %s"
+            params.append(current_week)
+        elif week_filter != 'all':
+            try:
+                query += " AND rr.week_number = %s"
+                params.append(int(week_filter))
+            except ValueError:
+                pass
+
+        query += " ORDER BY FIELD(rr.urgency, 'critical', 'high', 'medium', 'low'), rr.stock_gap DESC LIMIT 1000"
+
+        cursor.execute(query, params)
+        columns = [col[0] for col in cursor.description]
+
+        for row in cursor.fetchall():
+            row_dict = dict(zip(columns, row))
+
+            # Determine final quantity
+            if row_dict['dp_approved_quantity'] is not None:
+                final_qty = row_dict['dp_approved_quantity']
+            elif row_dict['store_approved_quantity'] is not None:
+                final_qty = row_dict['store_approved_quantity']
+            else:
+                final_qty = row_dict['suggested_quantity']
+
+            requests_list.append({
+                'id': row_dict['id'],
+                'request_id': row_dict['request_id'],
+                'school_name': row_dict['school_name'],
+                'product_name': row_dict['product_name'],
+                'product_code': row_dict['product_code'],
+                'branch_name': row_dict['branch_name'],
+                'current_stock': round(row_dict['current_stock'], 1),
+                'forecasted_demand': round(row_dict['forecasted_demand_30d'], 1),
+                'stock_gap': round(row_dict['stock_gap'], 1),
+                'suggested_quantity': round(row_dict['suggested_quantity'], 1),
+                'store_approved_quantity': round(row_dict['store_approved_quantity'], 1) if row_dict['store_approved_quantity'] else None,
+                'dp_approved_quantity': round(row_dict['dp_approved_quantity'], 1) if row_dict['dp_approved_quantity'] else None,
+                'final_quantity': round(final_qty, 1),
+                'urgency': row_dict['urgency'],
+                'ai_confidence': round(row_dict['ai_confidence'], 1),
+                'status': row_dict['status'],
+                'store_comment': row_dict['store_manager_comment'],
+                'dp_comment': row_dict['dp_team_comment'],
+                'week_number': row_dict['week_number'],
+                'year': row_dict['year'],
+                'created_at': row_dict['created_at'].strftime('%Y-%m-%d') if row_dict['created_at'] else '',
+                'approved_at': row_dict['store_approved_at'].strftime('%Y-%m-%d') if row_dict['store_approved_at'] else ''
+            })
+
+    # Calculate summary statistics
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            SELECT
+                COUNT(*) as total_requests,
+                SUM(CASE WHEN status IN ('approved', 'modified') THEN 1 ELSE 0 END) as pending_review,
+                SUM(CASE WHEN status = 'dp_approved' THEN 1 ELSE 0 END) as dp_approved_count,
+                SUM(CASE WHEN urgency = 'critical' THEN 1 ELSE 0 END) as critical_count,
+                SUM(COALESCE(store_approved_quantity, suggested_quantity)) as total_units_needed,
+                COUNT(DISTINCT product_id) as unique_products,
+                COUNT(DISTINCT branch_id) as unique_branches
+            FROM dashboard_replenishmentrequest
+            WHERE status IN ('approved', 'modified', 'dp_review', 'dp_approved')
+        """)
+
+        row = cursor.fetchone()
+        summary = {
+            'total_requests': row[0] or 0,
+            'pending_review': row[1] or 0,
+            'dp_approved': row[2] or 0,
+            'critical_count': row[3] or 0,
+            'total_units': round(row[4] or 0, 0),
+            'unique_products': row[5] or 0,
+            'unique_branches': row[6] or 0
+        }
+
+    context = {
+        'requests': requests_list,
+        'requests_json': json.dumps(requests_list, default=str),
+        'summary': summary,
+        'current_urgency': urgency_filter,
+        'current_week': week_filter,
+        'urgency_choices': ReplenishmentRequest.URGENCY_LEVELS,
+    }
+
+    return render(request, 'dashboard/dp_replenishment.html', context)
+
+
+@login_required
+@require_http_methods(["POST"])
+def dp_approve_replenishment(request, request_id):
+    """
+    DP Team approval/modification of replenishment request
+    """
+    from django.db import connection
+    import json
+
+    try:
+        data = json.loads(request.body)
+        action = data.get('action')  # 'approve', 'modify', 'reject'
+        approved_quantity = data.get('quantity')
+        comment = data.get('comment', '')
+
+        with connection.cursor() as cursor:
+            if action == 'approve':
+                # Approve with store manager's quantity
+                cursor.execute("""
+                    UPDATE dashboard_replenishmentrequest
+                    SET status = 'dp_approved',
+                        dp_approved_quantity = COALESCE(store_approved_quantity, suggested_quantity),
+                        dp_team_comment = %s,
+                        dp_approver_id = %s,
+                        dp_approved_at = NOW(),
+                        updated_at = NOW()
+                    WHERE id = %s
+                """, [comment, request.user.id, request_id])
+
+            elif action == 'modify':
+                # Override with DP team's quantity
+                cursor.execute("""
+                    UPDATE dashboard_replenishmentrequest
+                    SET status = 'dp_approved',
+                        dp_approved_quantity = %s,
+                        dp_team_comment = %s,
+                        dp_approver_id = %s,
+                        dp_approved_at = NOW(),
+                        updated_at = NOW()
+                    WHERE id = %s
+                """, [float(approved_quantity), comment, request.user.id, request_id])
+
+            elif action == 'reject':
+                cursor.execute("""
+                    UPDATE dashboard_replenishmentrequest
+                    SET status = 'dp_rejected',
+                        dp_approved_quantity = 0,
+                        dp_team_comment = %s,
+                        dp_approver_id = %s,
+                        dp_approved_at = NOW(),
+                        updated_at = NOW()
+                    WHERE id = %s
+                """, [comment, request.user.id, request_id])
+
+        return JsonResponse({
+            'success': True,
+            'message': f'Request {action}ed successfully by DP team'
+        })
+
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=400)
