@@ -171,7 +171,7 @@
                                         <tr class="parent-row clickable" data-variation-id="{{ forloop.counter }}" style="background-color: #f8f9fa;">
                                             <td class="dt-control"></td>
                                             <td>
-                                                <strong>{{ forecast.parent_name }}</strong>
+                                                <strong>{{ forecast.product_name }}</strong>
                                             </td>
                                             <td><strong>{{ forecast.total_quantity|floatformat:0 }} units</strong></td>
                                             <td>
@@ -197,7 +197,7 @@
 
                                         <!-- Variation Rows (Collapsed by default) -->
                                         <tr class="variation-group" id="variations-{{ forloop.counter }}">
-                                            <td colspan="5" class="p-0">
+                                            <td colspan="6" class="p-0">
                                                 <div class="table-responsive">
                                                     <!-- Info Alert -->
                                                     <div class="alert alert-info m-2 mb-0" style="font-size: 0.85rem; padding: 0.5rem 1rem;">
@@ -208,34 +208,33 @@
                                                     <table class="table table-sm mb-0">
                                                         <thead class="table-light">
                                                             <tr>
-                                                                <th class="text-start" width="15%">SKU Code</th>
-                                                                <th class="text-start" width="15%">Variation</th>
-                                                                <th class="text-end" width="12%">Stock in Hand</th>
-                                                                <th class="text-end" width="12%">Incoming Stock</th>
-                                                                <th class="text-end" width="13%">Forecasted Stock</th>
-                                                                <th class="text-center" width="12%">Stock Gap</th>
-                                                                <th class="text-center" width="21%">Actions</th>
+                                                                <th class="text-start" width="25%">Product Name</th>
+                                                                <th class="text-start" width="12%">SKU Code</th>
+                                                                <th class="text-start" width="10%">Variation</th>
+                                                                <th class="text-end" width="11%">Stock in Hand</th>
+                                                                <th class="text-end" width="11%">Incoming Stock</th>
+                                                                <th class="text-end" width="12%">Forecasted Stock</th>
+                                                                <th class="text-center" width="10%">Stock Gap</th>
+                                                                <th class="text-center" width="9%">Actions</th>
                                                             </tr>
                                                         </thead>
                                                         <tbody>
                                                             {% for variation in forecast.variations %}
                                                             <tr>
-                                                                <td class="text-start"><code>{{ variation.sku_code }}</code></td>
-                                                                <td class="text-start"><strong>{{ variation.size }}</strong></td>
-                                                                <td class="text-end">{{ variation.stock_on_hand|floatformat:0 }}</td>
-                                                                <td class="text-end">{{ variation.incoming_stock|floatformat:0 }}</td>
-                                                                <td class="text-end">{{ variation.total_quantity|floatformat:0 }}</td>
-                                                                <td class="text-center">
+                                                                <td class="text-start align-middle">{{ variation.product_name }}</td>
+                                                                <td class="text-start align-middle"><code>{{ variation.sku_code }}</code></td>
+                                                                <td class="text-start align-middle"><strong>{{ variation.size }}</strong></td>
+                                                                <td class="text-end align-middle">{{ variation.stock_on_hand|floatformat:0 }}</td>
+                                                                <td class="text-end align-middle">{{ variation.incoming_stock|floatformat:0 }}</td>
+                                                                <td class="text-end align-middle">{{ variation.total_quantity|floatformat:0 }}</td>
+                                                                <td class="text-center align-middle">
                                                                     {% if variation.stock_gap >= 0 %}
                                                                         <span class="badge bg-success">+{{ variation.stock_gap|floatformat:0 }}</span>
                                                                     {% else %}
                                                                         <span class="badge bg-danger">{{ variation.stock_gap|floatformat:0 }}</span>
                                                                     {% endif %}
                                                                 </td>
-                                                                <td class="text-center">
-                                                                    <button class="btn btn-sm btn-outline-info" data-sku="{{ variation.sku_code }}" data-forecast='{{ variation.forecast_data|tojson }}' onclick='viewDetailsFromButton(this)'>
-                                                                        <i class="fas fa-calendar"></i> Details
-                                                                    </button>
+                                                                <td class="text-center align-middle">
                                                                     <button class="btn btn-sm btn-outline-success" data-sku="{{ variation.sku_code }}" data-forecast='{{ variation.forecast_data|tojson }}' onclick='viewChartFromButton(this)'>
                                                                         <i class="fas fa-chart-line"></i> Chart
                                                                     </button>

@@ -1514,14 +1514,15 @@ def sales_forecasting(request):
 
     # Helper function to get stock data for a SKU
     def get_stock_data(sku_code):
-        """Get aggregated stock data for a SKU across all branches using raw SQL"""
+        """Get aggregated stock data and product name for a SKU across all branches using raw SQL"""
         from django.db import connection
 
         with connection.cursor() as cursor:
             cursor.execute("""
                 SELECT
                     COALESCE(SUM(stock_on_hand), 0) as total_stock_on_hand,
-                    COALESCE(SUM(incoming), 0) as total_incoming
+                    COALESCE(SUM(incoming), 0) as total_incoming,
+                    MAX(product_name) as product_name
                 FROM cin7_sync_stock
                 WHERE code = %s
             """, [sku_code])
@@ -1529,7 +1530,8 @@ def sales_forecasting(request):
 
         return {
             'stock_on_hand': float(row[0] or 0),
-            'incoming': float(row[1] or 0)
+            'incoming': float(row[1] or 0),
+            'product_name': row[2] or sku_code
         }
 
     # Get parameters
@@ -1663,7 +1665,6 @@ def sales_forecasting(request):
         grouped_products = defaultdict(list)
 
         for f in forecasts:
-            parent_name = extract_parent_product_from_sku(f.entity_name)
             size = extract_size_from_sku(f.entity_name)
 
             # Extract forecast data for the selected date range
@@ -1693,15 +1694,17 @@ def sales_forecasting(request):
                 for date in forecast_dates
             ]
 
-            # Get stock data for this SKU
+            # Get stock data and actual product name for this SKU
             stock_info = get_stock_data(f.entity_name)
             stock_on_hand = stock_info['stock_on_hand']
             incoming_stock = stock_info['incoming']
+            product_name = stock_info['product_name']
             forecasted_stock = round(total_qty, 1)
             stock_gap = (stock_on_hand + incoming_stock) - forecasted_stock
 
             variation_data = {
                 'sku_code': f.entity_name,
+                'product_name': product_name,
                 'size': size,
                 'total_quantity': forecasted_stock,
                 'stock_on_hand': int(stock_on_hand),
@@ -1716,11 +1719,11 @@ def sales_forecasting(request):
                 'mape': round(f.mape, 2) if f.mape else None
             }
 
-            grouped_products[parent_name].append(variation_data)
+            grouped_products[product_name].append(variation_data)
 
         # Create product summaries
         forecast_list = []
-        for parent_name, variations in sorted(grouped_products.items()):
+        for product_name, variations in sorted(grouped_products.items()):
             # Calculate totals across all variations
             total_forecast = sum([v['total_quantity'] for v in variations])
             avg_accuracy = sum([v['accuracy_score'] for v in variations if v['accuracy_score'] != 'N/A']) / len([v for v in variations if v['accuracy_score'] != 'N/A']) if any([v['accuracy_score'] != 'N/A' for v in variations]) else 'N/A'
@@ -1734,7 +1737,7 @@ def sales_forecasting(request):
             ))
 
             forecast_list.append({
-                'parent_name': parent_name,
+                'product_name': product_name,
                 'variations': variations_sorted,
                 'total_quantity': round(total_forecast, 1),
                 'variation_count': len(variations),
