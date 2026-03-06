@@ -1220,6 +1220,7 @@ table.dataTable tbody tr.child td {
     letter-spacing: 0.5px;
     box-shadow: 0 0.25rem 0.75rem rgba(13, 110, 253, 0.3);
     transition: all 0.3s ease;
+    min-height: 50px;
 }
 
 .filter-card .btn-primary:hover {
@@ -1229,6 +1230,13 @@ table.dataTable tbody tr.child td {
 
 .filter-card .btn-primary:active {
     transform: translateY(0);
+}
+
+/* Apply button in left filter section */
+.filter-section .btn-primary {
+    background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%);
+    border: none;
+    font-size: 1.1rem;
 }
 
 /* Responsive Adjustments */
