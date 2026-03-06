@@ -9,8 +9,8 @@
 {% endblock %}
 
 {% block preloader %}
-<!-- Page Preloader -->
-<div id="pagePreloader" class="preloader-overlay">
+<!-- Page Preloader - Active by default to show during page load -->
+<div id="pagePreloader" class="preloader-overlay active">
     <div class="preloader-content">
         <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
             <span class="visually-hidden">Loading...</span>
@@ -400,6 +400,11 @@ $(document).ready(function() {
     // Initialize DataTables for all views
     var isGroupedView = '{{ current_level }}' === 'product';
 
+    console.log('=== PRELOADER DEBUG START ===');
+    console.log('Time:', new Date().toISOString());
+    console.log('Grouped view:', isGroupedView);
+    console.log('Preloader active:', $('#pagePreloader').hasClass('active'));
+
     if (isGroupedView) {
         // For grouped product view, we need to handle child rows properly with DataTables
         // Store variation rows data before DataTables processes the table
@@ -416,6 +421,8 @@ $(document).ready(function() {
         // Remove variation rows from DOM before DataTables init
         $('.variation-group').remove();
 
+        console.log('Before DataTable init:', new Date().toISOString());
+
         // Now initialize DataTables on clean parent rows only
         var table = $('#forecastsTable').DataTable({
             order: [[1, 'asc']], // Order by Product Name
@@ -425,22 +432,63 @@ $(document).ready(function() {
                 { className: 'dt-control', orderable: false, targets: 0 }, // Control column
                 { orderable: false, targets: [3, 5] } // Disable sorting on Variations and Actions columns
             ],
-            displayLength: 50
+            displayLength: 50,
+            initComplete: function() {
+                console.log('✓ initComplete fired:', new Date().toISOString());
+                console.log('  Table initialized but NOT yet drawn');
+            }
         });
+
+        console.log('After DataTable constructor:', new Date().toISOString());
 
         // Wait for table to be fully drawn before hiding preloader
         table.one('draw.dt', function() {
+            console.log('✓ draw.dt fired:', new Date().toISOString());
+            console.log('  Table has been drawn to DOM');
+
             // Use requestAnimationFrame to ensure browser has painted
             requestAnimationFrame(function() {
+                console.log('✓ RAF 1 fired:', new Date().toISOString());
+                console.log('  First animation frame');
+
                 requestAnimationFrame(function() {
+                    console.log('✓ RAF 2 fired:', new Date().toISOString());
+                    console.log('  Second animation frame');
+
+                    // Increased delay to ensure DataTables CSS and rendering is complete
                     setTimeout(function() {
+                        console.log('✓ setTimeout fired:', new Date().toISOString());
+                        console.log('  About to hide preloader...');
+
+                        var tableVisible = $('#forecastsTable').is(':visible');
+                        var rowCount = $('#forecastsTable tbody tr').length;
+                        var hasDataTablesClass = $('#forecastsTable').hasClass('dataTable');
+
+                        console.log('  Table visible:', tableVisible);
+                        console.log('  Row count:', rowCount);
+                        console.log('  Has DataTables class:', hasDataTablesClass);
+                        console.log('  Hiding preloader NOW');
+
                         $('#pagePreloader').removeClass('active');
-                    }, 200);
+
+                        console.log('✓ Preloader hidden:', new Date().toISOString());
+                        console.log('=== PRELOADER DEBUG END ===');
+                    }, 500);
                 });
             });
         });
 
+        // Fallback: if draw.dt doesn't fire within 5 seconds, hide preloader anyway
+        setTimeout(function() {
+            if ($('#pagePreloader').hasClass('active')) {
+                console.warn('⚠ FALLBACK: draw.dt did not fire, hiding preloader anyway');
+                $('#pagePreloader').removeClass('active');
+            }
+        }, 5000);
+
     } else {
+        console.log('Before DataTable init (non-grouped):', new Date().toISOString());
+
         // For non-grouped views (school, shop, category)
         var table = $('#forecastsTable').DataTable({
             order: [[1, 'asc']], // Order by entity name
@@ -450,20 +498,57 @@ $(document).ready(function() {
                 { className: 'dt-control', orderable: false, targets: 0 }, // Control column
                 { orderable: false, targets: -1 } // Disable sorting on last column (Actions)
             ],
-            displayLength: 25
+            displayLength: 25,
+            initComplete: function() {
+                console.log('✓ initComplete fired (non-grouped):', new Date().toISOString());
+                console.log('  Table initialized but NOT yet drawn');
+            }
         });
+
+        console.log('After DataTable constructor (non-grouped):', new Date().toISOString());
 
         // Wait for table to be fully drawn before hiding preloader
         table.one('draw.dt', function() {
+            console.log('✓ draw.dt fired (non-grouped):', new Date().toISOString());
+            console.log('  Table has been drawn to DOM');
+
             // Use requestAnimationFrame to ensure browser has painted
             requestAnimationFrame(function() {
+                console.log('✓ RAF 1 fired (non-grouped):', new Date().toISOString());
+
                 requestAnimationFrame(function() {
+                    console.log('✓ RAF 2 fired (non-grouped):', new Date().toISOString());
+
+                    // Increased delay to ensure DataTables CSS and rendering is complete
                     setTimeout(function() {
+                        console.log('✓ setTimeout fired (non-grouped):', new Date().toISOString());
+                        console.log('  About to hide preloader...');
+
+                        var tableVisible = $('#forecastsTable').is(':visible');
+                        var rowCount = $('#forecastsTable tbody tr').length;
+                        var hasDataTablesClass = $('#forecastsTable').hasClass('dataTable');
+
+                        console.log('  Table visible:', tableVisible);
+                        console.log('  Row count:', rowCount);
+                        console.log('  Has DataTables class:', hasDataTablesClass);
+                        console.log('  Hiding preloader NOW');
+
                         $('#pagePreloader').removeClass('active');
-                    }, 200);
+
+                        console.log('✓ Preloader hidden (non-grouped):', new Date().toISOString());
+                        console.log('=== PRELOADER DEBUG END ===');
+                    }, 500);
                 });
             });
         });
+
+        // Fallback: if draw.dt doesn't fire within 5 seconds, hide preloader anyway
+        setTimeout(function() {
+            if ($('#pagePreloader').hasClass('active')) {
+                console.warn('⚠ FALLBACK: draw.dt did not fire, hiding preloader anyway (non-grouped)');
+                $('#pagePreloader').removeClass('active');
+            }
+        }, 5000);
     }
 
     // Format function for product variation child rows
