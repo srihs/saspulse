@@ -1848,51 +1848,73 @@ def forecast_product_breakdown(request, school_name):
     """
     Get product-level breakdown for a specific school
     Returns JSON with all products forecasted for that school
+    Uses the new SalesForecastBase system with 365-day forecasts
     """
-    from dashboard.models import SalesForecast
+    from dashboard.models import SalesForecastBase
     from django.db import connection
+    from datetime import datetime, timedelta
     import json
 
-    horizon = request.GET.get('horizon', '30d')
+    # Get date range parameters (same as main forecasting view)
+    start_date_str = request.GET.get('start_date')
+    end_date_str = request.GET.get('end_date')
 
-    # Get product-level forecasts for this school
-    # We need to query products that belong to this school's sub_category
+    # Default to next 30 days if not provided
+    if not start_date_str or not end_date_str:
+        today = datetime.now().date()
+        start_date = today
+        end_date = today + timedelta(days=30)
+        start_date_str = start_date.isoformat()
+        end_date_str = end_date.isoformat()
+    else:
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+
+    num_days = (end_date - start_date).days + 1
+
+    # Get product-level forecasts for this school from NEW system
     with connection.cursor() as cursor:
         cursor.execute("""
             SELECT
                 sf.entity_name as product_name,
-                sf.forecast_data,
+                sf.daily_forecasts,
                 sf.accuracy_score,
                 sf.model_params,
                 p.code as product_code,
                 p.sub_category
-            FROM dashboard_salesforecast sf
+            FROM dashboard_salesforecastbase sf
             JOIN cin7_sync_product p ON p.name COLLATE utf8mb4_unicode_ci = sf.entity_name COLLATE utf8mb4_unicode_ci
             WHERE sf.aggregation_level = 'product'
-              AND sf.horizon = %s
               AND p.sub_category COLLATE utf8mb4_unicode_ci = %s
               AND (p.category_name LIKE '%%Shop' OR p.category_name = 'Wholesale Schools')
             ORDER BY sf.entity_name
             LIMIT 500
-        """, [horizon, school_name])
+        """, [school_name])
 
         products = []
         for row in cursor.fetchall():
-            product_name, forecast_data_json, accuracy, model_params_json, product_code, sub_category = row
+            product_name, daily_forecasts_json, accuracy, model_params_json, product_code, sub_category = row
 
             # Parse JSON fields
             import json as json_lib
-            forecast_data = json_lib.loads(forecast_data_json) if isinstance(forecast_data_json, str) else forecast_data_json
+            daily_forecasts = json_lib.loads(daily_forecasts_json) if isinstance(daily_forecasts_json, str) else daily_forecasts_json
             model_params = json_lib.loads(model_params_json) if isinstance(model_params_json, str) else model_params_json
 
-            # Calculate totals
-            total_qty = sum([day.get('quantity', 0) for day in forecast_data.values()])
+            # Filter forecasts to the requested date range
+            date_range_forecasts = {}
+            if daily_forecasts:
+                for date_str, forecast_data in daily_forecasts.items():
+                    if start_date_str <= date_str <= end_date_str:
+                        date_range_forecasts[date_str] = forecast_data
 
-            # Get next 7 days
-            forecast_dates = sorted(forecast_data.keys())[:7]
+            # Calculate total quantity for the date range
+            total_qty = sum([day.get('quantity', 0) for day in date_range_forecasts.values()])
+
+            # Get first 7 days of the date range
+            forecast_dates = sorted(date_range_forecasts.keys())[:7]
             next_7_days = []
             for date in forecast_dates:
-                day_data = forecast_data.get(date, {})
+                day_data = date_range_forecasts.get(date, {})
                 next_7_days.append({
                     'date': date,
                     'quantity': round(day_data.get('quantity', 0), 1)
@@ -1909,7 +1931,9 @@ def forecast_product_breakdown(request, school_name):
 
     return JsonResponse({
         'school_name': school_name,
-        'horizon': horizon,
+        'start_date': start_date_str,
+        'end_date': end_date_str,
+        'num_days': num_days,
         'products': products,
         'total_products': len(products),
         'total_units': sum([p['total_quantity'] for p in products])

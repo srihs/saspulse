@@ -753,9 +753,12 @@ function viewProducts(schoolName) {
         $('#productModalTitle').text('Products for ' + schoolName);
         $('#productModalBody').html('<div class="text-center py-4"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><p class="mt-2">Loading products...</p></div>');
 
-        const horizon = '{{ current_horizon }}';
+        // Use the current date range from the filter form
+        const startDate = '{{ start_date }}';
+        const endDate = '{{ end_date }}';
+        const numDays = '{{ num_days }}';
 
-        fetch(`/dashboard/forecasting/products/${encodeURIComponent(schoolName)}/?horizon=${horizon}`)
+        fetch(`/dashboard/forecasting/products/${encodeURIComponent(schoolName)}/?start_date=${startDate}&end_date=${endDate}`)
             .then(response => {
                 if (!response.ok) {
                     throw new Error('Network response was not ok');
@@ -768,10 +771,10 @@ function viewProducts(schoolName) {
                     return;
                 }
 
-                let html = `<p class="mb-3"><strong>${data.total_products} products</strong> forecasted for total of <strong>${data.total_units.toFixed(0)} units</strong></p>`;
+                let html = `<p class="mb-3"><strong>${data.total_products} products</strong> forecasted for total of <strong>${data.total_units.toFixed(0)} units</strong> (${data.num_days} days)</p>`;
                 html += '<div class="table-responsive">';
                 html += '<table class="table table-sm table-striped">';
-                html += '<thead><tr><th>Product</th><th>Code</th><th>Total (30d)</th><th>Accuracy</th><th>Next 7 Days</th></tr></thead>';
+                html += '<thead><tr><th>Product</th><th>Code</th><th>Total (' + data.num_days + 'd)</th><th>Accuracy</th><th>Next 7 Days</th></tr></thead>';
                 html += '<tbody>';
 
                 data.products.forEach(function(product) {
