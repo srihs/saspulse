@@ -425,12 +425,19 @@ $(document).ready(function() {
                 { className: 'dt-control', orderable: false, targets: 0 }, // Control column
                 { orderable: false, targets: [3, 5] } // Disable sorting on Variations and Actions columns
             ],
-            displayLength: 50,
-            initComplete: function() {
-                setTimeout(function() {
-                    $('#pagePreloader').removeClass('active');
-                }, 300);
-            }
+            displayLength: 50
+        });
+
+        // Wait for table to be fully drawn before hiding preloader
+        table.one('draw.dt', function() {
+            // Use requestAnimationFrame to ensure browser has painted
+            requestAnimationFrame(function() {
+                requestAnimationFrame(function() {
+                    setTimeout(function() {
+                        $('#pagePreloader').removeClass('active');
+                    }, 200);
+                });
+            });
         });
 
     } else {
@@ -443,12 +450,19 @@ $(document).ready(function() {
                 { className: 'dt-control', orderable: false, targets: 0 }, // Control column
                 { orderable: false, targets: -1 } // Disable sorting on last column (Actions)
             ],
-            displayLength: 25,
-            initComplete: function() {
-                setTimeout(function() {
-                    $('#pagePreloader').removeClass('active');
-                }, 300);
-            }
+            displayLength: 25
+        });
+
+        // Wait for table to be fully drawn before hiding preloader
+        table.one('draw.dt', function() {
+            // Use requestAnimationFrame to ensure browser has painted
+            requestAnimationFrame(function() {
+                requestAnimationFrame(function() {
+                    setTimeout(function() {
+                        $('#pagePreloader').removeClass('active');
+                    }, 200);
+                });
+            });
         });
     }
 
