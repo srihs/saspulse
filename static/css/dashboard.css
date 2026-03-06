@@ -958,43 +958,9 @@ div.dataTables_wrapper div.dataTables_paginate {
 /* Grouped Product Rows */
 .parent-row {
     font-weight: 500;
-    cursor: pointer;
 }
 .parent-row:hover {
     background-color: #e9ecef !important;
-}
-.parent-row .chevron-icon {
-    transition: transform 0.3s ease;
-    margin-right: 8px;
-    display: inline-block;
-}
-.parent-row .chevron-icon.rotated {
-    transform: rotate(90deg);
-}
-.variation-group {
-    display: none;
-}
-.variation-group.show {
-    display: table-row;
-}
-.variation-group td {
-    background-color: #f8f9fa;
-    border-top: none;
-    padding: 0 !important;
-}
-.variation-group .table {
-    border-left: 3px solid #0d6efd;
-    margin: 0 0 0 10px;
-    background-color: #ffffff;
-}
-.variation-group .table thead th {
-    background-color: #e9ecef;
-    font-weight: 600;
-    font-size: 0.875rem;
-}
-.variation-group .table tbody td {
-    padding: 0.5rem;
-    font-size: 0.875rem;
 }
 
 /* Forecasts Table Enhancements */
@@ -1079,4 +1045,44 @@ div.dataTables_wrapper div.dataTables_paginate {
         opacity: 0.95;
         transform: scale(1);
     }
+}
+
+/* DataTables Row Details Control */
+td.dt-control {
+    cursor: pointer;
+    width: 40px;
+    min-width: 40px;
+    text-align: center;
+    position: relative;
+    vertical-align: middle;
+}
+
+td.dt-control::before {
+    content: '\f078';
+    font-family: 'Font Awesome 6 Free';
+    font-weight: 900;
+    color: #5470c6;
+    font-size: 14px;
+}
+
+tr.shown td.dt-control::before {
+    content: '\f077';
+}
+
+td.dt-control:hover::before {
+    color: #3d5aa3;
+}
+
+/* Styling for child row content */
+table.dataTable tbody tr.child {
+    background-color: #f8f9fa;
+}
+
+table.dataTable tbody tr.child:hover {
+    background-color: #f8f9fa !important;
+}
+
+table.dataTable tbody tr.child td {
+    border-top: 1px solid #dee2e6;
+    padding: 0 !important;
 }

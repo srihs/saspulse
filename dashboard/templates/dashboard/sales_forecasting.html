@@ -137,6 +137,7 @@
                                 <thead>
                                     <tr>
                                         {% if current_level == 'product' %}
+                                        <th></th>
                                         <th width="30%">Product Name</th>
                                         <th>Total Forecast</th>
                                         <th>
@@ -151,6 +152,7 @@
                                         <th>Avg Accuracy</th>
                                         <th>Actions</th>
                                         {% else %}
+                                        <th></th>
                                         <th>{{ summary.level_display }}</th>
                                         <th>Total Forecast</th>
                                         <th>Accuracy</th>
@@ -167,8 +169,8 @@
                                         {% if forecast.is_grouped %}
                                         <!-- Parent Product Row (Grouped View) -->
                                         <tr class="parent-row clickable" data-variation-id="{{ forloop.counter }}" style="background-color: #f8f9fa;">
+                                            <td class="dt-control"></td>
                                             <td>
-                                                <i class="fas fa-chevron-right chevron-icon" id="chevron-{{ forloop.counter }}"></i>
                                                 <strong>{{ forecast.parent_name }}</strong>
                                             </td>
                                             <td><strong>{{ forecast.total_quantity|floatformat:0 }} units</strong></td>
@@ -248,6 +250,7 @@
                                         {% else %}
                                         <!-- Regular Row (Non-grouped View) -->
                                         <tr>
+                                            <td class="dt-control"></td>
                                             <td><strong>{{ forecast.entity_name }}</strong></td>
                                             <td>{{ forecast.total_quantity|floatformat:0 }} units</td>
                                             <td>
@@ -407,34 +410,23 @@ $(document).ready(function() {
             var variationId = $(this).data('variation-id');
             var variationRow = $(this).next('.variation-group');
             if (variationRow.length && variationId) {
-                variationRowsData[variationId] = variationRow.detach(); // Remove from DOM temporarily
+                variationRowsData[variationId] = variationRow.html(); // Store HTML content
             }
         });
 
+        // Remove variation rows from DOM before DataTables init
+        $('.variation-group').remove();
+
         // Now initialize DataTables on clean parent rows only
         var table = $('#forecastsTable').DataTable({
-            order: [[1, 'desc']], // Sort by Total Forecast descending
+            order: [[1, 'asc']], // Order by Product Name
             pageLength: 50,
             dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>rtip',
             columnDefs: [
-                { orderable: false, targets: [2, 4] } // Disable sorting on Variations and Actions columns
+                { className: 'dt-control', orderable: false, targets: 0 }, // Control column
+                { orderable: false, targets: [3, 5] } // Disable sorting on Variations and Actions columns
             ],
-            drawCallback: function(settings) {
-                // After each draw (sort, page, search), re-attach variation rows
-                $('#forecastsTable tbody tr.parent-row').each(function() {
-                    var variationId = $(this).data('variation-id');
-                    var storedRow = variationRowsData[variationId];
-                    if (storedRow) {
-                        $(this).after(storedRow);
-                    }
-                });
-
-                // Re-initialize tooltips after table redraw
-                var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-                tooltipTriggerList.map(function (tooltipTriggerEl) {
-                    return new bootstrap.Tooltip(tooltipTriggerEl);
-                });
-            },
+            displayLength: 50,
             initComplete: function() {
                 setTimeout(function() {
                     $('#pagePreloader').removeClass('active');
@@ -442,26 +434,17 @@ $(document).ready(function() {
             }
         });
 
-        // Initial attachment of variation rows after DataTables init
-        setTimeout(function() {
-            $('#forecastsTable tbody tr.parent-row').each(function() {
-                var variationId = $(this).data('variation-id');
-                var storedRow = variationRowsData[variationId];
-                if (storedRow) {
-                    $(this).after(storedRow);
-                }
-            });
-        }, 100);
-
     } else {
         // For non-grouped views (school, shop, category)
         var table = $('#forecastsTable').DataTable({
-            order: [[1, 'desc']], // Sort by Total Forecast descending
+            order: [[1, 'asc']], // Order by entity name
             pageLength: 25,
             dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>rtip',
             columnDefs: [
+                { className: 'dt-control', orderable: false, targets: 0 }, // Control column
                 { orderable: false, targets: -1 } // Disable sorting on last column (Actions)
             ],
+            displayLength: 25,
             initComplete: function() {
                 setTimeout(function() {
                     $('#pagePreloader').removeClass('active');
@@ -470,26 +453,62 @@ $(document).ready(function() {
         });
     }
 
-    // Handle collapse events for grouped product rows
-    // Use manual collapse since DataTables breaks Bootstrap collapse data bindings
-    $(document).on('click', '.parent-row', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
+    // Format function for product variation child rows
+    function formatProductVariations(variationId) {
+        return variationRowsData[variationId] || '<p>No variation data available</p>';
+    }
 
-        var variationId = $(this).data('variation-id');
-        var targetId = '#variations-' + variationId;
-        var chevronId = '#chevron-' + variationId;
-        var variationRow = $(targetId);
-        var chevron = $(chevronId);
+    // Format function for detail view child rows (school, shop, category)
+    function formatDetailView(rowData) {
+        // Extract data from the row (you'll need to enhance this based on your data structure)
+        var html = '<div class="p-3">';
+        html += '<div class="row">';
+        html += '<div class="col-md-6">';
+        html += '<h6 class="mb-3">Accuracy Metrics</h6>';
+        html += '<table class="table table-sm table-bordered">';
+        html += '<tr><th width="40%">Model Used</th><td>' + (rowData[4] || 'N/A') + '</td></tr>';
+        html += '<tr><th>MAE (Mean Absolute Error)</th><td>' + (rowData[5] || 'N/A') + '</td></tr>';
+        html += '<tr><th>MAPE (Mean Absolute % Error)</th><td>' + (rowData[6] || 'N/A') + '</td></tr>';
+        html += '<tr><th>Training Days</th><td>' + (rowData[7] || 'N/A') + '</td></tr>';
+        html += '</table>';
+        html += '</div>';
+        html += '<div class="col-md-6">';
+        html += '<h6 class="mb-3">Forecast Information</h6>';
+        html += '<div class="alert alert-info mb-0">';
+        html += '<p class="mb-2"><i class="fas fa-info-circle me-2"></i><strong>About This Forecast:</strong></p>';
+        html += '<ul class="mb-0" style="font-size: 0.9rem;">';
+        html += '<li>Uses historical sales patterns and seasonal trends</li>';
+        html += '<li>Automatically selects the best performing model</li>';
+        html += '<li>Updates daily with new sales data</li>';
+        html += '<li>Confidence intervals show prediction uncertainty</li>';
+        html += '</ul>';
+        html += '</div>';
+        html += '</div>';
+        html += '</div>';
+        html += '</div>';
+        return html;
+    }
 
-        var isVisible = variationRow.hasClass('show');
+    // Click handler for dt-control column (row expand/collapse)
+    $('#forecastsTable tbody').on('click', 'td.dt-control', function() {
+        var tr = $(this).closest('tr');
+        var row = table.row(tr);
 
-        if (isVisible) {
-            variationRow.removeClass('show').css('display', 'none');
-            chevron.removeClass('rotated');
+        if (row.child.isShown()) {
+            // Hide child row
+            row.child.hide();
+            tr.removeClass('shown');
         } else {
-            variationRow.addClass('show').css('display', 'table-row');
-            chevron.addClass('rotated');
+            // Show child row
+            if (isGroupedView) {
+                // Product view: show variations
+                var variationId = tr.data('variation-id');
+                row.child(formatProductVariations(variationId)).show();
+            } else {
+                // Detail view: show metrics
+                row.child(formatDetailView(row.data())).show();
+            }
+            tr.addClass('shown');
         }
     });
 
