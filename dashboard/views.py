@@ -1534,6 +1534,7 @@ def sales_forecasting(request):
 
     # Get parameters
     level = request.GET.get('level', 'school')
+    search_query = request.GET.get('search', '').strip()  # Search/filter parameter
 
     # Date range parameters (new approach)
     start_date_str = request.GET.get('start_date')
@@ -1591,9 +1592,13 @@ def sales_forecasting(request):
     from django.db.models import Max
 
     # Get all base forecasts for this level (latest forecast for each entity)
-    all_base_forecasts = SalesForecastBase.objects.filter(
-        aggregation_level=level
-    ).order_by('entity_name', '-forecast_date')
+    query = SalesForecastBase.objects.filter(aggregation_level=level)
+
+    # Apply search filter if provided
+    if search_query:
+        query = query.filter(entity_name__icontains=search_query)
+
+    all_base_forecasts = query.order_by('entity_name', '-forecast_date')
 
     # Keep only the latest forecast for each entity_name
     seen_entities = set()
@@ -1602,7 +1607,7 @@ def sales_forecasting(request):
         if f.entity_name not in seen_entities:
             base_forecasts.append(f)
             seen_entities.add(f.entity_name)
-        if len(base_forecasts) >= 500:  # Limit to 500 unique entities
+        if len(base_forecasts) >= 2000:  # Limit to 2000 unique entities (increased from 500)
             break
 
     # If no base forecasts, fall back to legacy SalesForecast model
@@ -1738,7 +1743,7 @@ def sales_forecasting(request):
             })
 
         # Sort by total quantity descending
-        forecast_list = sorted(forecast_list, key=lambda x: x['total_quantity'], reverse=True)[:200]  # Increased limit to show more products
+        forecast_list = sorted(forecast_list, key=lambda x: x['total_quantity'], reverse=True)[:500]  # Increased limit to 500 products (was 200)
 
     else:
         # Regular flat view for school/shop/category
