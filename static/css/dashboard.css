@@ -941,3 +941,142 @@ div.dataTables_wrapper div.dataTables_paginate {
 #productForecastTable tbody td:nth-child(8) {
     padding-right: 1.5rem !important;
 }
+
+/* ================================================
+   SALES FORECASTING DASHBOARD
+   ================================================ */
+
+/* Urgency & Accuracy Badges */
+.urgency-critical { background-color: #dc3545; color: white; }
+.urgency-high { background-color: #fd7e14; color: white; }
+.urgency-medium { background-color: #ffc107; color: #000; }
+.urgency-low { background-color: #28a745; color: white; }
+.accuracy-high { background-color: #10b981; color: white; }
+.accuracy-medium { background-color: #f59e0b; color: white; }
+.accuracy-low { background-color: #ef4444; color: white; }
+
+/* Grouped Product Rows */
+.parent-row {
+    font-weight: 500;
+    cursor: pointer;
+}
+.parent-row:hover {
+    background-color: #e9ecef !important;
+}
+.parent-row .chevron-icon {
+    transition: transform 0.3s ease;
+    margin-right: 8px;
+    display: inline-block;
+}
+.parent-row .chevron-icon.rotated {
+    transform: rotate(90deg);
+}
+.variation-group {
+    display: none;
+}
+.variation-group.show {
+    display: table-row;
+}
+.variation-group td {
+    background-color: #f8f9fa;
+    border-top: none;
+    padding: 0 !important;
+}
+.variation-group .table {
+    border-left: 3px solid #0d6efd;
+    margin: 0 0 0 10px;
+    background-color: #ffffff;
+}
+.variation-group .table thead th {
+    background-color: #e9ecef;
+    font-weight: 600;
+    font-size: 0.875rem;
+}
+.variation-group .table tbody td {
+    padding: 0.5rem;
+    font-size: 0.875rem;
+}
+
+/* Forecasts Table Enhancements */
+#forecastsTable thead th {
+    vertical-align: middle;
+    white-space: nowrap;
+}
+
+#forecastsTable .btn-sm {
+    margin: 0 2px;
+}
+
+#forecastsTable .badge {
+    font-size: 0.875rem;
+    padding: 0.35em 0.65em;
+}
+
+/* Page Preloader */
+.preloader-overlay {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    background: rgba(255, 255, 255, 0.95) !important;
+    display: none !important;
+    justify-content: center !important;
+    align-items: center !important;
+    z-index: 9999 !important;
+    backdrop-filter: blur(2px) !important;
+}
+
+.preloader-overlay.active {
+    display: flex !important;
+    background: rgba(255, 255, 255, 0.95) !important;
+}
+
+.preloader-content {
+    text-align: center;
+    animation: fadeIn 0.3s ease-in;
+    background: white;
+    padding: 2rem;
+    border-radius: 1rem;
+    box-shadow: 0 0.5rem 2rem rgba(0,0,0,0.15);
+}
+
+.preloader-content .spinner-border {
+    border-width: 0.3em;
+}
+
+.preloader-content h4 {
+    color: #0d6efd;
+    font-weight: 600;
+}
+
+.preloader-content p {
+    font-size: 0.95rem;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Pulsing animation for preloader */
+@keyframes preloaderPulse {
+    0% {
+        opacity: 0.95;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 1;
+        transform: scale(1.01);
+    }
+    100% {
+        opacity: 0.95;
+        transform: scale(1);
+    }
+}

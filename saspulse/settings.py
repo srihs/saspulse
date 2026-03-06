@@ -16,9 +16,9 @@ load_dotenv(BASE_DIR / '.env')
 SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-h#$ie3h)1xi!n4p=of2i^k-e7qq%niz@ox**r91vh@yss5-zku')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv('DEBUG', 'True') == 'True'
+DEBUG = True  # Hardcoded for development
 
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0', '*']  # Allow all hosts for development
 
 # Site URL for email links (used in authentication emails)
 SITE_URL = os.getenv('SITE_URL', 'http://localhost:8000')

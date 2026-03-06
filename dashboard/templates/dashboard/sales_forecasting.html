@@ -6,79 +6,27 @@
 
 {% block extra_css %}
 <link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet">
-<style>
-.urgency-critical { background-color: #dc3545; color: white; }
-.urgency-high { background-color: #fd7e14; color: white; }
-.urgency-medium { background-color: #ffc107; color: #000; }
-.urgency-low { background-color: #28a745; color: white; }
-.accuracy-high { background-color: #10b981; color: white; }
-.accuracy-medium { background-color: #f59e0b; color: white; }
-.accuracy-low { background-color: #ef4444; color: white; }
+{% endblock %}
 
-/* Grouped product rows */
-.parent-row {
-    font-weight: 500;
-    cursor: pointer;
-}
-.parent-row:hover {
-    background-color: #e9ecef !important;
-}
-.parent-row .chevron-icon {
-    transition: transform 0.3s ease;
-    margin-right: 8px;
-    display: inline-block;
-}
-.parent-row .chevron-icon.rotated {
-    transform: rotate(90deg);
-}
-.variation-group {
-    display: none;
-}
-.variation-group.show {
-    display: table-row;
-}
-.variation-group td {
-    background-color: #f8f9fa;
-    border-top: none;
-    padding: 0 !important;
-}
-.variation-group .table {
-    border-left: 3px solid #0d6efd;
-    margin: 0 0 0 10px;
-    background-color: #ffffff;
-}
-.variation-group .table thead th {
-    background-color: #e9ecef;
-    font-weight: 600;
-    font-size: 0.875rem;
-}
-.variation-group .table tbody td {
-    padding: 0.5rem;
-    font-size: 0.875rem;
-}
-
-/* Ensure table header alignment */
-#forecastsTable thead th {
-    vertical-align: middle;
-    white-space: nowrap;
-}
-
-/* Improve button spacing in action columns */
-.btn-sm {
-    margin: 0 2px;
-}
-
-/* Badge styling improvements */
-.badge {
-    font-size: 0.875rem;
-    padding: 0.35em 0.65em;
-}
-</style>
+{% block preloader %}
+<!-- Page Preloader -->
+<div id="pagePreloader" class="preloader-overlay">
+    <div class="preloader-content">
+        <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <h4 class="mt-3">Loading Forecasts...</h4>
+        <p class="text-muted">Processing data, please wait...</p>
+        <small class="text-muted">
+            <i class="fas fa-robot me-1"></i>
+            Analyzing 2000 SKUs and generating predictions...
+        </small>
+    </div>
+</div>
 {% endblock %}
 
 {% block content %}
-<div class="content">
-    <div class="pb-5">
+<div class="pb-5">
         <div class="row g-4">
             <div class="col-12">
                 <div class="mb-8">
@@ -351,7 +299,6 @@
             </div>
         </div>
     </div>
-</div>
 
 <!-- Product Breakdown Modal -->
 <div class="modal fade" id="productModal" tabindex="-1">
@@ -407,6 +354,41 @@
 
 <script>
 $(document).ready(function() {
+    // Show preloader when filter form is submitted
+    $('#forecastFilterForm').on('submit', function(e) {
+        e.preventDefault();
+
+        var preloader = $('#pagePreloader');
+
+        // Show preloader with nuclear styling approach (proven to work)
+        preloader[0].setAttribute('style',
+            'display: flex !important; ' +
+            'position: fixed !important; ' +
+            'top: 0 !important; ' +
+            'left: 0 !important; ' +
+            'right: 0 !important; ' +
+            'bottom: 0 !important; ' +
+            'width: 100vw !important; ' +
+            'height: 100vh !important; ' +
+            'z-index: 9999999 !important; ' +
+            'background: rgba(255, 255, 255, 0.95) !important; ' +
+            'visibility: visible !important; ' +
+            'opacity: 1 !important; ' +
+            'justify-content: center !important; ' +
+            'align-items: center !important; ' +
+            'transform: none !important; ' +
+            'filter: none !important; ' +
+            'clip-path: none !important; ' +
+            'contain: none !important; ' +
+            'animation: preloaderPulse 1s infinite !important;'
+        );
+
+        // Allow browser to repaint, then submit the form
+        setTimeout(function() {
+            e.target.submit();
+        }, 50);
+    });
+
     // Initialize Bootstrap tooltips
     var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
     var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
@@ -452,6 +434,11 @@ $(document).ready(function() {
                 tooltipTriggerList.map(function (tooltipTriggerEl) {
                     return new bootstrap.Tooltip(tooltipTriggerEl);
                 });
+            },
+            initComplete: function() {
+                setTimeout(function() {
+                    $('#pagePreloader').removeClass('active');
+                }, 300);
             }
         });
 
@@ -468,13 +455,18 @@ $(document).ready(function() {
 
     } else {
         // For non-grouped views (school, shop, category)
-        $('#forecastsTable').DataTable({
+        var table = $('#forecastsTable').DataTable({
             order: [[1, 'desc']], // Sort by Total Forecast descending
             pageLength: 25,
             dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>rtip',
             columnDefs: [
                 { orderable: false, targets: -1 } // Disable sorting on last column (Actions)
-            ]
+            ],
+            initComplete: function() {
+                setTimeout(function() {
+                    $('#pagePreloader').removeClass('active');
+                }, 300);
+            }
         });
     }
 
@@ -490,25 +482,16 @@ $(document).ready(function() {
         var variationRow = $(targetId);
         var chevron = $(chevronId);
 
-        // Debug logging
-        console.log('Toggling variation row:', variationId, 'Found:', variationRow.length);
-
-        // Check if currently visible
         var isVisible = variationRow.hasClass('show');
 
         if (isVisible) {
-            // Hide the variation row
             variationRow.removeClass('show').css('display', 'none');
             chevron.removeClass('rotated');
         } else {
-            // Show the variation row
             variationRow.addClass('show').css('display', 'table-row');
             chevron.addClass('rotated');
         }
     });
-
-    // Log when DataTables is initialized
-    console.log('Sales Forecasting Dashboard initialized. Level:', '{{ current_level }}');
 
     // Date range validation
     $('#startDate, #endDate').on('change', function() {
@@ -526,6 +509,7 @@ function selectDateRange(days) {
     document.getElementById('endDate').value = formatDate(endDate);
 
     validateDateRange();
+    $('#forecastFilterForm').submit();
 }
 
 function selectThisMonth() {
@@ -537,6 +521,7 @@ function selectThisMonth() {
     document.getElementById('endDate').value = formatDate(lastDay);
 
     validateDateRange();
+    $('#forecastFilterForm').submit();
 }
 
 function formatDate(date) {
