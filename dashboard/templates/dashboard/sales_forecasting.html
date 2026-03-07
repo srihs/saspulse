@@ -117,6 +117,21 @@
     .choices.is-loading::after {
         border-color: #4e73df transparent transparent;
     }
+
+    /* Inner variation table - remove padding for edge-to-edge display */
+    .variation-group td {
+        padding: 0 !important;
+    }
+
+    .variation-group table th:first-child,
+    .variation-group table td:first-child {
+        padding-left: 0.75rem !important;
+    }
+
+    .variation-group table th:last-child,
+    .variation-group table td:last-child {
+        padding-right: 0.75rem !important;
+    }
 </style>
 {% endblock %}
 
@@ -368,14 +383,14 @@
 
                                         <!-- Variation Rows (Collapsed by default) -->
                                         <tr class="variation-group" id="variations-{{ forloop.counter }}">
-                                            <td colspan="5" style="padding: 0 !important; margin: 0; background-color: #f8f9fa;">
+                                            <td colspan="5" style="padding: 0 !important; margin: 0 !important; background-color: #f8f9fa;">
                                                 <!-- Info Alert -->
-                                                <div class="alert alert-info mx-3 mt-2 mb-0" style="font-size: 0.85rem; padding: 0.5rem 1rem;">
+                                                <div class="alert alert-info mb-0" style="font-size: 0.85rem; padding: 0.5rem 1rem; margin: 0.5rem 0 0 0; border-radius: 0;">
                                                     <i class="fas fa-info-circle me-2"></i>
                                                     <strong>Note:</strong> Only variations with at least 10 historical sales are forecasted to ensure statistical accuracy.
                                                     Low-volume sizes (e.g., 2XS, 3XL, 4XL) may not appear if they have insufficient sales history.
                                                 </div>
-                                                <table class="table table-sm mb-0" style="width: 100%; table-layout: auto; margin: 0;">
+                                                <table class="table table-sm mb-0" style="width: 100%; table-layout: auto; margin: 0 !important;">
                                                         <thead class="table-light">
                                                             <tr>
                                                                 <th class="text-start" width="25%">Product Name</th>
