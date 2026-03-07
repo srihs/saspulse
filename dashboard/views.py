@@ -1517,12 +1517,12 @@ def forecasting_filter_options(request):
         'categories': []
     }
 
-    # Get schools (sub_category from Wholesale Schools products)
+    # Get schools (sub_category excluding Wholesale Schools category)
     with connection.cursor() as cursor:
         cursor.execute("""
             SELECT DISTINCT sub_category
             FROM cin7_sync_product
-            WHERE category_name = 'Wholesale Schools'
+            WHERE category_name != 'Wholesale Schools'
               AND sub_category IS NOT NULL
               AND sub_category != ''
             ORDER BY sub_category
@@ -1534,7 +1534,7 @@ def forecasting_filter_options(request):
         cursor.execute("""
             SELECT DISTINCT p.name, p.cin7_id
             FROM cin7_sync_product p
-            WHERE (p.category_name = 'Wholesale Schools' OR p.category_name LIKE '%% Shop')
+            WHERE p.category_name LIKE '%% Shop'
               AND p.name IS NOT NULL
             ORDER BY p.name
         """)
@@ -1547,7 +1547,7 @@ def forecasting_filter_options(request):
             FROM cin7_sync_product
             WHERE style_code IS NOT NULL
               AND style_code != ''
-              AND (category_name = 'Wholesale Schools' OR category_name LIKE '%% Shop')
+              AND category_name LIKE '%% Shop'
             ORDER BY style_code
         """)
         result['style_codes'] = [{'value': row[0], 'label': row[0]} for row in cursor.fetchall()]
@@ -1984,8 +1984,10 @@ def sales_forecasting(request):
         # Note: Advanced filtering across levels requires custom SQL queries
         if level == 'school' and school_filter:
             query = query.filter(entity_name__icontains=school_filter)
+            all_base_forecasts = query.order_by('entity_name', '-forecast_date')
         elif level == 'category' and category_filter:
             query = query.filter(entity_name__icontains=category_filter)
+            all_base_forecasts = query.order_by('entity_name', '-forecast_date')
         elif level == 'product':
             # For product level, we need to join with product table for advanced filters
             # This will be handled via raw SQL if filters are present
