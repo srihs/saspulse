@@ -2334,6 +2334,33 @@ def sales_forecasting(request):
         # We have forecasts - don't trigger auto-refresh
         generating_forecasts = False
 
+    # Determine the display name for the header based on active filters
+    display_name = None
+    has_filter = False
+
+    if school_filter:
+        display_name = school_filter
+        has_filter = True
+    elif product_filter:
+        # Get product name from cin7_sync_product table
+        try:
+            from cin7.models import Product
+            product = Product.objects.get(cin7_id=product_filter)
+            display_name = product.name
+            has_filter = True
+        except Product.DoesNotExist:
+            display_name = f"Product #{product_filter}"
+            has_filter = True
+    elif shop_filter:
+        display_name = shop_filter
+        has_filter = True
+    elif category_filter:
+        display_name = category_filter
+        has_filter = True
+    else:
+        # No filter - use generic aggregation level name
+        display_name = dict(SalesForecastBase.AGGREGATION_LEVELS).get(level, level)
+
     context = {
         'forecasts': forecast_list,
         'forecast_list_json': json.dumps(forecast_list, default=str),
@@ -2349,7 +2376,9 @@ def sales_forecasting(request):
         'from_cache': False,
         'generating_forecasts': generating_forecasts,
         'no_forecasts_available': no_forecasts_available,  # New flag to distinguish "none available" vs "generating"
-        'using_365d_base': not use_legacy  # Flag to indicate using new 365-day base system
+        'using_365d_base': not use_legacy,  # Flag to indicate using new 365-day base system
+        'display_name': display_name,  # Dynamic display name based on filter
+        'has_filter': has_filter  # Boolean to indicate if any filter is active
     }
 
     # Cache the context only if we have data (don't cache empty state)
