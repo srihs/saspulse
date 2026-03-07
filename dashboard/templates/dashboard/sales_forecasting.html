@@ -321,7 +321,7 @@
                             <table id="forecastsTable" class="table table-sm table-striped">
                                 <thead>
                                     <tr>
-                                        {% if current_level == 'product' %}
+                                        {% if render_level == 'product' %}
                                         <th></th>
                                         <th width="30%">Product Name</th>
                                         <th>Total Forecast</th>
@@ -570,7 +570,7 @@ $(document).ready(function() {
     });
 
     // Initialize DataTables for all views
-    var isGroupedView = '{{ current_level }}' === 'product';
+    var isGroupedView = '{{ render_level }}' === 'product';
 
     console.log('=== PRELOADER DEBUG START ===');
     console.log('Time:', new Date().toISOString());
@@ -885,7 +885,7 @@ $(document).ready(function() {
                 row.child(formatProductVariations(variationId)).show();
             } else {
                 // Check if this is shop level
-                var level = '{{ current_level }}';
+                var level = '{{ render_level }}';
                 var shopName = tr.find('td:eq(1)').text().trim();
 
                 if (level === 'shop') {

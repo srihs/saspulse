@@ -1850,6 +1850,7 @@ def sales_forecasting(request):
 
     # Get parameters
     level = request.GET.get('level', 'school')
+    original_level = level  # Preserve original level for context
     search_query = request.GET.get('search', '').strip()  # Search/filter parameter
 
     # Extract filter parameters
@@ -2371,7 +2372,8 @@ def sales_forecasting(request):
         'forecast_list_json': json.dumps(forecast_list, default=str),
         'summary': summary,
         'current_horizon': horizon,  # For backward compatibility
-        'current_level': level,
+        'current_level': original_level,  # Use original level, not modified level
+        'render_level': level,  # Level for template rendering (may be 'product' when school selected)
         'start_date': start_date_str,
         'end_date': end_date_str,
         'num_days': num_days,
