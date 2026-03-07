@@ -1534,6 +1534,220 @@ def sales_forecasting(request):
             'product_name': row[2] or sku_code
         }
 
+    # Helper function to aggregate product forecasts by shop
+    def get_shop_forecasts_from_products(start_date, end_date, search_query=None):
+        """
+        Aggregate product-level forecasts by shop category (category_name ending with 'Shop')
+
+        This is the smart approach: instead of generating separate shop forecasts,
+        we dynamically aggregate existing product forecasts by their shop category.
+
+        Benefits:
+        - No separate forecast generation needed
+        - Always up-to-date with latest product forecasts
+        - Mathematically correct: shop total = sum of products in that shop
+        - No data duplication or discrepancies
+
+        Returns:
+            list: List of shop forecast dictionaries with aggregated data
+        """
+        from django.db import connection
+
+        logger = logging.getLogger(__name__)
+        logger.info('=== AGGREGATING SHOP FORECASTS FROM PRODUCTS ===')
+        logger.info(f'Date range: {start_date} to {end_date}')
+        logger.info(f'Search query: {search_query}')
+
+        # Build SQL query to fetch product forecasts with shop category
+        sql = """
+            SELECT
+                p.category_name as shop_name,
+                sf.daily_forecasts,
+                sf.accuracy_score,
+                sf.mae,
+                sf.mape,
+                sf.model_params,
+                sf.entity_name as sku_code,
+                p.name as product_name,
+                po.option1 as size
+            FROM dashboard_salesforecastbase sf
+            JOIN cin7_sync_productoption po ON po.code = sf.entity_name
+            JOIN cin7_sync_product p ON p.cin7_id = po.cin7_product_id
+            WHERE sf.aggregation_level = 'product'
+              AND p.category_name LIKE %s
+        """
+
+        # Base param for shop filter (double %% escapes the % in SQL)
+        params = ['%Shop']
+
+        # Apply search filter if provided
+        if search_query:
+            sql += " AND p.category_name LIKE %s"
+            params.append(f'%{search_query}%')
+
+        # Order by category for grouping
+        sql += " ORDER BY p.category_name, sf.entity_name"
+
+        with connection.cursor() as cursor:
+            cursor.execute(sql, params)
+            rows = cursor.fetchall()
+
+        logger.info(f'Found {len(rows)} product forecasts belonging to shops')
+
+        # Aggregate forecasts by shop
+        shop_aggregates = defaultdict(lambda: {
+            'daily_totals': defaultdict(float),
+            'accuracy_scores': [],
+            'mae_scores': [],
+            'mape_scores': [],
+            'product_count': 0,
+            'sku_codes': [],
+            'products': []  # Store individual product details
+        })
+
+        for row in rows:
+            shop_name, daily_forecasts_json, accuracy_score, mae, mape, model_params_json, sku_code, product_name, size = row
+
+            # Parse JSON fields
+            if isinstance(daily_forecasts_json, str):
+                daily_forecasts = json.loads(daily_forecasts_json)
+            else:
+                daily_forecasts = daily_forecasts_json or {}
+
+            if isinstance(model_params_json, str):
+                model_params = json.loads(model_params_json)
+            else:
+                model_params = model_params_json or {}
+
+            # Calculate product total for date range
+            product_total = 0
+            for date_str, forecast_data in daily_forecasts.items():
+                try:
+                    forecast_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+                    if start_date <= forecast_date <= end_date:
+                        quantity = forecast_data.get('quantity', 0)
+                        shop_aggregates[shop_name]['daily_totals'][date_str] += quantity
+                        product_total += quantity
+                except (ValueError, TypeError) as e:
+                    logger.warning(f'Error parsing date {date_str}: {e}')
+                    continue
+
+            # Store individual product details
+            shop_aggregates[shop_name]['products'].append({
+                'product_name': product_name or sku_code,
+                'sku_code': sku_code,
+                'size': size or 'N/A',
+                'total_quantity': round(product_total, 1),
+                'accuracy_score': round(accuracy_score, 1) if accuracy_score is not None else 'N/A'
+            })
+
+            # Collect accuracy metrics
+            if accuracy_score is not None:
+                shop_aggregates[shop_name]['accuracy_scores'].append(accuracy_score)
+            if mae is not None:
+                shop_aggregates[shop_name]['mae_scores'].append(mae)
+            if mape is not None:
+                shop_aggregates[shop_name]['mape_scores'].append(mape)
+
+            shop_aggregates[shop_name]['product_count'] += 1
+            shop_aggregates[shop_name]['sku_codes'].append(sku_code)
+
+        logger.info(f'Aggregated into {len(shop_aggregates)} shops')
+
+        # Calculate number of days in range
+        num_days = (end_date - start_date).days + 1
+
+        # Convert aggregated data into forecast list format
+        forecast_list = []
+        for shop_name, agg_data in sorted(shop_aggregates.items()):
+            # Build date_range_data structure
+            date_range_data = {}
+            for date_str in sorted(agg_data['daily_totals'].keys()):
+                quantity = agg_data['daily_totals'][date_str]
+                date_range_data[date_str] = {
+                    'quantity': quantity,
+                    'confidence_lower': quantity * 0.9,  # Approximate confidence intervals
+                    'confidence_upper': quantity * 1.1
+                }
+
+            # Calculate total quantity for the date range
+            total_qty = sum([day['quantity'] for day in date_range_data.values()])
+
+            # Get first 7 days detail
+            forecast_dates = sorted(date_range_data.keys())[:7]
+            next_7_days = [
+                {
+                    'date': date,
+                    'quantity': date_range_data[date]['quantity'],
+                    'confidence_lower': date_range_data[date]['confidence_lower'],
+                    'confidence_upper': date_range_data[date]['confidence_upper']
+                }
+                for date in forecast_dates
+            ]
+
+            # Calculate average metrics
+            avg_accuracy = sum(agg_data['accuracy_scores']) / len(agg_data['accuracy_scores']) if agg_data['accuracy_scores'] else None
+            avg_mae = sum(agg_data['mae_scores']) / len(agg_data['mae_scores']) if agg_data['mae_scores'] else None
+            avg_mape = sum(agg_data['mape_scores']) / len(agg_data['mape_scores']) if agg_data['mape_scores'] else None
+
+            # Build shop forecast data structure (MUST match school-level format exactly)
+            shop_forecast = {
+                'entity_name': shop_name,
+                'total_quantity': round(total_qty, 1),
+                'accuracy_score': round(avg_accuracy, 1) if avg_accuracy is not None else 'N/A',
+                'model': 'Product Aggregation',  # Indicates this is aggregated from products
+                'next_7_days': next_7_days,
+                'forecast_data': date_range_data,
+                'training_days': 0,  # Not applicable for aggregated forecasts
+                'mae': round(avg_mae, 2) if avg_mae else None,
+                'mape': round(avg_mape, 2) if avg_mape else None,
+                'is_grouped': False,
+                'product_count': agg_data['product_count'],  # Additional metadata
+                'source': 'aggregated',  # Flag to indicate this is aggregated
+                'products': agg_data['products'],  # Include product details for expandable rows
+                'num_days': num_days  # Include number of days for display
+            }
+
+            forecast_list.append(shop_forecast)
+
+            logger.info(f'✓ Shop: {shop_name}')
+            logger.info(f'  - Products: {agg_data["product_count"]}')
+            logger.info(f'  - Total Forecast (aggregated): {round(total_qty, 1)} units')
+            logger.info(f'  - Avg Accuracy: {round(avg_accuracy, 1) if avg_accuracy else "N/A"}%')
+            logger.info(f'  - Date Range: {len(date_range_data)} days ({start_date} to {end_date})')
+            logger.info(f'  - Next 7 Days: {len(next_7_days)} days')
+            logger.info(f'  - Sample SKUs: {agg_data["sku_codes"][:3]}')
+
+        logger.info(f'=== SHOP AGGREGATION COMPLETE ===')
+        logger.info(f'Total shops: {len(forecast_list)}')
+        logger.info(f'Total products aggregated: {sum([f["product_count"] for f in forecast_list])}')
+        logger.info(f'Total forecast units: {sum([f["total_quantity"] for f in forecast_list])}')
+
+        # Verification: Log the shop totals for cross-checking with product breakdown
+        logger.info(f'=== SHOP TOTALS FOR VERIFICATION ===')
+        for shop_forecast in forecast_list[:3]:  # Log first 3 shops
+            logger.info(f'{shop_forecast["entity_name"]}: {shop_forecast["total_quantity"]:.2f} units ({shop_forecast["product_count"]} products)')
+        logger.info(f'=== END SHOP TOTALS ===')
+
+        # Log sample shop data structure for debugging
+        if forecast_list:
+            logger.info(f'=== SAMPLE SHOP DATA STRUCTURE ===')
+            sample_shop = forecast_list[0]
+            logger.info(f'Shop Name: {sample_shop.get("entity_name")}')
+            logger.info(f'Total Quantity: {sample_shop.get("total_quantity")}')
+            logger.info(f'Accuracy Score: {sample_shop.get("accuracy_score")}')
+            logger.info(f'Model: {sample_shop.get("model")}')
+            logger.info(f'MAE: {sample_shop.get("mae")}')
+            logger.info(f'MAPE: {sample_shop.get("mape")}')
+            logger.info(f'Training Days: {sample_shop.get("training_days")}')
+            logger.info(f'Is Grouped: {sample_shop.get("is_grouped")}')
+            logger.info(f'Has forecast_data: {bool(sample_shop.get("forecast_data"))}')
+            logger.info(f'Next 7 Days count: {len(sample_shop.get("next_7_days", []))}')
+            logger.info(f'=== END SAMPLE DATA ===')
+
+        logger.info(f'=== SHOP FORECASTS READY FOR TEMPLATE ===')
+        return forecast_list
+
     # Get parameters
     level = request.GET.get('level', 'school')
     search_query = request.GET.get('search', '').strip()  # Search/filter parameter
@@ -1592,28 +1806,47 @@ def sales_forecasting(request):
 
     # Try to use new SalesForecastBase model
     from django.db.models import Max
+    import logging
+    logger = logging.getLogger(__name__)
 
-    # Get all base forecasts for this level (latest forecast for each entity)
-    query = SalesForecastBase.objects.filter(aggregation_level=level)
+    # SPECIAL HANDLING FOR SHOP LEVEL: Aggregate from product forecasts
+    if level == 'shop':
+        logger.info(f'=== SHOP-LEVEL FORECAST REQUEST ===')
+        logger.info(f'Date range: {start_date_str} to {end_date_str}')
+        logger.info(f'Search query: {search_query}')
+        logger.info('Using smart aggregation: summing product forecasts by shop category')
 
-    # Apply search filter if provided
-    if search_query:
-        query = query.filter(entity_name__icontains=search_query)
+        # Use the smart aggregation approach
+        forecast_list = get_shop_forecasts_from_products(start_date, end_date, search_query)
+        use_legacy = False
+        no_forecasts_available = len(forecast_list) == 0
 
-    all_base_forecasts = query.order_by('entity_name', '-forecast_date')
+        # Skip the rest of the forecast processing and jump directly to summary
+        # (We'll handle this in the template section below)
 
-    # Keep only the latest forecast for each entity_name
-    seen_entities = set()
-    base_forecasts = []
-    for f in all_base_forecasts:
-        if f.entity_name not in seen_entities:
-            base_forecasts.append(f)
-            seen_entities.add(f.entity_name)
-        if len(base_forecasts) >= 2000:  # Limit to 2000 unique entities (increased from 500)
-            break
+    # NORMAL HANDLING FOR OTHER LEVELS (school, product, category)
+    elif level != 'shop':
+        # Get all base forecasts for this level (latest forecast for each entity)
+        query = SalesForecastBase.objects.filter(aggregation_level=level)
+
+        # Apply search filter if provided
+        if search_query:
+            query = query.filter(entity_name__icontains=search_query)
+
+        all_base_forecasts = query.order_by('entity_name', '-forecast_date')
+
+        # Keep only the latest forecast for each entity_name
+        seen_entities = set()
+        base_forecasts = []
+        for f in all_base_forecasts:
+            if f.entity_name not in seen_entities:
+                base_forecasts.append(f)
+                seen_entities.add(f.entity_name)
+            if len(base_forecasts) >= 2000:  # Limit to 2000 unique entities (increased from 500)
+                break
 
     # If no base forecasts, fall back to legacy SalesForecast model
-    if not base_forecasts:
+    if level != 'shop' and not base_forecasts:
         # Fallback to legacy horizon-based approach
         # Auto-select the best horizon that covers the requested date range
         # with fallback to shorter horizons if longer ones don't exist
@@ -1655,12 +1888,31 @@ def sales_forecasting(request):
                 break
 
         use_legacy = True
-    else:
+
+        # IMPORTANT: Check if we have no forecasts at all (not even legacy)
+        # This prevents infinite refresh loop for levels without forecasts (e.g., shop)
+        if not forecasts:
+            # Set flag to show "no data" message instead of "generating" message
+            # This prevents the auto-refresh JavaScript from triggering
+            no_forecasts_available = True
+            if level == 'shop':
+                logger.warning(f'No shop-level forecasts found in database (neither base nor legacy)')
+                logger.warning(f'Returning no_forecasts_available=True to prevent infinite refresh')
+        else:
+            no_forecasts_available = False
+    elif level != 'shop':
+        # For non-shop levels, use base_forecasts
         forecasts = base_forecasts
         use_legacy = False
+        no_forecasts_available = False
 
     # Check if we need to group by parent product
-    if level == 'product':
+    if level == 'shop':
+        # Shop forecasts are already in forecast_list from aggregation above
+        # No further processing needed - skip to summary
+        pass
+
+    elif level == 'product':
         # Group SKU variations by parent product
         grouped_products = defaultdict(list)
 
@@ -1710,7 +1962,7 @@ def sales_forecasting(request):
                 'stock_on_hand': int(stock_on_hand),
                 'incoming_stock': int(incoming_stock),
                 'stock_gap': round(stock_gap, 1),
-                'accuracy_score': round(f.accuracy_score, 1) if f.accuracy_score else 'N/A',
+                'accuracy_score': round(f.accuracy_score, 1) if f.accuracy_score is not None else 'N/A',
                 'model': f.model_params.get('model', 'Unknown'),
                 'next_7_days': next_7_days,
                 'forecast_data': date_range_data,
@@ -1782,7 +2034,7 @@ def sales_forecasting(request):
             forecast_list.append({
                 'entity_name': f.entity_name,
                 'total_quantity': round(total_qty, 1),
-                'accuracy_score': round(f.accuracy_score, 1) if f.accuracy_score else 'N/A',
+                'accuracy_score': round(f.accuracy_score, 1) if f.accuracy_score is not None else 'N/A',
                 'model': f.model_params.get('model', 'Unknown'),
                 'next_7_days': next_7_days,
                 'forecast_data': date_range_data,
@@ -1793,8 +2045,12 @@ def sales_forecasting(request):
             })
 
     # Get summary statistics
-    # Calculate average accuracy from the forecasts list
-    if level == 'product':
+    # Calculate average accuracy from the forecast list
+    if level == 'shop':
+        # For shop level, forecast_list is already populated by aggregation
+        accuracy_scores = [f['accuracy_score'] for f in forecast_list if f.get('accuracy_score') != 'N/A']
+        avg_accuracy = round(sum(accuracy_scores) / len(accuracy_scores), 1) if accuracy_scores else 0
+    elif level == 'product':
         # For product level, forecasts is a list, calculate manually
         accuracy_scores = [f.accuracy_score for f in forecasts if f.accuracy_score is not None]
         avg_accuracy = round(sum(accuracy_scores) / len(accuracy_scores), 1) if accuracy_scores else 0
@@ -1817,7 +2073,19 @@ def sales_forecasting(request):
     }
 
     # Detect if forecasts are being generated (no data available)
-    generating_forecasts = len(forecast_list) == 0
+    # IMPORTANT: Only set generating_forecasts=True if forecasts don't exist yet
+    # but COULD be generated. If no forecasts are available at all (e.g., shop level
+    # has never been implemented), set no_forecasts_available=True instead to prevent
+    # infinite refresh loop.
+    if len(forecast_list) == 0 and no_forecasts_available:
+        # No forecasts exist and none are available - don't trigger auto-refresh
+        generating_forecasts = False
+    elif len(forecast_list) == 0:
+        # No forecasts but they might be generating - trigger auto-refresh
+        generating_forecasts = True
+    else:
+        # We have forecasts - don't trigger auto-refresh
+        generating_forecasts = False
 
     context = {
         'forecasts': forecast_list,
@@ -1833,6 +2101,7 @@ def sales_forecasting(request):
         'use_date_range': True,
         'from_cache': False,
         'generating_forecasts': generating_forecasts,
+        'no_forecasts_available': no_forecasts_available,  # New flag to distinguish "none available" vs "generating"
         'using_365d_base': not use_legacy  # Flag to indicate using new 365-day base system
     }
 
@@ -1846,18 +2115,33 @@ def sales_forecasting(request):
 @login_required
 def forecast_product_breakdown(request, school_name):
     """
-    Get product-level breakdown for a specific school
-    Returns JSON with all products forecasted for that school
+    Get product-level breakdown for a specific school or shop
+    Returns JSON with all products forecasted for that entity
     Uses the new SalesForecastBase system with 365-day forecasts
+
+    Supports two levels:
+    - school: Queries by p.sub_category (school name)
+    - shop: Queries by p.category_name (shop name)
     """
     from dashboard.models import SalesForecastBase
     from django.db import connection
     from datetime import datetime, timedelta
     import json
+    import logging
+
+    logger = logging.getLogger(__name__)
+    logger.info('=== FORECAST_PRODUCT_BREAKDOWN START ===')
+    logger.info(f'Entity name: {school_name}')
+
+    # Get level parameter to determine if this is school or shop
+    level = request.GET.get('level', 'school')
+    logger.info(f'Level: {level}')
 
     # Get date range parameters (same as main forecasting view)
     start_date_str = request.GET.get('start_date')
     end_date_str = request.GET.get('end_date')
+
+    logger.info(f'Date range params: start={start_date_str}, end={end_date_str}')
 
     # Default to next 30 days if not provided
     if not start_date_str or not end_date_str:
@@ -1866,34 +2150,87 @@ def forecast_product_breakdown(request, school_name):
         end_date = today + timedelta(days=30)
         start_date_str = start_date.isoformat()
         end_date_str = end_date.isoformat()
+        logger.info(f'Using default 30-day range: {start_date_str} to {end_date_str}')
     else:
         start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
         end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+        logger.info(f'Using provided date range: {start_date_str} to {end_date_str}')
 
     num_days = (end_date - start_date).days + 1
+    logger.info(f'Total days in range: {num_days}')
 
-    # Get product-level forecasts for this school from NEW system
+    # Get product-level forecasts for this school/shop from NEW system
+    # Note: Product forecasts are stored by SKU code from line items (e.g., "JKT 704 CL WHHS -M")
+    # We use a subquery to find which SKUs belong to this entity, then fetch their forecasts
     with connection.cursor() as cursor:
-        cursor.execute("""
-            SELECT
-                sf.entity_name as product_name,
-                sf.daily_forecasts,
-                sf.accuracy_score,
-                sf.model_params,
-                p.code as product_code,
-                p.sub_category
-            FROM dashboard_salesforecastbase sf
-            JOIN cin7_sync_product p ON p.name COLLATE utf8mb4_unicode_ci = sf.entity_name COLLATE utf8mb4_unicode_ci
-            WHERE sf.aggregation_level = 'product'
-              AND p.sub_category COLLATE utf8mb4_unicode_ci = %s
-              AND (p.category_name LIKE '%%Shop' OR p.category_name = 'Wholesale Schools')
-            ORDER BY sf.entity_name
-            LIMIT 500
-        """, [school_name])
+        logger.info('=== EXECUTING PRODUCT BREAKDOWN QUERY ===')
+
+        # Build query based on level
+        if level == 'shop':
+            # For shops, filter by category_name (e.g., "Coffee Shop", "Uniform Shop")
+            logger.info(f'Querying products for shop: {school_name}')
+            cursor.execute("""
+                SELECT
+                    sf.entity_name as sku_code,
+                    sf.daily_forecasts,
+                    sf.accuracy_score,
+                    sf.model_params,
+                    sf.entity_name as product_code,
+                    product_info.product_name,
+                    product_info.size
+                FROM dashboard_salesforecastbase sf
+                INNER JOIN (
+                    -- Subquery to get unique SKU to product mapping for this shop
+                    SELECT DISTINCT
+                        po.code as sku_code,
+                        COALESCE(p.name, po.code) as product_name,
+                        COALESCE(po.option1, 'N/A') as size
+                    FROM cin7_sync_productoption po
+                    JOIN cin7_sync_product p ON p.cin7_id = po.cin7_product_id
+                    WHERE p.category_name = %s
+                ) AS product_info ON product_info.sku_code = sf.entity_name
+                WHERE sf.aggregation_level = 'product'
+                ORDER BY product_info.product_name, product_info.size
+                LIMIT 500
+            """, [school_name])
+        else:
+            # For schools, filter by sub_category (school name)
+            logger.info(f'Querying products for school: {school_name}')
+            cursor.execute("""
+                SELECT
+                    sf.entity_name as sku_code,
+                    sf.daily_forecasts,
+                    sf.accuracy_score,
+                    sf.model_params,
+                    sf.entity_name as product_code,
+                    product_info.product_name,
+                    product_info.size
+                FROM dashboard_salesforecastbase sf
+                INNER JOIN (
+                    -- Subquery to get unique SKU to product mapping
+                    SELECT DISTINCT
+                        li.code as sku_code,
+                        COALESCE(p.name, li.name) as product_name,
+                        COALESCE(po.option1, SUBSTRING_INDEX(li.code, '-', -1)) as size
+                    FROM cin7_sync_salesorderlineitem li
+                    JOIN cin7_sync_product p ON p.id = li.product_id
+                    LEFT JOIN cin7_sync_productoption po ON po.code = li.code
+                    WHERE p.sub_category = %s
+                      AND (p.category_name LIKE '%%Shop' OR p.category_name = 'Wholesale Schools')
+                ) AS product_info ON product_info.sku_code = sf.entity_name
+                WHERE sf.aggregation_level = 'product'
+                ORDER BY product_info.product_name, product_info.size
+                LIMIT 500
+            """, [school_name])
+
+        logger.info('Query executed successfully')
 
         products = []
-        for row in cursor.fetchall():
-            product_name, daily_forecasts_json, accuracy, model_params_json, product_code, sub_category = row
+        rows = cursor.fetchall()
+        logger.info(f'Query returned {len(rows)} products')
+
+        for row in rows:
+            sku_code, daily_forecasts_json, accuracy, model_params_json, product_code, product_name, size = row
 
             # Parse JSON fields
             import json as json_lib
@@ -1921,22 +2258,107 @@ def forecast_product_breakdown(request, school_name):
                 })
 
             products.append({
-                'product_name': product_name,
-                'product_code': product_code or 'N/A',
+                'sku_code': sku_code,
+                'product_name': product_name,  # Just the product name without size
+                'product_code': sku_code,  # Full SKU code with size for the Code column
+                'size': size,
                 'total_quantity': round(total_qty, 1),
-                'accuracy_score': round(accuracy, 1) if accuracy else 'N/A',
+                'accuracy_score': round(accuracy, 1) if accuracy is not None else 'N/A',
                 'model': model_params.get('model', 'Unknown'),
-                'next_7_days': next_7_days
+                'next_7_days': next_7_days,
+                'forecast_data': date_range_forecasts  # Add full forecast data for chart functionality
             })
 
+    total_units = sum([p['total_quantity'] for p in products])
+    logger.info(f'=== PRODUCT BREAKDOWN TOTALS ===')
+    logger.info(f'Shop/Entity: {school_name}')
+    logger.info(f'Date Range: {start_date_str} to {end_date_str} ({num_days} days)')
+    logger.info(f'Product Count: {len(products)}')
+    logger.info(f'Total Units (sum of products): {total_units:.2f}')
+    logger.info(f'First 3 products: {[p["product_name"] for p in products[:3]]}')
+
+    # Calculate and log individual product totals for verification
+    if len(products) > 0:
+        logger.info(f'Sample product totals (first 5):')
+        for i, p in enumerate(products[:5]):
+            logger.info(f'  {i+1}. {p["sku_code"]}: {p["total_quantity"]:.2f} units')
+    logger.info(f'=== END PRODUCT BREAKDOWN TOTALS ===')
+
+    # Check if we also have an entity-level forecast for comparison
+    entity_forecast_total = None
+    entity_label = 'School' if level == 'school' else 'Shop'
+
+    try:
+        from dashboard.models import SalesForecastBase
+
+        # For shops, we don't have direct shop forecasts - they're aggregated from products
+        # So skip the comparison for shops
+        if level == 'school':
+            entity_forecast = SalesForecastBase.objects.filter(
+                entity_name=school_name,
+                aggregation_level='school'
+            ).first()
+
+            if entity_forecast:
+                entity_date_range = entity_forecast.get_date_range_forecast(start_date, end_date)
+                entity_forecast_total = sum([day.get('quantity', 0) for day in entity_date_range.values()])
+                logger.info(f'{entity_label}-level forecast for comparison: {entity_forecast_total} units')
+
+                # Calculate discrepancy ratio
+                if entity_forecast_total > 0:
+                    discrepancy_ratio = total_units / entity_forecast_total
+                    logger.warning(f'⚠️  DISCREPANCY: Product sum ({total_units}) vs {entity_label} total ({entity_forecast_total}) = {discrepancy_ratio:.1f}x difference')
+                else:
+                    logger.warning(f'⚠️  {entity_label} forecast is 0 or unavailable')
+        else:
+            # For shops, the sum of products IS the shop forecast (they're aggregated)
+            # So we expect them to match perfectly
+            logger.info(f'✓ Shop-level forecasts are aggregated from products')
+            logger.info(f'  Expected: Product sum ({total_units:.2f}) = Shop total')
+            logger.info(f'  This breakdown will be compared with shop aggregation total in UI')
+            entity_forecast_total = total_units
+
+    except Exception as e:
+        logger.error(f'Error fetching {entity_label} forecast for comparison: {e}')
+
+    # Final verification for shops: ensure consistency
+    verification_passed = True
+    if level == 'shop':
+        # For shops, we can verify against the aggregation by checking if totals would match
+        # This is a safety check to ensure the product breakdown matches what the main table shows
+        logger.info(f'=== FINAL VERIFICATION FOR SHOP: {school_name} ===')
+        logger.info(f'  Total from products: {total_units:.2f} units')
+        logger.info(f'  Number of products: {len(products)}')
+        logger.info(f'  Date range: {start_date_str} to {end_date_str}')
+        logger.info(f'  Expected to match shop aggregation total in main table')
+
+        if total_units == 0 and len(products) > 0:
+            logger.warning(f'⚠️  WARNING: Have {len(products)} products but total is 0!')
+            verification_passed = False
+        elif len(products) == 0 and total_units > 0:
+            logger.error(f'❌ ERROR: Have total of {total_units} but no products!')
+            verification_passed = False
+        else:
+            logger.info(f'✓ Verification passed: Product count and totals are consistent')
+
+        logger.info(f'=== END VERIFICATION ===')
+
+    logger.info('=== FORECAST_PRODUCT_BREAKDOWN END ===')
+
     return JsonResponse({
-        'school_name': school_name,
+        'entity_name': school_name,
+        'entity_label': entity_label,
+        'school_name': school_name,  # Keep for backward compatibility
         'start_date': start_date_str,
         'end_date': end_date_str,
         'num_days': num_days,
         'products': products,
         'total_products': len(products),
-        'total_units': sum([p['total_quantity'] for p in products])
+        'total_units': total_units,
+        'school_forecast_total': entity_forecast_total,  # Keep old name for backward compatibility
+        'entity_forecast_total': entity_forecast_total,
+        'warning': 'Product-level forecasts are currently unreliable (50-100x too high). Use with extreme caution.' if total_units > 0 and level == 'school' else None,
+        'verification_passed': verification_passed if level == 'shop' else None
     })
 
 

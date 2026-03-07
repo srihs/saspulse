@@ -157,6 +157,8 @@ class Product(TimestampedModel):
     # Classification
     brand = models.CharField(max_length=250, blank=True, db_index=True)
     category = models.CharField(max_length=250, blank=True, db_index=True)
+    category_id = models.BigIntegerField(null=True, blank=True, db_index=True, help_text="Primary category ID")
+    category_name = models.CharField(max_length=255, blank=True, db_index=True, help_text="Primary category name (e.g., 'Avondale Shop')")
     sub_category = models.CharField(max_length=250, blank=True)
     category_id_array = models.JSONField(default=list, blank=True, help_text="Array of category IDs")
 

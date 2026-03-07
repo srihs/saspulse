@@ -650,6 +650,137 @@ $(document).ready(function() {
         return html;
     }
 
+    // Format function for shop product breakdown with nested parent/child rows
+    function formatShopProducts(products, shopName, numDays) {
+        var html = '<div class="p-3">';
+
+        // Blue info banner
+        html += '<div class="alert alert-info mb-3" style="font-size: 0.9rem;">';
+        html += '<i class="fas fa-info-circle me-2"></i>';
+        html += '<strong>Note:</strong> Only variations with at least 10 historical sales are forecasted to ensure statistical accuracy. ';
+        html += 'Low-volume sizes (e.g., 2XS, 3XL, 4XL) may not appear if they have insufficient sales history.';
+        html += '</div>';
+
+        // Group products by base name
+        var grouped = {};
+        products.forEach(function(p) {
+            var baseName = p.product_name.replace(/\s*\([^)]*\)\s*$/, '').trim();
+            if (!grouped[baseName]) {
+                grouped[baseName] = [];
+            }
+            grouped[baseName].push(p);
+        });
+
+        var productNames = Object.keys(grouped).sort();
+        var uniqueId = 'shop-products-' + Date.now();
+
+        html += '<div class="table-responsive">';
+        html += '<table class="table table-sm table-bordered mb-0" style="font-size: 0.9rem;">';
+        html += '<thead><tr style="background-color: #f8f9fa;">';
+        html += '<th width="3%" class="text-center"></th>';
+        html += '<th width="25%">Product Name</th>';
+        html += '<th width="12%" class="text-center">Total Forecast</th>';
+        html += '<th width="10%" class="text-center">Variations</th>';
+        html += '<th width="10%" class="text-center">Avg Accuracy</th>';
+        html += '<th width="15%">Actions</th>';
+        html += '</tr></thead><tbody>';
+
+        // Parent rows
+        productNames.forEach(function(baseName, idx) {
+            var variations = grouped[baseName];
+            var totalQty = 0;
+            var accSum = 0;
+            var accCount = 0;
+
+            variations.forEach(function(v) {
+                totalQty += parseFloat(v.total_quantity || 0);
+                if (v.accuracy_score && v.accuracy_score !== 'N/A') {
+                    accSum += parseFloat(v.accuracy_score);
+                    accCount++;
+                }
+            });
+
+            var avgAcc = accCount > 0 ? (accSum / accCount).toFixed(1) : 'N/A';
+            var rowId = uniqueId + '-parent-' + idx;
+
+            html += '<tr class="parent-product-row" style="cursor: pointer; background-color: #f8f9fa;" data-toggle-target="' + rowId + '">';
+            html += '<td class="text-center"><i class="fas fa-chevron-right" style="font-size: 0.8rem; transition: transform 0.2s;"></i></td>';
+            html += '<td><strong>' + baseName + '</strong></td>';
+            html += '<td class="text-center"><strong>' + Math.round(totalQty) + ' units</strong></td>';
+            html += '<td class="text-center"><span class="badge bg-primary">' + variations.length + ' size' + (variations.length > 1 ? 's' : '') + '</span></td>';
+            html += '<td class="text-center">';
+            if (avgAcc !== 'N/A') {
+                var acc = parseFloat(avgAcc);
+                if (acc >= 80) {
+                    html += '<span class="badge bg-success">' + avgAcc + '%</span>';
+                } else if (acc >= 60) {
+                    html += '<span class="badge bg-warning text-dark">' + avgAcc + '%</span>';
+                } else {
+                    html += '<span class="badge bg-danger">' + avgAcc + '%</span>';
+                }
+            } else {
+                html += '<span class="text-muted">N/A</span>';
+            }
+            html += '</td>';
+            html += '<td class="text-muted small">Click to expand</td>';
+            html += '</tr>';
+
+            // Child rows (hidden by default)
+            html += '<tr id="' + rowId + '" style="display: none;"><td colspan="6" style="padding: 0; background-color: #fff;">';
+            html += '<table class="table table-sm mb-0" style="font-size: 0.85rem;">';
+            html += '<thead style="background-color: #e9ecef;"><tr>';
+            html += '<th>Product Name</th>';
+            html += '<th>SKU Code</th>';
+            html += '<th>Variation</th>';
+            html += '<th class="text-center">Stock in Hand</th>';
+            html += '<th class="text-center">Incoming Stock</th>';
+            html += '<th class="text-center">Forecasted Stock</th>';
+            html += '<th class="text-center">Stock Gap</th>';
+            html += '<th>Actions</th>';
+            html += '</tr></thead><tbody>';
+
+            variations.sort(function(a, b) {
+                return (a.size || '').localeCompare(b.size || '');
+            });
+
+            variations.forEach(function(v) {
+                html += '<tr>';
+                html += '<td>' + baseName + '</td>';
+                html += '<td><code style="font-size: 0.75rem;">' + v.product_code + '</code></td>';
+                html += '<td><strong>' + (v.size || 'N/A') + '</strong></td>';
+                html += '<td class="text-center text-muted">N/A</td>';
+                html += '<td class="text-center text-muted">N/A</td>';
+                html += '<td class="text-center">' + Math.round(v.total_quantity) + '</td>';
+                html += '<td class="text-center"><span class="badge bg-secondary">N/A</span></td>';
+                html += '<td><button class="btn btn-sm btn-outline-success"><i class="fas fa-chart-line"></i> Chart</button></td>';
+                html += '</tr>';
+            });
+
+            html += '</tbody></table></td></tr>';
+        });
+
+        html += '</tbody></table></div></div>';
+
+        // Add click handler for parent rows
+        setTimeout(function() {
+            $('.parent-product-row').off('click').on('click', function() {
+                var targetId = $(this).data('toggle-target');
+                var targetRow = $('#' + targetId);
+                var icon = $(this).find('i.fa-chevron-right, i.fa-chevron-down');
+
+                if (targetRow.is(':visible')) {
+                    targetRow.hide();
+                    icon.removeClass('fa-chevron-down').addClass('fa-chevron-right').css('transform', 'rotate(0deg)');
+                } else {
+                    targetRow.show();
+                    icon.removeClass('fa-chevron-right').addClass('fa-chevron-down').css('transform', 'rotate(90deg)');
+                }
+            });
+        }, 100);
+
+        return html;
+    }
+
     // Click handler for dt-control column (row expand/collapse)
     $('#forecastsTable tbody').on('click', 'td.dt-control', function() {
         var tr = $(this).closest('tr');
@@ -666,10 +797,39 @@ $(document).ready(function() {
                 var variationId = tr.data('variation-id');
                 row.child(formatProductVariations(variationId)).show();
             } else {
-                // Detail view: show metrics
-                row.child(formatDetailView(row.data())).show();
+                // Check if this is shop level
+                var level = '{{ current_level }}';
+                var shopName = tr.find('td:eq(1)').text().trim();
+
+                if (level === 'shop') {
+                    // Show loading state
+                    row.child('<div class="p-3 text-center"><div class="spinner-border spinner-border-sm" role="status"></div> Loading products...</div>').show();
+                    tr.addClass('shown');
+
+                    // Fetch products via AJAX
+                    var startDate = '{{ start_date }}';
+                    var endDate = '{{ end_date }}';
+                    var numDays = '{{ num_days }}';
+                    var url = '/dashboard/forecasting/products/' + encodeURIComponent(shopName) + '/?start_date=' + startDate + '&end_date=' + endDate + '&level=shop';
+
+                    fetch(url)
+                        .then(function(response) { return response.json(); })
+                        .then(function(data) {
+                            if (data.products && data.products.length > 0) {
+                                row.child(formatShopProducts(data.products, shopName, numDays)).show();
+                            } else {
+                                row.child('<div class="p-3 alert alert-info">No products found for this shop.</div>').show();
+                            }
+                        })
+                        .catch(function(error) {
+                            row.child('<div class="p-3 alert alert-danger">Error loading products.</div>').show();
+                        });
+                } else {
+                    // School or other: show detail view
+                    row.child(formatDetailView(row.data())).show();
+                    tr.addClass('shown');
+                }
             }
-            tr.addClass('shown');
         }
     });
 
