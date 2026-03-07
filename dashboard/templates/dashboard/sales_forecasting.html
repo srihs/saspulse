@@ -814,16 +814,16 @@ $(document).ready(function() {
 
             // Child rows (hidden by default)
             html += '<tr id="' + rowId + '" style="display: none;"><td colspan="5" style="padding: 0; background-color: #fff;">';
-            html += '<table class="table table-sm mb-0" style="font-size: 0.85rem;">';
+            html += '<table class="table table-sm mb-0" style="font-size: 0.85rem; table-layout: fixed; width: 100%;">';
             html += '<thead style="background-color: #e9ecef;"><tr>';
-            html += '<th>Product Name</th>';
-            html += '<th>SKU Code</th>';
-            html += '<th>Variation</th>';
-            html += '<th class="text-center">Stock in Hand</th>';
-            html += '<th class="text-center">Incoming Stock</th>';
-            html += '<th class="text-center">Forecasted Stock</th>';
-            html += '<th class="text-center">Stock Gap</th>';
-            html += '<th>Actions</th>';
+            html += '<th style="width: 25%;">Product Name</th>';
+            html += '<th style="width: 15%; white-space: nowrap;">SKU Code</th>';
+            html += '<th style="width: 10%; text-align: center;">Variation</th>';
+            html += '<th class="text-center" style="width: 10%;">Stock in Hand</th>';
+            html += '<th class="text-center" style="width: 10%;">Incoming Stock</th>';
+            html += '<th class="text-center" style="width: 10%;">Forecasted Stock</th>';
+            html += '<th class="text-center" style="width: 10%;">Stock Gap</th>';
+            html += '<th style="width: 10%;">Actions</th>';
             html += '</tr></thead><tbody>';
 
             variations.sort(function(a, b) {
@@ -832,14 +832,14 @@ $(document).ready(function() {
 
             variations.forEach(function(v) {
                 html += '<tr>';
-                html += '<td>' + baseName + '</td>';
-                html += '<td><code style="font-size: 0.75rem;">' + v.product_code + '</code></td>';
-                html += '<td><strong>' + (v.size || 'N/A') + '</strong></td>';
+                html += '<td style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">' + baseName + '</td>';
+                html += '<td style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"><code style="font-size: 0.75rem;">' + v.product_code + '</code></td>';
+                html += '<td class="text-center"><strong>' + (v.size || 'N/A') + '</strong></td>';
                 html += '<td class="text-center text-muted">N/A</td>';
                 html += '<td class="text-center text-muted">N/A</td>';
                 html += '<td class="text-center">' + Math.round(v.total_quantity) + '</td>';
                 html += '<td class="text-center"><span class="badge bg-secondary">N/A</span></td>';
-                html += '<td><button class="btn btn-sm btn-outline-success"><i class="fas fa-chart-line"></i> Chart</button></td>';
+                html += '<td class="text-center"><button class="btn btn-sm btn-outline-success"><i class="fas fa-chart-line"></i> Chart</button></td>';
                 html += '</tr>';
             });
 
