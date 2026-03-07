@@ -1972,11 +1972,11 @@ def sales_forecasting(request):
 
     # NORMAL HANDLING FOR OTHER LEVELS (school, product, category)
     elif level != 'shop':
-        # SPECIAL CASE: When school filter is applied at school level, show products for that school
-        if level == 'school' and school_filter:
+        # SPECIAL CASE: When "By School" is selected, ALWAYS show product breakdown
+        if level == 'school':
             from django.db import connection
 
-            # Switch to product-level view filtered by school (sub_category)
+            # Switch to product-level view, optionally filtered by school (sub_category)
             sql = """
                 SELECT DISTINCT sf.id, sf.forecast_id, sf.model_type, sf.aggregation_level,
                        sf.entity_name, sf.entity_id, sf.daily_forecasts, sf.forecast_date,
@@ -1986,10 +1986,15 @@ def sales_forecasting(request):
                 LEFT JOIN cin7_sync_productoption po ON po.code = sf.entity_name
                 LEFT JOIN cin7_sync_product p ON p.cin7_id = po.cin7_product_id
                 WHERE sf.aggregation_level = 'product'
-                  AND p.sub_category = %s
             """
-            params = [school_filter]
+            params = []
 
+            # Add school filter if provided
+            if school_filter:
+                sql += " AND p.sub_category = %s"
+                params.append(school_filter)
+
+            # Add search query if provided
             if search_query:
                 sql += " AND (sf.entity_name LIKE %s OR p.name LIKE %s)"
                 params.extend([f'%{search_query}%', f'%{search_query}%'])
