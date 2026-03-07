@@ -1517,12 +1517,12 @@ def forecasting_filter_options(request):
         'categories': []
     }
 
-    # Get schools (sub_category excluding Wholesale Schools category)
+    # Get schools (sub_category from Wholesale Schools category)
     with connection.cursor() as cursor:
         cursor.execute("""
             SELECT DISTINCT sub_category
             FROM cin7_sync_product
-            WHERE category_name != 'Wholesale Schools'
+            WHERE category_name = 'Wholesale Schools'
               AND sub_category IS NOT NULL
               AND sub_category != ''
             ORDER BY sub_category
