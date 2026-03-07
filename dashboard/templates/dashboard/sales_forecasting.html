@@ -801,29 +801,21 @@ $(document).ready(function() {
         html += '<table class="table table-sm table-bordered mb-0" style="font-size: 0.9rem;">';
         html += '<thead><tr style="background-color: #f8f9fa;">';
         html += '<th width="3%" class="text-center"></th>';
-        html += '<th width="25%">Product Name</th>';
-        html += '<th width="12%" class="text-center">Total Forecast</th>';
-        html += '<th width="10%" class="text-center">Variations</th>';
-        html += '<th width="10%" class="text-center">Avg Accuracy</th>';
-        html += '<th width="15%">Actions</th>';
+        html += '<th width="35%">Product Name</th>';
+        html += '<th width="15%" class="text-center">Total Forecast</th>';
+        html += '<th width="15%" class="text-center">Variations</th>';
+        html += '<th width="20%">Actions</th>';
         html += '</tr></thead><tbody>';
 
         // Parent rows
         productNames.forEach(function(baseName, idx) {
             var variations = grouped[baseName];
             var totalQty = 0;
-            var accSum = 0;
-            var accCount = 0;
 
             variations.forEach(function(v) {
                 totalQty += parseFloat(v.total_quantity || 0);
-                if (v.accuracy_score && v.accuracy_score !== 'N/A') {
-                    accSum += parseFloat(v.accuracy_score);
-                    accCount++;
-                }
             });
 
-            var avgAcc = accCount > 0 ? (accSum / accCount).toFixed(1) : 'N/A';
             var rowId = uniqueId + '-parent-' + idx;
 
             html += '<tr class="parent-product-row" style="cursor: pointer; background-color: #f8f9fa;" data-toggle-target="' + rowId + '">';
@@ -831,25 +823,11 @@ $(document).ready(function() {
             html += '<td><strong>' + baseName + '</strong></td>';
             html += '<td class="text-center"><strong>' + Math.round(totalQty) + ' units</strong></td>';
             html += '<td class="text-center"><span class="badge bg-primary">' + variations.length + ' size' + (variations.length > 1 ? 's' : '') + '</span></td>';
-            html += '<td class="text-center">';
-            if (avgAcc !== 'N/A') {
-                var acc = parseFloat(avgAcc);
-                if (acc >= 80) {
-                    html += '<span class="badge bg-success">' + avgAcc + '%</span>';
-                } else if (acc >= 60) {
-                    html += '<span class="badge bg-warning text-dark">' + avgAcc + '%</span>';
-                } else {
-                    html += '<span class="badge bg-danger">' + avgAcc + '%</span>';
-                }
-            } else {
-                html += '<span class="text-muted">N/A</span>';
-            }
-            html += '</td>';
             html += '<td class="text-muted small">Click to expand</td>';
             html += '</tr>';
 
             // Child rows (hidden by default)
-            html += '<tr id="' + rowId + '" style="display: none;"><td colspan="6" style="padding: 0; background-color: #fff;">';
+            html += '<tr id="' + rowId + '" style="display: none;"><td colspan="5" style="padding: 0; background-color: #fff;">';
             html += '<table class="table table-sm mb-0" style="font-size: 0.85rem;">';
             html += '<thead style="background-color: #e9ecef;"><tr>';
             html += '<th>Product Name</th>';
