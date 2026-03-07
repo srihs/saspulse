@@ -1978,12 +1978,13 @@ def sales_forecasting(request):
 
             # Switch to product-level view filtered by school (sub_category)
             sql = """
-                SELECT DISTINCT sf.id, sf.entity_name, sf.aggregation_level, sf.daily_forecasts,
-                       sf.accuracy_score, sf.mae, sf.mape, sf.model_params, sf.forecast_date,
-                       sf.horizon, sf.created_at, sf.updated_at
+                SELECT DISTINCT sf.id, sf.forecast_id, sf.model_type, sf.aggregation_level,
+                       sf.entity_name, sf.entity_id, sf.daily_forecasts, sf.forecast_date,
+                       sf.training_data_start, sf.training_data_end, sf.mae, sf.mape, sf.rmse,
+                       sf.accuracy_score, sf.model_params, sf.created_at, sf.updated_at
                 FROM dashboard_salesforecastbase sf
                 LEFT JOIN cin7_sync_productoption po ON po.code = sf.entity_name
-                LEFT JOIN cin7_sync_product p ON p.cin7_id = po.product_id
+                LEFT JOIN cin7_sync_product p ON p.cin7_id = po.cin7_product_id
                 WHERE sf.aggregation_level = 'product'
                   AND p.sub_category = %s
             """
@@ -2015,12 +2016,13 @@ def sales_forecasting(request):
 
                 # Switch to product-level view filtered by category
                 sql = """
-                    SELECT DISTINCT sf.id, sf.entity_name, sf.aggregation_level, sf.daily_forecasts,
-                           sf.accuracy_score, sf.mae, sf.mape, sf.model_params, sf.forecast_date,
-                           sf.horizon, sf.created_at, sf.updated_at
+                    SELECT DISTINCT sf.id, sf.forecast_id, sf.model_type, sf.aggregation_level,
+                           sf.entity_name, sf.entity_id, sf.daily_forecasts, sf.forecast_date,
+                           sf.training_data_start, sf.training_data_end, sf.mae, sf.mape, sf.rmse,
+                           sf.accuracy_score, sf.model_params, sf.created_at, sf.updated_at
                     FROM dashboard_salesforecastbase sf
                     LEFT JOIN cin7_sync_productoption po ON po.code = sf.entity_name
-                    LEFT JOIN cin7_sync_product p ON p.cin7_id = po.product_id
+                    LEFT JOIN cin7_sync_product p ON p.cin7_id = po.cin7_product_id
                     WHERE sf.aggregation_level = 'product'
                       AND p.category = %s
                 """
@@ -2044,12 +2046,13 @@ def sales_forecasting(request):
                     from django.db import connection
 
                     sql = """
-                        SELECT DISTINCT sf.id, sf.entity_name, sf.aggregation_level, sf.daily_forecasts,
-                               sf.accuracy_score, sf.mae, sf.mape, sf.model_params, sf.forecast_date,
-                               sf.horizon, sf.created_at, sf.updated_at
+                        SELECT DISTINCT sf.id, sf.forecast_id, sf.model_type, sf.aggregation_level,
+                               sf.entity_name, sf.entity_id, sf.daily_forecasts, sf.forecast_date,
+                               sf.training_data_start, sf.training_data_end, sf.mae, sf.mape, sf.rmse,
+                               sf.accuracy_score, sf.model_params, sf.created_at, sf.updated_at
                         FROM dashboard_salesforecastbase sf
                         LEFT JOIN cin7_sync_productoption po ON po.code = sf.entity_name
-                        LEFT JOIN cin7_sync_product p ON p.cin7_id = po.product_id
+                        LEFT JOIN cin7_sync_product p ON p.cin7_id = po.cin7_product_id
                         WHERE sf.aggregation_level = 'product'
                     """
                     params = []
