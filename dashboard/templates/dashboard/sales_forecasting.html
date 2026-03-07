@@ -1338,8 +1338,25 @@ function viewChartFromButton(button) {
         // Listen for aggregation level changes
         levelSelect.addEventListener('change', function() {
             const newLevel = this.value;
+
+            // Clear all filter values when aggregation level changes
+            clearAllFilters();
+
             toggleFilterVisibility(newLevel);
             loadFilterOptions(newLevel);
+        });
+    }
+
+    // Clear all filter dropdown values
+    function clearAllFilters() {
+        const filterIds = ['schoolFilter', 'productFilter', 'styleCodeFilter', 'shopFilter', 'categoryFilter'];
+
+        filterIds.forEach(function(filterId) {
+            const selectElement = document.getElementById(filterId);
+            if (selectElement && filterChoicesInstances[filterId]) {
+                // Reset Choices.js instance to empty value
+                filterChoicesInstances[filterId].setChoiceByValue('');
+            }
         });
     }
 
