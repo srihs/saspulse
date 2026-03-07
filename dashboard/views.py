@@ -1992,6 +1992,16 @@ def sales_forecasting(request):
         # IMPORTANT: Set level to 'product' for template rendering
         level = 'product'
 
+        # Keep only the latest forecast for each entity_name
+        seen_entities = set()
+        base_forecasts = []
+        for f in all_base_forecasts:
+            if f.entity_name not in seen_entities:
+                base_forecasts.append(f)
+                seen_entities.add(f.entity_name)
+            if len(base_forecasts) >= 2000:  # Limit to 2000 unique entities
+                break
+
     # NORMAL HANDLING FOR OTHER LEVELS (school, product, category)
     elif level != 'shop':
         # SPECIAL CASE: When "By School" is selected, ALWAYS show product breakdown
