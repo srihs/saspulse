@@ -118,10 +118,20 @@
         border-color: #4e73df transparent transparent;
     }
 
+    /* DataTables child row - remove padding from wrapper td */
+    table.dataTable tbody tr.child td.child {
+        padding: 0 !important;
+    }
+
     /* Inner variation table - remove ALL padding for edge-to-edge display */
     .variation-group > td {
         padding: 0 !important;
         margin: 0 !important;
+    }
+
+    /* Also target any td inside shown parent row */
+    tr.shown + tr > td {
+        padding: 0 !important;
     }
 
     /* Remove default Bootstrap table padding */
