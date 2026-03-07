@@ -1499,6 +1499,84 @@ def extract_size_from_sku(sku_code):
 
 
 @login_required
+def forecasting_filter_options(request):
+    """
+    API endpoint to return filter options for sales forecasting page
+    Returns different filter data based on the current aggregation level
+    """
+    from django.db import connection
+    import json
+
+    level = request.GET.get('level', 'school')
+
+    result = {
+        'schools': [],
+        'products': [],
+        'style_codes': [],
+        'shops': [],
+        'categories': []
+    }
+
+    # Get schools (sub_category from Wholesale Schools products)
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            SELECT DISTINCT sub_category
+            FROM cin7_sync_product
+            WHERE category_name = 'Wholesale Schools'
+              AND sub_category IS NOT NULL
+              AND sub_category != ''
+            ORDER BY sub_category
+        """)
+        result['schools'] = [{'value': row[0], 'label': row[0]} for row in cursor.fetchall()]
+
+    # Get products (distinct product names and cin7_id)
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            SELECT DISTINCT p.name, p.cin7_id
+            FROM cin7_sync_product p
+            WHERE (p.category_name = 'Wholesale Schools' OR p.category_name LIKE '%% Shop')
+              AND p.name IS NOT NULL
+            ORDER BY p.name
+        """)
+        result['products'] = [{'value': str(row[1]), 'label': row[0]} for row in cursor.fetchall()]
+
+    # Get style codes (distinct style codes)
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            SELECT DISTINCT style_code
+            FROM cin7_sync_product
+            WHERE style_code IS NOT NULL
+              AND style_code != ''
+              AND (category_name = 'Wholesale Schools' OR category_name LIKE '%% Shop')
+            ORDER BY style_code
+        """)
+        result['style_codes'] = [{'value': row[0], 'label': row[0]} for row in cursor.fetchall()]
+
+    # Get shops (categories ending with 'Shop')
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            SELECT DISTINCT category_name
+            FROM cin7_sync_product
+            WHERE category_name LIKE '%% Shop' OR category_name = 'Shop'
+            ORDER BY category_name
+        """)
+        result['shops'] = [{'value': row[0], 'label': row[0]} for row in cursor.fetchall()]
+
+    # Get categories (unique sub_categories - Tier 3)
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            SELECT DISTINCT sub_category
+            FROM cin7_sync_product
+            WHERE sub_category IS NOT NULL
+              AND sub_category != ''
+            ORDER BY sub_category
+        """)
+        result['categories'] = [{'value': row[0], 'label': row[0]} for row in cursor.fetchall()]
+
+    return JsonResponse(result)
+
+
+@login_required
 def sales_forecasting(request):
     """
     Main sales forecasting dashboard with AI/ML predictions
@@ -1535,7 +1613,7 @@ def sales_forecasting(request):
         }
 
     # Helper function to aggregate product forecasts by shop
-    def get_shop_forecasts_from_products(start_date, end_date, search_query=None):
+    def get_shop_forecasts_from_products(start_date, end_date, search_query=None, filters=None):
         """
         Aggregate product-level forecasts by shop category (category_name ending with 'Shop')
 
@@ -1548,6 +1626,12 @@ def sales_forecasting(request):
         - Mathematically correct: shop total = sum of products in that shop
         - No data duplication or discrepancies
 
+        Args:
+            start_date: Start date for forecast range
+            end_date: End date for forecast range
+            search_query: General search query (legacy)
+            filters: Dictionary containing specific filters (school, product, style_code, shop, category)
+
         Returns:
             list: List of shop forecast dictionaries with aggregated data
         """
@@ -1557,6 +1641,7 @@ def sales_forecasting(request):
         logger.info('=== AGGREGATING SHOP FORECASTS FROM PRODUCTS ===')
         logger.info(f'Date range: {start_date} to {end_date}')
         logger.info(f'Search query: {search_query}')
+        logger.info(f'Filters: {filters}')
 
         # Build SQL query to fetch product forecasts with shop category
         sql = """
@@ -1584,6 +1669,21 @@ def sales_forecasting(request):
         if search_query:
             sql += " AND p.category_name LIKE %s"
             params.append(f'%{search_query}%')
+
+        # Apply specific filters if provided
+        if filters:
+            if filters.get('product'):
+                sql += " AND p.cin7_id = %s"
+                params.append(filters['product'])
+            if filters.get('style_code'):
+                sql += " AND p.style_code = %s"
+                params.append(filters['style_code'])
+            if filters.get('shop'):
+                sql += " AND p.category_name = %s"
+                params.append(filters['shop'])
+            if filters.get('category'):
+                sql += " AND p.sub_category = %s"
+                params.append(filters['category'])
 
         # Order by category for grouping
         sql += " ORDER BY p.category_name, sf.entity_name"
@@ -1752,6 +1852,13 @@ def sales_forecasting(request):
     level = request.GET.get('level', 'school')
     search_query = request.GET.get('search', '').strip()  # Search/filter parameter
 
+    # Extract filter parameters
+    school_filter = request.GET.get('school', '').strip()
+    product_filter = request.GET.get('product', '').strip()
+    style_code_filter = request.GET.get('style_code', '').strip()
+    shop_filter = request.GET.get('shop', '').strip()
+    category_filter = request.GET.get('category', '').strip()
+
     # Date range parameters (new approach)
     start_date_str = request.GET.get('start_date')
     end_date_str = request.GET.get('end_date')
@@ -1764,6 +1871,11 @@ def sales_forecasting(request):
 
     # Parse and validate date ranges
     today = datetime_date.today()
+
+    # Initialize date variables
+    start_date = None
+    end_date = None
+    num_days = None
 
     if use_date_range:
         try:
@@ -1778,25 +1890,51 @@ def sales_forecasting(request):
             if date_diff > 365:
                 return JsonResponse({'error': 'Date range cannot exceed 365 days'}, status=400)
 
+            # Calculate number of days in range
+            num_days = (end_date - start_date).days
+
         except ValueError:
             return JsonResponse({'error': 'Invalid date format. Use YYYY-MM-DD'}, status=400)
     else:
-        # Default: today + 30 days
+        # No default dates - require user to select dates via Apply Filters button
+        # Set placeholder values for template rendering
         start_date = today
         end_date = today + timedelta(days=30)
         start_date_str = start_date.strftime('%Y-%m-%d')
         end_date_str = end_date.strftime('%Y-%m-%d')
+        num_days = 30
 
-    # Calculate number of days in range
-    num_days = (end_date - start_date).days
-
-    # Check cache first
-    cache_key = f'forecast_{level}_{start_date_str}_{end_date_str}'
+    # Build cache key including filters
+    filter_key = f"{school_filter}_{product_filter}_{style_code_filter}_{shop_filter}_{category_filter}_{search_query}"
+    cache_key = f'forecast_{level}_{start_date_str}_{end_date_str}_{filter_key}'
 
     # Determine cache timeout based on range
     common_ranges = [7, 30, 90]
     is_common_range = num_days in common_ranges and start_date == today
     cache_timeout = 1800 if is_common_range else 600  # 30 min for common, 10 min for custom
+
+    # Skip data loading if no date range was provided (initial page load)
+    if not use_date_range:
+        # Return empty state - user must click Apply Filters button
+        context = {
+            'forecasts': [],
+            'forecast_list_json': json.dumps([], default=str),
+            'summary': {'total_forecasts': 0, 'avg_accuracy': 'N/A', 'level_display': dict(SalesForecastBase.AGGREGATION_LEVELS).get(level, level)},
+            'current_horizon': horizon,
+            'current_level': level,
+            'start_date': start_date_str,
+            'end_date': end_date_str,
+            'num_days': num_days,
+            'horizons': SalesForecast.FORECAST_HORIZONS,
+            'levels': SalesForecastBase.AGGREGATION_LEVELS,
+            'use_date_range': True,
+            'from_cache': False,
+            'generating_forecasts': False,
+            'no_forecasts_available': False,
+            'using_365d_base': True,
+            'initial_load': True  # Flag to indicate this is initial page load without data
+        }
+        return render(request, 'dashboard/sales_forecasting.html', context)
 
     cached_data = cache.get(cache_key)
     if cached_data:
@@ -1816,8 +1954,16 @@ def sales_forecasting(request):
         logger.info(f'Search query: {search_query}')
         logger.info('Using smart aggregation: summing product forecasts by shop category')
 
+        # Build filters dictionary
+        filters = {
+            'product': product_filter,
+            'style_code': style_code_filter,
+            'shop': shop_filter,
+            'category': category_filter
+        }
+
         # Use the smart aggregation approach
-        forecast_list = get_shop_forecasts_from_products(start_date, end_date, search_query)
+        forecast_list = get_shop_forecasts_from_products(start_date, end_date, search_query, filters)
         use_legacy = False
         no_forecasts_available = len(forecast_list) == 0
 
@@ -1833,7 +1979,54 @@ def sales_forecasting(request):
         if search_query:
             query = query.filter(entity_name__icontains=search_query)
 
-        all_base_forecasts = query.order_by('entity_name', '-forecast_date')
+        # Apply specific filters if provided (requires joining with product table for product-level filters)
+        # For now, we'll apply filters that match the aggregation level directly
+        # Note: Advanced filtering across levels requires custom SQL queries
+        if level == 'school' and school_filter:
+            query = query.filter(entity_name__icontains=school_filter)
+        elif level == 'category' and category_filter:
+            query = query.filter(entity_name__icontains=category_filter)
+        elif level == 'product':
+            # For product level, we need to join with product table for advanced filters
+            # This will be handled via raw SQL if filters are present
+            if product_filter or style_code_filter or shop_filter or category_filter:
+                from django.db import connection
+
+                sql = """
+                    SELECT DISTINCT sf.id, sf.entity_name, sf.aggregation_level, sf.daily_forecasts,
+                           sf.accuracy_score, sf.mae, sf.mape, sf.model_params, sf.forecast_date,
+                           sf.horizon, sf.created_at, sf.updated_at
+                    FROM dashboard_salesforecastbase sf
+                    LEFT JOIN cin7_sync_productoption po ON po.code = sf.entity_name
+                    LEFT JOIN cin7_sync_product p ON p.cin7_id = po.cin7_product_id
+                    WHERE sf.aggregation_level = 'product'
+                """
+                params = []
+
+                if product_filter:
+                    sql += " AND p.cin7_id = %s"
+                    params.append(product_filter)
+                if style_code_filter:
+                    sql += " AND p.style_code = %s"
+                    params.append(style_code_filter)
+                if shop_filter:
+                    sql += " AND p.category_name = %s"
+                    params.append(shop_filter)
+                if category_filter:
+                    sql += " AND p.sub_category = %s"
+                    params.append(category_filter)
+                if search_query:
+                    sql += " AND (sf.entity_name LIKE %s OR p.name LIKE %s)"
+                    params.extend([f'%{search_query}%', f'%{search_query}%'])
+
+                sql += " ORDER BY sf.entity_name, sf.forecast_date DESC"
+
+                # Execute raw SQL and convert to model instances
+                all_base_forecasts = SalesForecastBase.objects.raw(sql, params)
+            else:
+                all_base_forecasts = query.order_by('entity_name', '-forecast_date')
+        else:
+            all_base_forecasts = query.order_by('entity_name', '-forecast_date')
 
         # Keep only the latest forecast for each entity_name
         seen_entities = set()

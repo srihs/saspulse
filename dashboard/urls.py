@@ -15,6 +15,7 @@ urlpatterns = [
 
     # Sales Forecasting (AI/ML)
     path('forecasting/', views.sales_forecasting, name='sales_forecasting'),
+    path('forecasting/filter-options/', views.forecasting_filter_options, name='forecasting_filter_options'),
     path('forecasting/products/<str:school_name>/', views.forecast_product_breakdown, name='forecast_product_breakdown'),
     path('forecasting/health/', views.forecast_health_dashboard, name='forecast_health'),
     path('forecasting/regenerate/', views.trigger_forecast_regeneration, name='trigger_regeneration'),

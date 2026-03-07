@@ -6,6 +6,118 @@
 
 {% block extra_css %}
 <link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet">
+<link href="{% static 'js/choices/choices.min.css' %}" rel="stylesheet">
+<style>
+    /* Enhanced Choices.js styling for better visibility */
+    .choices__inner {
+        min-height: 44px;
+        padding: 7.5px 10px 3.75px;
+        border: 1px solid #ced4da;
+        border-radius: 0.375rem;
+        background-color: #fff;
+        font-size: 1rem;
+    }
+
+    .choices__list--single {
+        padding: 4px 16px 4px 4px;
+    }
+
+    .choices__list--single .choices__item {
+        color: #212529;
+        font-weight: 500;
+    }
+
+    /* Dropdown list styling */
+    .choices__list--dropdown {
+        border: 1px solid #ced4da;
+        border-radius: 0.375rem;
+        margin-top: 4px;
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+        z-index: 1050;
+    }
+
+    .choices__list--dropdown .choices__item--selectable {
+        padding: 10px 16px;
+        font-size: 0.95rem;
+    }
+
+    /* Highlighted (hover) state */
+    .choices__list--dropdown .choices__item--selectable.is-highlighted {
+        background-color: #4e73df;
+        color: #fff;
+    }
+
+    /* Selected item in dropdown */
+    .choices__list--dropdown .choices__item--selectable[aria-selected="true"] {
+        background-color: #e7f1ff;
+        color: #0d6efd;
+        font-weight: 600;
+        position: relative;
+    }
+
+    .choices__list--dropdown .choices__item--selectable[aria-selected="true"]::after {
+        content: "✓";
+        position: absolute;
+        right: 16px;
+        font-weight: bold;
+        color: #0d6efd;
+    }
+
+    /* Highlighted + Selected state */
+    .choices__list--dropdown .choices__item--selectable.is-highlighted[aria-selected="true"] {
+        background-color: #4e73df;
+        color: #fff;
+    }
+
+    .choices__list--dropdown .choices__item--selectable.is-highlighted[aria-selected="true"]::after {
+        color: #fff;
+    }
+
+    /* Search input in dropdown */
+    .choices__input--cloned {
+        padding: 8px 12px;
+        border-bottom: 1px solid #e3e6f0;
+        font-size: 0.95rem;
+    }
+
+    /* Placeholder text */
+    .choices__placeholder {
+        color: #6c757d;
+        opacity: 1;
+    }
+
+    /* Focus state */
+    .choices.is-focused .choices__inner {
+        border-color: #86b7fe;
+        outline: 0;
+        box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+    }
+
+    /* Open state arrow */
+    .choices[data-type*="select-one"]::after {
+        border-color: #212529 transparent transparent;
+        border-width: 6px 6px 0;
+        margin-top: -3px;
+    }
+
+    .choices[data-type*="select-one"].is-open::after {
+        border-color: transparent transparent #212529;
+        border-width: 0 6px 6px;
+        margin-top: -9px;
+    }
+
+    /* No results message */
+    .choices__item--choice.has-no-results {
+        color: #6c757d;
+        font-style: italic;
+        padding: 12px 16px;
+    }
+
+    /* Loading state */
+    .choices.is-loading::after {
+        border-color: #4e73df transparent transparent;
+    }
+</style>
 {% endblock %}
 
 {% block preloader %}
@@ -97,60 +209,70 @@
                                     </div>
                                 </div>
 
-                                <!-- RIGHT COLUMN: Quick Select Shortcuts -->
+                                <!-- RIGHT COLUMN: Advanced Filters -->
                                 <div class="col-lg-6">
-                                    <div class="filter-section quick-select-section">
+                                    <div class="filter-section">
                                         <h6 class="filter-section-title mb-3">
-                                            <i class="fas fa-bolt me-2"></i>Quick Select
-                                            <small class="text-muted fw-normal ms-2">(Shortcuts)</small>
+                                            <i class="fas fa-filter me-2"></i>Advanced Filters
+                                            <small class="text-muted ms-2">(Quick Select)</small>
                                         </h6>
 
-                                        <p class="text-muted small mb-3">
-                                            Click to instantly set common date ranges:
-                                        </p>
-
-                                        <div class="d-grid gap-2">
-                                            <button type="button"
-                                                    class="btn btn-outline-primary"
-                                                    onclick="selectDateRange(7)">
-                                                <i class="fas fa-calendar-day me-2"></i>Next 7 Days
-                                            </button>
-                                            <button type="button"
-                                                    class="btn btn-outline-primary"
-                                                    onclick="selectDateRange(30)">
-                                                <i class="fas fa-calendar-week me-2"></i>Next 30 Days
-                                            </button>
-                                            <button type="button"
-                                                    class="btn btn-outline-primary"
-                                                    onclick="selectDateRange(90)">
-                                                <i class="fas fa-calendar-alt me-2"></i>Next 90 Days
-                                            </button>
-                                            <button type="button"
-                                                    class="btn btn-outline-primary"
-                                                    onclick="selectThisMonth()">
-                                                <i class="fas fa-calendar me-2"></i>This Month
-                                            </button>
+                                        <!-- School Filter (visible when level = 'school') -->
+                                        <div id="schoolFilterDiv" class="mb-3" style="display: none;">
+                                            <label for="schoolFilter" class="form-label fw-semibold">
+                                                <i class="fas fa-school me-1"></i>Filter by School
+                                            </label>
+                                            <select name="school" id="schoolFilter" class="form-select">
+                                                <option value="">All Schools</option>
+                                            </select>
+                                            <small class="form-text text-muted">Select a specific school to view its forecast</small>
                                         </div>
 
-                                        <!-- Selected Range Info -->
-                                        <div class="selected-range-info mt-3 p-3 bg-light rounded">
-                                            <div class="d-flex align-items-center justify-content-between">
-                                                <div>
-                                                    <small class="text-muted d-block mb-1">Selected Range:</small>
-                                                    <strong class="text-dark" id="dateRangeDisplay">
-                                                        {{ start_date }} to {{ end_date }} ({{ num_days }} days)
-                                                    </strong>
-                                                </div>
-                                                {% if from_cache %}
-                                                <span class="badge bg-info"
-                                                      data-bs-toggle="tooltip"
-                                                      data-bs-placement="top"
-                                                      data-bs-html="true"
-                                                      title="<strong>Cached Results</strong><br>Generated from pre-calculated forecasts for faster loading.<br>Data is refreshed daily.">
-                                                    <i class="fas fa-bolt"></i> Cached
-                                                </span>
-                                                {% endif %}
-                                            </div>
+                                        <!-- Product Filters (visible when level = 'product') -->
+                                        <div id="productFilterDiv" class="mb-3" style="display: none;">
+                                            <label for="productFilter" class="form-label fw-semibold">
+                                                <i class="fas fa-box me-1"></i>Filter by Product Name
+                                            </label>
+                                            <select name="product" id="productFilter" class="form-select">
+                                                <option value="">All Products</option>
+                                            </select>
+
+                                            <label for="styleCodeFilter" class="form-label fw-semibold mt-3">
+                                                <i class="fas fa-tag me-1"></i>Filter by Style Code
+                                            </label>
+                                            <select name="style_code" id="styleCodeFilter" class="form-select">
+                                                <option value="">All Style Codes</option>
+                                            </select>
+                                            <small class="form-text text-muted">Filter products by name or style code</small>
+                                        </div>
+
+                                        <!-- Shop Filter (visible when level = 'shop') -->
+                                        <div id="shopFilterDiv" class="mb-3" style="display: none;">
+                                            <label for="shopFilter" class="form-label fw-semibold">
+                                                <i class="fas fa-store me-1"></i>Filter by Shop Location
+                                            </label>
+                                            <select name="shop" id="shopFilter" class="form-select">
+                                                <option value="">All Shops</option>
+                                            </select>
+                                            <small class="form-text text-muted">Select a specific shop to view its forecast</small>
+                                        </div>
+
+                                        <!-- Category Filter (visible when level = 'category') -->
+                                        <div id="categoryFilterDiv" class="mb-3" style="display: none;">
+                                            <label for="categoryFilter" class="form-label fw-semibold">
+                                                <i class="fas fa-sitemap me-1"></i>Filter by Category
+                                            </label>
+                                            <select name="category" id="categoryFilter" class="form-select">
+                                                <option value="">All Categories</option>
+                                            </select>
+                                            <small class="form-text text-muted">Select a specific category to view its forecast</small>
+                                        </div>
+
+                                        <!-- Empty state when no specific filter applies -->
+                                        <div id="noFilterDiv" class="alert alert-info" style="display: none;">
+                                            <i class="fas fa-info-circle me-2"></i>
+                                            <strong>No additional filters available</strong><br>
+                                            <small>Change the aggregation level to see filter options</small>
                                         </div>
                                     </div>
                                 </div>
@@ -416,6 +538,7 @@
 <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+<script src="{% static 'js/choices/choices.min.js' %}"></script>
 
 <script>
 $(document).ready(function() {
@@ -1232,5 +1355,158 @@ function viewChartFromButton(button) {
         alert('Error loading forecast data. Please try again.');
     }
 }
+
+// Dynamic Filter Management
+(function() {
+    let filterChoicesInstances = {};
+
+    // Initialize filter loading on page load
+    function initializeFilters() {
+        const currentLevel = '{{ current_level }}';
+        const levelSelect = document.getElementById('levelSelect');
+
+        // Load filter options
+        loadFilterOptions(currentLevel);
+
+        // Show appropriate filters for current level
+        toggleFilterVisibility(currentLevel);
+
+        // Listen for aggregation level changes
+        levelSelect.addEventListener('change', function() {
+            const newLevel = this.value;
+            toggleFilterVisibility(newLevel);
+            loadFilterOptions(newLevel);
+        });
+    }
+
+    // Toggle filter visibility based on aggregation level
+    function toggleFilterVisibility(level) {
+        // Hide all filters first
+        document.getElementById('schoolFilterDiv').style.display = 'none';
+        document.getElementById('productFilterDiv').style.display = 'none';
+        document.getElementById('shopFilterDiv').style.display = 'none';
+        document.getElementById('categoryFilterDiv').style.display = 'none';
+        document.getElementById('noFilterDiv').style.display = 'none';
+
+        // Show appropriate filter based on level
+        switch(level) {
+            case 'school':
+                document.getElementById('schoolFilterDiv').style.display = 'block';
+                break;
+            case 'product':
+                document.getElementById('productFilterDiv').style.display = 'block';
+                break;
+            case 'shop':
+                document.getElementById('shopFilterDiv').style.display = 'block';
+                break;
+            case 'category':
+                document.getElementById('categoryFilterDiv').style.display = 'block';
+                break;
+            default:
+                document.getElementById('noFilterDiv').style.display = 'block';
+        }
+    }
+
+    // Load filter options via AJAX
+    function loadFilterOptions(level) {
+        fetch('/dashboard/forecasting/filter-options/?level=' + level)
+            .then(response => response.json())
+            .then(data => {
+                // Populate school filter
+                updateSelectOptions('schoolFilter', data.schools);
+
+                // Populate product filters
+                updateSelectOptions('productFilter', data.products);
+                updateSelectOptions('styleCodeFilter', data.style_codes);
+
+                // Populate shop filter
+                updateSelectOptions('shopFilter', data.shops);
+
+                // Populate category filter
+                updateSelectOptions('categoryFilter', data.categories);
+            })
+            .catch(error => {
+                console.error('Error loading filter options:', error);
+            });
+    }
+
+    // Update select element with new options
+    function updateSelectOptions(selectId, options) {
+        const selectElement = document.getElementById(selectId);
+        if (!selectElement) return;
+
+        // Get or create Choices instance
+        let choicesInstance = filterChoicesInstances[selectId];
+
+        if (!choicesInstance) {
+            // Initialize Choices.js if not already done with proper configuration
+            choicesInstance = new Choices(selectElement, {
+                searchEnabled: true,
+                searchPlaceholderValue: 'Type to search...',
+                removeItemButton: false,
+                shouldSort: false,
+                itemSelectText: '',
+                noResultsText: 'No results found',
+                noChoicesText: 'No options available',
+                loadingText: 'Loading...',
+                position: 'auto',
+                resetScrollPosition: true,
+                searchResultLimit: 100,
+                renderChoiceLimit: -1,
+                placeholder: true,
+                placeholderValue: selectElement.querySelector('option[value=""]')?.textContent || 'Select an option',
+                classNames: {
+                    containerOuter: 'choices',
+                    containerInner: 'choices__inner',
+                    input: 'choices__input',
+                    inputCloned: 'choices__input--cloned',
+                    list: 'choices__list',
+                    listItems: 'choices__list--multiple',
+                    listSingle: 'choices__list--single',
+                    listDropdown: 'choices__list--dropdown',
+                    item: 'choices__item',
+                    itemSelectable: 'choices__item--selectable',
+                    itemDisabled: 'choices__item--disabled',
+                    itemChoice: 'choices__item--choice',
+                    placeholder: 'choices__placeholder',
+                    group: 'choices__group',
+                    groupHeading: 'choices__heading',
+                    button: 'choices__button',
+                    activeState: 'is-active',
+                    focusState: 'is-focused',
+                    openState: 'is-open',
+                    disabledState: 'is-disabled',
+                    highlightedState: 'is-highlighted',
+                    selectedState: 'is-selected',
+                    flippedState: 'is-flipped',
+                    loadingState: 'is-loading'
+                }
+            });
+            filterChoicesInstances[selectId] = choicesInstance;
+        }
+
+        // Clear existing options
+        choicesInstance.clearStore();
+
+        // Add "All" option first
+        const allOptionText = selectElement.querySelector('option[value=""]')?.textContent || 'All';
+
+        choicesInstance.setChoices([
+            { value: '', label: allOptionText, selected: true }
+        ], 'value', 'label', false);
+
+        // Add new options
+        if (options && options.length > 0) {
+            choicesInstance.setChoices(options, 'value', 'label', false);
+        }
+    }
+
+    // Initialize on DOM ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initializeFilters);
+    } else {
+        initializeFilters();
+    }
+})();
 </script>
 {% endblock %}
