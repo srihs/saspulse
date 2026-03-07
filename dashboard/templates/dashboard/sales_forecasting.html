@@ -118,19 +118,39 @@
         border-color: #4e73df transparent transparent;
     }
 
-    /* Inner variation table - remove padding for edge-to-edge display */
-    .variation-group td {
+    /* Inner variation table - remove ALL padding for edge-to-edge display */
+    .variation-group > td {
         padding: 0 !important;
+        margin: 0 !important;
     }
 
+    /* Remove default Bootstrap table padding */
+    .variation-group table.table {
+        margin: 0 !important;
+    }
+
+    .variation-group table th,
+    .variation-group table td {
+        padding: 0.5rem !important;
+    }
+
+    /* Only first cell needs left padding */
     .variation-group table th:first-child,
     .variation-group table td:first-child {
         padding-left: 0.75rem !important;
     }
 
+    /* Only last cell needs right padding */
     .variation-group table th:last-child,
     .variation-group table td:last-child {
         padding-right: 0.75rem !important;
+    }
+
+    /* Ensure alert spans full width */
+    .variation-group .alert {
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+        border-radius: 0 !important;
     }
 </style>
 {% endblock %}
@@ -385,7 +405,7 @@
                                         <tr class="variation-group" id="variations-{{ forloop.counter }}">
                                             <td colspan="5" style="padding: 0 !important; margin: 0 !important; background-color: #f8f9fa;">
                                                 <!-- Info Alert -->
-                                                <div class="alert alert-info mb-0" style="font-size: 0.85rem; padding: 0.5rem 1rem; margin: 0.5rem 0 0 0; border-radius: 0;">
+                                                <div class="alert alert-info mb-0" style="font-size: 0.85rem; padding: 0.5rem 1rem; margin: 0.5rem 0 0 0 !important; border-radius: 0 !important; width: 100%;">
                                                     <i class="fas fa-info-circle me-2"></i>
                                                     <strong>Note:</strong> Only variations with at least 10 historical sales are forecasted to ensure statistical accuracy.
                                                     Low-volume sizes (e.g., 2XS, 3XL, 4XL) may not appear if they have insufficient sales history.
