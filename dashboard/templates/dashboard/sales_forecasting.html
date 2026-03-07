@@ -334,7 +334,6 @@
                                                title="Only variations with 10+ historical sales are forecasted. Low-volume sizes may not appear."
                                                style="font-size: 0.85rem; cursor: help;"></i>
                                         </th>
-                                        <th>Avg Accuracy</th>
                                         <th>Actions</th>
                                         {% else %}
                                         <th></th>
@@ -363,26 +362,13 @@
                                                 <span class="badge bg-info">{{ forecast.variation_count }} size{{ forecast.variation_count|pluralize }}</span>
                                             </td>
                                             <td>
-                                                {% if forecast.avg_accuracy != 'N/A' %}
-                                                    {% if forecast.avg_accuracy >= 80 %}
-                                                        <span class="badge accuracy-high">{{ forecast.avg_accuracy }}%</span>
-                                                    {% elif forecast.avg_accuracy >= 60 %}
-                                                        <span class="badge accuracy-medium">{{ forecast.avg_accuracy }}%</span>
-                                                    {% else %}
-                                                        <span class="badge accuracy-low">{{ forecast.avg_accuracy }}%</span>
-                                                    {% endif %}
-                                                {% else %}
-                                                    <span class="text-muted">N/A</span>
-                                                {% endif %}
-                                            </td>
-                                            <td>
                                                 <small class="text-muted">Click to expand</small>
                                             </td>
                                         </tr>
 
                                         <!-- Variation Rows (Collapsed by default) -->
                                         <tr class="variation-group" id="variations-{{ forloop.counter }}">
-                                            <td colspan="6" class="p-0">
+                                            <td colspan="5" class="p-0">
                                                 <div class="table-responsive">
                                                     <!-- Info Alert -->
                                                     <div class="alert alert-info m-2 mb-0" style="font-size: 0.85rem; padding: 0.5rem 1rem;">
@@ -616,7 +602,7 @@ $(document).ready(function() {
             dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>rtip',
             columnDefs: [
                 { className: 'dt-control', orderable: false, targets: 0 }, // Control column
-                { orderable: false, targets: [3, 5] } // Disable sorting on Variations and Actions columns
+                { orderable: false, targets: [3, 4] } // Disable sorting on Variations and Actions columns
             ],
             displayLength: 50,
             initComplete: function() {
