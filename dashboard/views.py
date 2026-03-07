@@ -1972,63 +1972,112 @@ def sales_forecasting(request):
 
     # NORMAL HANDLING FOR OTHER LEVELS (school, product, category)
     elif level != 'shop':
-        # Get all base forecasts for this level (latest forecast for each entity)
-        query = SalesForecastBase.objects.filter(aggregation_level=level)
-
-        # Apply search filter if provided
-        if search_query:
-            query = query.filter(entity_name__icontains=search_query)
-
-        # Apply specific filters if provided (requires joining with product table for product-level filters)
-        # For now, we'll apply filters that match the aggregation level directly
-        # Note: Advanced filtering across levels requires custom SQL queries
+        # SPECIAL CASE: When school filter is applied at school level, show products for that school
         if level == 'school' and school_filter:
-            query = query.filter(entity_name__icontains=school_filter)
-            all_base_forecasts = query.order_by('entity_name', '-forecast_date')
-        elif level == 'category' and category_filter:
-            query = query.filter(entity_name__icontains=category_filter)
-            all_base_forecasts = query.order_by('entity_name', '-forecast_date')
-        elif level == 'product':
-            # For product level, we need to join with product table for advanced filters
-            # This will be handled via raw SQL if filters are present
-            if product_filter or style_code_filter or shop_filter or category_filter:
+            from django.db import connection
+
+            # Switch to product-level view filtered by school (sub_category)
+            sql = """
+                SELECT DISTINCT sf.id, sf.entity_name, sf.aggregation_level, sf.daily_forecasts,
+                       sf.accuracy_score, sf.mae, sf.mape, sf.model_params, sf.forecast_date,
+                       sf.horizon, sf.created_at, sf.updated_at
+                FROM dashboard_salesforecastbase sf
+                LEFT JOIN cin7_sync_productoption po ON po.code = sf.entity_name
+                LEFT JOIN cin7_sync_product p ON p.cin7_id = po.product_id
+                WHERE sf.aggregation_level = 'product'
+                  AND p.sub_category = %s
+            """
+            params = [school_filter]
+
+            if search_query:
+                sql += " AND (sf.entity_name LIKE %s OR p.name LIKE %s)"
+                params.extend([f'%{search_query}%', f'%{search_query}%'])
+
+            sql += " ORDER BY p.name, sf.entity_name, sf.forecast_date DESC"
+
+            # Execute raw SQL and convert to model instances
+            all_base_forecasts = SalesForecastBase.objects.raw(sql, params)
+
+            # IMPORTANT: Set level to 'product' for template rendering
+            level = 'product'
+        else:
+            # Get all base forecasts for this level (latest forecast for each entity)
+            query = SalesForecastBase.objects.filter(aggregation_level=level)
+
+            # Apply search filter if provided
+            if search_query:
+                query = query.filter(entity_name__icontains=search_query)
+
+            # Apply specific filters if provided
+            if level == 'category' and category_filter:
+                # SPECIAL CASE: When category filter is applied at category level, show products for that category
                 from django.db import connection
 
+                # Switch to product-level view filtered by category
                 sql = """
                     SELECT DISTINCT sf.id, sf.entity_name, sf.aggregation_level, sf.daily_forecasts,
                            sf.accuracy_score, sf.mae, sf.mape, sf.model_params, sf.forecast_date,
                            sf.horizon, sf.created_at, sf.updated_at
                     FROM dashboard_salesforecastbase sf
                     LEFT JOIN cin7_sync_productoption po ON po.code = sf.entity_name
-                    LEFT JOIN cin7_sync_product p ON p.cin7_id = po.cin7_product_id
+                    LEFT JOIN cin7_sync_product p ON p.cin7_id = po.product_id
                     WHERE sf.aggregation_level = 'product'
+                      AND p.category = %s
                 """
-                params = []
+                params = [category_filter]
 
-                if product_filter:
-                    sql += " AND p.cin7_id = %s"
-                    params.append(product_filter)
-                if style_code_filter:
-                    sql += " AND p.style_code = %s"
-                    params.append(style_code_filter)
-                if shop_filter:
-                    sql += " AND p.category_name = %s"
-                    params.append(shop_filter)
-                if category_filter:
-                    sql += " AND p.sub_category = %s"
-                    params.append(category_filter)
                 if search_query:
                     sql += " AND (sf.entity_name LIKE %s OR p.name LIKE %s)"
                     params.extend([f'%{search_query}%', f'%{search_query}%'])
 
-                sql += " ORDER BY sf.entity_name, sf.forecast_date DESC"
+                sql += " ORDER BY p.name, sf.entity_name, sf.forecast_date DESC"
 
                 # Execute raw SQL and convert to model instances
                 all_base_forecasts = SalesForecastBase.objects.raw(sql, params)
+
+                # IMPORTANT: Set level to 'product' for template rendering
+                level = 'product'
+            elif level == 'product':
+                # For product level, we need to join with product table for advanced filters
+                # This will be handled via raw SQL if filters are present
+                if product_filter or style_code_filter or shop_filter or category_filter:
+                    from django.db import connection
+
+                    sql = """
+                        SELECT DISTINCT sf.id, sf.entity_name, sf.aggregation_level, sf.daily_forecasts,
+                               sf.accuracy_score, sf.mae, sf.mape, sf.model_params, sf.forecast_date,
+                               sf.horizon, sf.created_at, sf.updated_at
+                        FROM dashboard_salesforecastbase sf
+                        LEFT JOIN cin7_sync_productoption po ON po.code = sf.entity_name
+                        LEFT JOIN cin7_sync_product p ON p.cin7_id = po.product_id
+                        WHERE sf.aggregation_level = 'product'
+                    """
+                    params = []
+
+                    if product_filter:
+                        sql += " AND p.cin7_id = %s"
+                        params.append(product_filter)
+                    if style_code_filter:
+                        sql += " AND p.style_code = %s"
+                        params.append(style_code_filter)
+                    if shop_filter:
+                        sql += " AND p.category_name = %s"
+                        params.append(shop_filter)
+                    if category_filter:
+                        sql += " AND p.sub_category = %s"
+                        params.append(category_filter)
+                    if search_query:
+                        sql += " AND (sf.entity_name LIKE %s OR p.name LIKE %s)"
+                        params.extend([f'%{search_query}%', f'%{search_query}%'])
+
+                    sql += " ORDER BY sf.entity_name, sf.forecast_date DESC"
+
+                    # Execute raw SQL and convert to model instances
+                    all_base_forecasts = SalesForecastBase.objects.raw(sql, params)
+                else:
+                    all_base_forecasts = query.order_by('entity_name', '-forecast_date')
             else:
                 all_base_forecasts = query.order_by('entity_name', '-forecast_date')
-        else:
-            all_base_forecasts = query.order_by('entity_name', '-forecast_date')
 
         # Keep only the latest forecast for each entity_name
         seen_entities = set()
