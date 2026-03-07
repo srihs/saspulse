@@ -1948,28 +1948,49 @@ def sales_forecasting(request):
     import logging
     logger = logging.getLogger(__name__)
 
-    # SPECIAL HANDLING FOR SHOP LEVEL: Aggregate from product forecasts
+    # SPECIAL HANDLING FOR SHOP LEVEL: Show product breakdown
     if level == 'shop':
+        from django.db import connection
+
         logger.info(f'=== SHOP-LEVEL FORECAST REQUEST ===')
         logger.info(f'Date range: {start_date_str} to {end_date_str}')
         logger.info(f'Search query: {search_query}')
-        logger.info('Using smart aggregation: summing product forecasts by shop category')
+        logger.info('Showing product breakdown for shop')
 
-        # Build filters dictionary
-        filters = {
-            'product': product_filter,
-            'style_code': style_code_filter,
-            'shop': shop_filter,
-            'category': category_filter
-        }
+        # Switch to product-level view, optionally filtered by shop (category_name)
+        sql = """
+            SELECT DISTINCT sf.id, sf.forecast_id, sf.model_type, sf.aggregation_level,
+                   sf.entity_name, sf.entity_id, sf.daily_forecasts, sf.forecast_date,
+                   sf.training_data_start, sf.training_data_end, sf.mae, sf.mape, sf.rmse,
+                   sf.accuracy_score, sf.model_params, sf.created_at, sf.updated_at
+            FROM dashboard_salesforecastbase sf
+            LEFT JOIN cin7_sync_productoption po ON po.code = sf.entity_name
+            LEFT JOIN cin7_sync_product p ON p.cin7_id = po.cin7_product_id
+            WHERE sf.aggregation_level = 'product'
+        """
+        params = []
 
-        # Use the smart aggregation approach
-        forecast_list = get_shop_forecasts_from_products(start_date, end_date, search_query, filters)
-        use_legacy = False
-        no_forecasts_available = len(forecast_list) == 0
+        # Add shop filter if provided
+        if shop_filter:
+            sql += " AND p.category_name = %s"
+            params.append(shop_filter)
+        else:
+            # Show all shop products (exclude Wholesale Schools)
+            sql += " AND p.category_name LIKE %s"
+            params.append('% Shop')
 
-        # Skip the rest of the forecast processing and jump directly to summary
-        # (We'll handle this in the template section below)
+        # Add search query if provided
+        if search_query:
+            sql += " AND (sf.entity_name LIKE %s OR p.name LIKE %s)"
+            params.extend([f'%{search_query}%', f'%{search_query}%'])
+
+        sql += " ORDER BY p.name, sf.entity_name, sf.forecast_date DESC"
+
+        # Execute raw SQL and convert to model instances
+        all_base_forecasts = SalesForecastBase.objects.raw(sql, params)
+
+        # IMPORTANT: Set level to 'product' for template rendering
+        level = 'product'
 
     # NORMAL HANDLING FOR OTHER LEVELS (school, product, category)
     elif level != 'shop':
