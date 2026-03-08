@@ -205,26 +205,13 @@
         background-color: #d1e7fd !important;
     }
 
-    .product-parent-row {
-        cursor: pointer;
-    }
-
-    .product-parent-row:hover {
-        background-color: #e9ecef !important;
-    }
-
     /* Ensure nested tables have proper spacing */
-    .school-products-group table.table {
+    .school-variations-group table.table {
         margin-bottom: 0 !important;
     }
 
-    .product-variations-group table.table {
+    .variation-group table.table {
         margin-bottom: 0 !important;
-    }
-
-    /* Icon rotation animation */
-    .product-toggle-icon {
-        transition: transform 0.2s ease-in-out;
     }
 </style>
 {% endblock %}
@@ -444,7 +431,15 @@
                                         <th></th>
                                         <th width="30%">School Name</th>
                                         <th>Total Forecast</th>
-                                        <th>Products</th>
+                                        <th>
+                                            Variations
+                                            <i class="fas fa-info-circle text-muted ms-1"
+                                               data-bs-toggle="tooltip"
+                                               data-bs-placement="top"
+                                               data-bs-html="true"
+                                               title="Only variations with 10+ historical sales are forecasted. Low-volume sizes may not appear."
+                                               style="font-size: 0.85rem; cursor: help;"></i>
+                                        </th>
                                         <th>Actions</th>
                                         {% else %}
                                         <th></th>
@@ -462,7 +457,7 @@
                                 <tbody>
                                     {% for forecast in forecasts %}
                                         {% if forecast.is_school_grouped %}
-                                        <!-- School Parent Row (School Grouped View) -->
+                                        <!-- School Parent Row (Simplified 2-Level View) -->
                                         <tr class="school-parent-row clickable" data-school-id="{{ forloop.counter }}" style="background-color: #e3f2fd;">
                                             <td class="dt-control"></td>
                                             <td>
@@ -470,15 +465,15 @@
                                             </td>
                                             <td><strong>{{ forecast.total_quantity|floatformat:0 }} units</strong></td>
                                             <td>
-                                                <span class="badge bg-primary">{{ forecast.product_count }} product{{ forecast.product_count|pluralize }}</span>
+                                                <span class="badge bg-primary">{{ forecast.variation_count }} variation{{ forecast.variation_count|pluralize }}</span>
                                             </td>
                                             <td>
                                                 <small class="text-muted">Click to expand</small>
                                             </td>
                                         </tr>
 
-                                        <!-- School Products (Collapsed by default) -->
-                                        <tr class="school-products-group" id="school-products-{{ forloop.counter }}">
+                                        <!-- School Variations (Collapsed by default) -->
+                                        <tr class="school-variations-group" id="school-variations-{{ forloop.counter }}">
                                             <td colspan="5" style="padding: 0 !important; margin: 0 !important; background-color: #f5f5f5;">
                                                 <!-- Info Alert -->
                                                 <div class="alert alert-info mb-0" style="font-size: 0.85rem; padding: 0.5rem 1rem; margin: 0.5rem 58px 0 58px !important;">
@@ -487,83 +482,44 @@
                                                     Low-volume sizes (e.g., 2XS, 3XL, 4XL) may not appear if they have insufficient sales history.
                                                 </div>
 
-                                                <!-- Nested Products Table -->
+                                                <!-- Variations Table (Direct under school) -->
                                                 <div style="padding-left: 58px; padding-right: 0; padding-top: 0.5rem; padding-bottom: 0.5rem;">
-                                                    <table class="table table-sm mb-0" style="width: 100%; table-layout: auto; background-color: white;">
+                                                    <table class="table table-sm mb-0" style="width: 100%; table-layout: auto; background-color: white; font-size: 0.9rem;">
                                                         <thead class="table-light">
                                                             <tr>
-                                                                <th width="5%"></th>
-                                                                <th width="25%">Product Name</th>
-                                                                <th width="15%">Total Forecast</th>
-                                                                <th width="10%">Variations</th>
-                                                                <th width="45%">Actions</th>
+                                                                <th class="text-start">Product Name</th>
+                                                                <th class="text-start">SKU Code</th>
+                                                                <th class="text-start">Variation</th>
+                                                                <th class="text-end">Stock in Hand</th>
+                                                                <th class="text-end">Incoming Stock</th>
+                                                                <th class="text-end">Forecasted Stock</th>
+                                                                <th class="text-center">Stock Gap</th>
+                                                                <th class="text-center">Actions</th>
                                                             </tr>
                                                         </thead>
                                                         <tbody>
-                                                            {% for product in forecast.products %}
-                                                            <!-- Product Parent Row -->
-                                                            <tr class="product-parent-row" data-product-id="school-{{ forloop.parentloop.counter }}-product-{{ forloop.counter }}" style="background-color: #f8f9fa; cursor: pointer;">
-                                                                <td class="text-center">
-                                                                    <i class="fas fa-chevron-right product-toggle-icon" style="font-size: 0.8rem; transition: transform 0.2s;"></i>
+                                                            {% for variation in forecast.variations %}
+                                                            <tr>
+                                                                <td class="text-start align-middle">{{ variation.product_name }}</td>
+                                                                <td class="text-start align-middle"><code>{{ variation.sku_code }}</code></td>
+                                                                <td class="text-start align-middle"><strong>{{ variation.size }}</strong></td>
+                                                                <td class="text-end align-middle">{{ variation.stock_on_hand|floatformat:0 }}</td>
+                                                                <td class="text-end align-middle">{{ variation.incoming_stock|floatformat:0 }}</td>
+                                                                <td class="text-end align-middle">{{ variation.total_quantity|floatformat:0 }}</td>
+                                                                <td class="text-center align-middle">
+                                                                    {% if variation.stock_gap >= 0 %}
+                                                                        <span class="badge bg-success">+{{ variation.stock_gap|floatformat:0 }}</span>
+                                                                    {% else %}
+                                                                        <span class="badge bg-danger">{{ variation.stock_gap|floatformat:0 }}</span>
+                                                                    {% endif %}
                                                                 </td>
-                                                                <td>
-                                                                    <strong>{{ product.product_name }}</strong>
-                                                                </td>
-                                                                <td><strong>{{ product.total_quantity|floatformat:0 }} units</strong></td>
-                                                                <td>
-                                                                    <span class="badge bg-info">{{ product.variation_count }} size{{ product.variation_count|pluralize }}</span>
-                                                                </td>
-                                                                <td>
-                                                                    <small class="text-muted">Click to expand</small>
-                                                                </td>
-                                                            </tr>
-
-                                                            <!-- Product Variations (Collapsed by default) -->
-                                                            <tr class="product-variations-group" id="product-variations-school-{{ forloop.parentloop.counter }}-product-{{ forloop.counter }}" style="display: none;">
-                                                                <td colspan="5" style="padding: 0 !important; margin: 0 !important; background-color: white;">
-                                                                    <div style="padding-left: 40px;">
-                                                                        <table class="table table-sm mb-0" style="width: 100%; font-size: 0.9rem;">
-                                                                            <thead style="background-color: #e9ecef;">
-                                                                                <tr>
-                                                                                    <th class="text-start">Product Name</th>
-                                                                                    <th class="text-start">SKU Code</th>
-                                                                                    <th class="text-start">Variation</th>
-                                                                                    <th class="text-end">Stock in Hand</th>
-                                                                                    <th class="text-end">Incoming Stock</th>
-                                                                                    <th class="text-end">Forecasted Stock</th>
-                                                                                    <th class="text-center">Stock Gap</th>
-                                                                                    <th class="text-center">Actions</th>
-                                                                                </tr>
-                                                                            </thead>
-                                                                            <tbody>
-                                                                                {% for variation in product.variations %}
-                                                                                <tr>
-                                                                                    <td class="text-start align-middle">{{ variation.product_name }}</td>
-                                                                                    <td class="text-start align-middle"><code>{{ variation.sku_code }}</code></td>
-                                                                                    <td class="text-start align-middle"><strong>{{ variation.size }}</strong></td>
-                                                                                    <td class="text-end align-middle">{{ variation.stock_on_hand|floatformat:0 }}</td>
-                                                                                    <td class="text-end align-middle">{{ variation.incoming_stock|floatformat:0 }}</td>
-                                                                                    <td class="text-end align-middle">{{ variation.total_quantity|floatformat:0 }}</td>
-                                                                                    <td class="text-center align-middle">
-                                                                                        {% if variation.stock_gap >= 0 %}
-                                                                                            <span class="badge bg-success">+{{ variation.stock_gap|floatformat:0 }}</span>
-                                                                                        {% else %}
-                                                                                            <span class="badge bg-danger">{{ variation.stock_gap|floatformat:0 }}</span>
-                                                                                        {% endif %}
-                                                                                    </td>
-                                                                                    <td class="text-center align-middle">
-                                                                                        <button class="btn btn-sm btn-outline-success" data-sku="{{ variation.sku_code }}" data-forecast='{{ variation.forecast_data|tojson }}' onclick='viewChartFromButton(this)'>
-                                                                                            <i class="fas fa-chart-line"></i> Predicted Demand
-                                                                                        </button>
-                                                                                        <button class="btn btn-sm btn-outline-primary ms-1" data-sku="{{ variation.sku_code }}" onclick="viewPastSales(this)">
-                                                                                            <i class="fas fa-history"></i> Past Sales
-                                                                                        </button>
-                                                                                    </td>
-                                                                                </tr>
-                                                                                {% endfor %}
-                                                                            </tbody>
-                                                                        </table>
-                                                                    </div>
+                                                                <td class="text-center align-middle">
+                                                                    <button class="btn btn-sm btn-outline-success" data-sku="{{ variation.sku_code }}" data-forecast='{{ variation.forecast_data|tojson }}' onclick='viewChartFromButton(this)'>
+                                                                        <i class="fas fa-chart-line"></i> Predicted Demand
+                                                                    </button>
+                                                                    <button class="btn btn-sm btn-outline-primary ms-1" data-sku="{{ variation.sku_code }}" onclick="viewPastSales(this)">
+                                                                        <i class="fas fa-history"></i> Past Sales
+                                                                    </button>
                                                                 </td>
                                                             </tr>
                                                             {% endfor %}
@@ -828,20 +784,20 @@ $(document).ready(function() {
     console.log('Preloader active:', $('#pagePreloader').hasClass('active'));
 
     if (isSchoolGroupedView) {
-        // For school-grouped view, we need to handle nested school/product/variation rows
-        // Store school products data before DataTables processes the table
-        var schoolProductsData = {};
+        // For school-grouped view, we need to handle school/variation rows (2-level structure)
+        // Store school variations data before DataTables processes the table
+        var schoolVariationsData = {};
 
         $('.school-parent-row').each(function() {
             var schoolId = $(this).data('school-id');
-            var schoolProductsRow = $(this).next('.school-products-group');
-            if (schoolProductsRow.length && schoolId) {
-                schoolProductsData[schoolId] = schoolProductsRow.html(); // Store HTML content
+            var schoolVariationsRow = $(this).next('.school-variations-group');
+            if (schoolVariationsRow.length && schoolId) {
+                schoolVariationsData[schoolId] = schoolVariationsRow.html(); // Store HTML content
             }
         });
 
-        // Remove school products rows from DOM before DataTables init
-        $('.school-products-group').remove();
+        // Remove school variations rows from DOM before DataTables init
+        $('.school-variations-group').remove();
 
         console.log('Before DataTable init (school-grouped):', new Date().toISOString());
 
@@ -852,7 +808,7 @@ $(document).ready(function() {
             dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>rtip',
             columnDefs: [
                 { className: 'dt-control', orderable: false, targets: 0 }, // Control column
-                { orderable: false, targets: [3, 4] } // Disable sorting on Products and Actions columns
+                { orderable: false, targets: [3, 4] } // Disable sorting on Variations and Actions columns
             ],
             displayLength: 25,
             initComplete: function() {
@@ -1054,9 +1010,9 @@ $(document).ready(function() {
         }, 5000);
     }
 
-    // Format function for school products child rows
-    function formatSchoolProducts(schoolId) {
-        return schoolProductsData[schoolId] || '<p>No product data available</p>';
+    // Format function for school variations child rows
+    function formatSchoolVariations(schoolId) {
+        return schoolVariationsData[schoolId] || '<p>No variation data available</p>';
     }
 
     // Format function for product variation child rows
@@ -1216,18 +1172,12 @@ $(document).ready(function() {
             // Hide child row
             row.child.hide();
             tr.removeClass('shown');
-
-            // If this is a school row, also collapse any expanded products within
-            if (isSchoolGroupedView) {
-                $(row.child()).find('.product-variations-group').hide();
-                $(row.child()).find('.product-toggle-icon').removeClass('fa-chevron-down').addClass('fa-chevron-right');
-            }
         } else {
             // Show child row
             if (isSchoolGroupedView) {
-                // School grouped view: show products within school
+                // School grouped view: show variations within school
                 var schoolId = tr.data('school-id');
-                row.child(formatSchoolProducts(schoolId)).show();
+                row.child(formatSchoolVariations(schoolId)).show();
                 tr.addClass('shown');
             } else if (isGroupedView) {
                 // Product view: show variations
@@ -1268,25 +1218,6 @@ $(document).ready(function() {
                     tr.addClass('shown');
                 }
             }
-        }
-    });
-
-    // Click handler for product parent rows within schools (expand/collapse product variations)
-    $('#forecastsTable tbody').on('click', 'tr.product-parent-row', function(e) {
-        e.stopPropagation(); // Prevent event bubbling
-
-        var productId = $(this).data('product-id');
-        var variationsRow = $('#product-variations-' + productId);
-        var icon = $(this).find('.product-toggle-icon');
-
-        if (variationsRow.is(':visible')) {
-            // Collapse product variations
-            variationsRow.hide();
-            icon.removeClass('fa-chevron-down').addClass('fa-chevron-right').css('transform', 'rotate(0deg)');
-        } else {
-            // Expand product variations
-            variationsRow.show();
-            icon.removeClass('fa-chevron-right').addClass('fa-chevron-down').css('transform', 'rotate(90deg)');
         }
     });
 

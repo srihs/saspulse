@@ -2292,7 +2292,7 @@ def sales_forecasting(request):
         forecast_list = sorted(forecast_list, key=lambda x: x['total_quantity'], reverse=True)[:500]  # Increased limit to 500 products (was 200)
 
     elif level == 'school':
-        # NESTED SCHOOL/PRODUCT VIEW: Group products by school (p.sub_category)
+        # SIMPLIFIED SCHOOL VIEW: Group variations by school (2-level structure)
         from collections import defaultdict
         from cin7.models import ProductOption
         import logging
@@ -2329,8 +2329,9 @@ def sales_forecasting(request):
         # Process each school group
         forecast_list = []
         for school_name, school_forecasts in sorted(school_groups.items()):
-            # Group products within this school (same logic as product-level grouping)
-            grouped_products = defaultdict(list)
+            # Direct list of variations (no product grouping)
+            school_variations = []
+            school_total_quantity = 0
 
             for f in school_forecasts:
                 size = extract_size_from_sku(f.entity_name)
@@ -2393,44 +2394,25 @@ def sales_forecasting(request):
                     'mape': round(f.mape, 2) if f.mape else None
                 }
 
-                grouped_products[product_name].append(variation_data)
+                school_variations.append(variation_data)
+                school_total_quantity += forecasted_stock
 
-            # Create product summaries for this school
-            school_products = []
-            school_total_quantity = 0
-
-            for product_name, variations in sorted(grouped_products.items()):
-                # Calculate totals across all variations
-                total_forecast = sum([v['total_quantity'] for v in variations])
-                school_total_quantity += total_forecast
-
-                # Sort variations by size
-                variations_sorted = sorted(variations, key=lambda x: (
+            # Only add school if it has variations after filtering
+            if school_variations:
+                # Sort variations by product name, then by size
+                school_variations = sorted(school_variations, key=lambda x: (
+                    x['product_name'],
                     int(x['size']) if x['size'].isdigit() else 999,
                     x['size']
                 ))
-
-                school_products.append({
-                    'product_name': product_name,
-                    'variations': variations_sorted,
-                    'total_quantity': round(total_forecast, 1),
-                    'variation_count': len(variations),
-                    'is_grouped': True
-                })
-
-            # Only add school if it has products after filtering
-            if school_products:
-                # Sort products by total quantity descending
-                school_products = sorted(school_products, key=lambda x: x['total_quantity'], reverse=True)
 
                 # Add school group to forecast list
                 forecast_list.append({
                     'school_name': school_name,
                     'entity_name': school_name,  # For compatibility with existing template code
                     'total_quantity': round(school_total_quantity, 1),
-                    'product_count': len(school_products),
-                    'products': school_products,
-                    'is_grouped': True,
+                    'variation_count': len(school_variations),
+                    'variations': school_variations,
                     'is_school_grouped': True  # Special flag for school-level grouping
                 })
 
@@ -3511,39 +3493,35 @@ def past_sales_data(request):
         current_year = datetime.now().year
         years_data = {}
 
-        # Get style_code for the given SKU first
+        # Verify SKU exists
         with connection.cursor() as cursor:
             cursor.execute("""
-                SELECT style_code
-                FROM cin7_sync_product
-                WHERE cin7_id = (
-                    SELECT cin7_product_id
-                    FROM cin7_sync_productoption
-                    WHERE code = %s
-                    LIMIT 1
-                )
+                SELECT po.code, p.style_code
+                FROM cin7_sync_productoption po
+                INNER JOIN cin7_sync_product p ON po.cin7_product_id = p.cin7_id
+                WHERE po.code = %s
+                LIMIT 1
             """, [sku])
 
             result = cursor.fetchone()
-            if not result or not result[0]:
-                return JsonResponse({'error': 'Style code not found for SKU'}, status=404)
+            if not result:
+                return JsonResponse({'error': 'SKU not found'}, status=404)
 
-            style_code = result[0]
+            sku_code = result[0]
+            style_code = result[1]
 
-        # Get all available years from historical data
+        # Get all available years from historical data for this specific SKU
         with connection.cursor() as cursor:
             cursor.execute("""
                 SELECT DISTINCT YEAR(so.invoice_date) as year
                 FROM cin7_sync_salesorderlineitem soli
                 INNER JOIN cin7_sync_salesorder so ON CAST(so.cin7_id AS CHAR) = soli.cin7_sales_order_id
-                INNER JOIN cin7_sync_productoption po ON soli.code = po.code
-                INNER JOIN cin7_sync_product p ON po.cin7_product_id = p.cin7_id
-                WHERE p.style_code = %s
+                WHERE soli.code = %s
                   AND so.invoice_date IS NOT NULL
                   AND so.status != 'Cancelled'
                   AND YEAR(so.invoice_date) < %s
                 ORDER BY year DESC
-            """, [style_code, current_year])
+            """, [sku_code, current_year])
 
             available_years = [row[0] for row in cursor.fetchall()]
 
@@ -3562,19 +3540,17 @@ def past_sales_data(request):
                 # Handle Feb 29 on non-leap years
                 year_end = end_date.replace(year=year, day=28)
 
-            # Query sales data grouped by style_code
+            # Query sales data for this specific SKU
             with connection.cursor() as cursor:
                 cursor.execute("""
                     SELECT COALESCE(SUM(soli.qty), 0) as total_quantity
                     FROM cin7_sync_salesorderlineitem soli
                     INNER JOIN cin7_sync_salesorder so ON CAST(so.cin7_id AS CHAR) = soli.cin7_sales_order_id
-                    INNER JOIN cin7_sync_productoption po ON soli.code = po.code
-                    INNER JOIN cin7_sync_product p ON po.cin7_product_id = p.cin7_id
-                    WHERE p.style_code = %s
+                    WHERE soli.code = %s
                       AND so.invoice_date >= %s
                       AND so.invoice_date <= %s
                       AND so.status != 'Cancelled'
-                """, [style_code, year_start, year_end])
+                """, [sku_code, year_start, year_end])
 
                 row = cursor.fetchone()
                 years_data[str(year)] = int(row[0]) if row and row[0] else 0
