@@ -3530,10 +3530,25 @@ def past_sales_data(request):
 
             style_code = result[0]
 
-        # Loop through last 3 COMPLETED years (offset 1, 2, 3)
-        for year_offset in [1, 2, 3]:  # Last 3 completed years
-            year = current_year - year_offset
+        # Get all available years from historical data
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT DISTINCT YEAR(so.invoice_date) as year
+                FROM cin7_sync_salesorderlineitem soli
+                INNER JOIN cin7_sync_salesorder so ON CAST(so.cin7_id AS CHAR) = soli.cin7_sales_order_id
+                INNER JOIN cin7_sync_productoption po ON soli.code = po.code
+                INNER JOIN cin7_sync_product p ON po.cin7_product_id = p.cin7_id
+                WHERE p.style_code = %s
+                  AND so.invoice_date IS NOT NULL
+                  AND so.status != 'Cancelled'
+                  AND YEAR(so.invoice_date) < %s
+                ORDER BY year DESC
+            """, [style_code, current_year])
 
+            available_years = [row[0] for row in cursor.fetchall()]
+
+        # Loop through all available years
+        for year in available_years:
             # Try to create year-adjusted dates, handle leap year edge cases
             try:
                 year_start = start_date.replace(year=year)
