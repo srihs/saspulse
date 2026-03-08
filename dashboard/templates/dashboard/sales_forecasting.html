@@ -119,14 +119,20 @@
         border-color: #4e73df transparent transparent;
     }
 
-    /* DataTables child row - FORCE zero padding on all wrapper elements */
+    /* DataTables child row - Add left padding for visual indentation */
     table.dataTable tbody tr.child td {
-        padding: 0 !important;
+        padding-left: 30px !important;
+        padding-right: 0 !important;
+        padding-top: 0 !important;
+        padding-bottom: 0 !important;
         margin: 0 !important;
     }
 
     table.dataTable tbody tr.child td.child {
-        padding: 0 !important;
+        padding-left: 30px !important;
+        padding-right: 0 !important;
+        padding-top: 0 !important;
+        padding-bottom: 0 !important;
         margin: 0 !important;
     }
 
@@ -135,15 +141,21 @@
         /* Keep normal padding for regular cells, but override for child rows below */
     }
 
-    /* Inner variation table - remove ALL padding for edge-to-edge display */
+    /* Inner variation table - Add left padding for indentation */
     .variation-group > td {
-        padding: 0 !important;
+        padding-left: 30px !important;
+        padding-right: 0 !important;
+        padding-top: 0 !important;
+        padding-bottom: 0 !important;
         margin: 0 !important;
     }
 
     /* Also target any td inside shown parent row */
     tr.shown + tr > td {
-        padding: 0 !important;
+        padding-left: 30px !important;
+        padding-right: 0 !important;
+        padding-top: 0 !important;
+        padding-bottom: 0 !important;
     }
 
     /* Target variation group when it's a child row */
@@ -165,10 +177,10 @@
         padding: 0.5rem !important;
     }
 
-    /* Only first cell needs left padding */
+    /* Only first cell needs left padding - increased to account for overall indentation */
     .variation-group table th:first-child,
     .variation-group table td:first-child {
-        padding-left: 0.75rem !important;
+        padding-left: 1rem !important;
     }
 
     /* Only last cell needs right padding */
