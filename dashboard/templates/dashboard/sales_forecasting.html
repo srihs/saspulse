@@ -1450,37 +1450,49 @@ function viewPastSales(button) {
     `;
 
     // Fetch historical sales data via AJAX
-    // TODO: This will need a backend endpoint to fetch actual sales data
-    // For now, show a placeholder table
-    setTimeout(function() {
-        var currentYear = new Date().getFullYear();
-        var html = `
-            <h6 class="mb-3">Sales for period: ${startDate} to ${endDate}</h6>
-            <table class="table table-bordered table-hover">
-                <thead class="table-light">
-                    <tr>
-                        <th>Period</th>
-                        <th class="text-end">${currentYear - 2}</th>
-                        <th class="text-end">${currentYear - 1}</th>
-                        <th class="text-end">${currentYear}</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td><strong>Total Units Sold</strong></td>
-                        <td class="text-end">Loading...</td>
-                        <td class="text-end">Loading...</td>
-                        <td class="text-end">Loading...</td>
-                    </tr>
-                </tbody>
-            </table>
-            <div class="alert alert-info">
-                <i class="fas fa-info-circle me-2"></i>
-                <strong>Note:</strong> Backend API endpoint needed to fetch actual historical sales data.
-            </div>
-        `;
-        document.getElementById('pastSalesContent').innerHTML = html;
-    }, 500);
+    fetch('/dashboard/forecasting/past-sales/?sku=' + encodeURIComponent(sku) +
+          '&start_date=' + startDate + '&end_date=' + endDate)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                var years = data.years;
+                var yearKeys = Object.keys(years).sort().reverse(); // Descending order
+
+                var html = `
+                    <h6 class="mb-3">Sales for period: ${data.period}</h6>
+                    <table class="table table-bordered table-hover">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Period</th>
+                                ${yearKeys.map(year => '<th class="text-end">' + year + '</th>').join('')}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>Total Units Sold</strong></td>
+                                ${yearKeys.map(year => '<td class="text-end"><strong>' + years[year] + '</strong></td>').join('')}
+                            </tr>
+                        </tbody>
+                    </table>
+                `;
+                document.getElementById('pastSalesContent').innerHTML = html;
+            } else {
+                document.getElementById('pastSalesContent').innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        Error loading data: ${data.error}
+                    </div>
+                `;
+            }
+        })
+        .catch(error => {
+            document.getElementById('pastSalesContent').innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    Error fetching sales data: ${error.message}
+                </div>
+            `;
+        });
 }
 
 // Dynamic Filter Management

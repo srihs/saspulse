@@ -19,6 +19,7 @@ urlpatterns = [
     path('forecasting/products/<str:school_name>/', views.forecast_product_breakdown, name='forecast_product_breakdown'),
     path('forecasting/health/', views.forecast_health_dashboard, name='forecast_health'),
     path('forecasting/regenerate/', views.trigger_forecast_regeneration, name='trigger_regeneration'),
+    path('forecasting/past-sales/', views.past_sales_data, name='past_sales_data'),
 
     # Replenishment Workflow
     path('replenishment/store/', views.store_manager_replenishment, name='store_replenishment'),

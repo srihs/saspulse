@@ -3216,3 +3216,68 @@ def trigger_forecast_regeneration(request):
             'success': False,
             'error': str(e)
         }, status=400)
+
+
+@login_required
+def past_sales_data(request):
+    """API endpoint to fetch historical sales data for Past Sales modal"""
+    from django.db import connection
+    from datetime import datetime, timedelta
+    import json
+
+    sku = request.GET.get('sku', '')
+    start_date_str = request.GET.get('start_date', '')
+    end_date_str = request.GET.get('end_date', '')
+
+    if not sku or not start_date_str or not end_date_str:
+        return JsonResponse({'error': 'Missing required parameters'}, status=400)
+
+    try:
+        # Parse dates
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+
+        # Calculate the same period for previous years
+        current_year = datetime.now().year
+        years_data = {}
+
+        for year_offset in [0, 1, 2]:  # Current year, -1 year, -2 years
+            year = current_year - year_offset
+
+            # Try to create year-adjusted dates, handle leap year edge cases
+            try:
+                year_start = start_date.replace(year=year)
+            except ValueError:
+                # Handle Feb 29 on non-leap years
+                year_start = start_date.replace(year=year, day=28)
+
+            try:
+                year_end = end_date.replace(year=year)
+            except ValueError:
+                # Handle Feb 29 on non-leap years
+                year_end = end_date.replace(year=year, day=28)
+
+            # Query sales data from cin7_sync_salesorderlineitem
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT COALESCE(SUM(soli.qty), 0) as total_quantity
+                    FROM cin7_sync_salesorderlineitem soli
+                    INNER JOIN cin7_sync_salesorder so ON CAST(so.cin7_id AS CHAR) = soli.cin7_sales_order_id
+                    WHERE soli.code = %s
+                      AND so.invoice_date >= %s
+                      AND so.invoice_date <= %s
+                      AND so.status != 'Cancelled'
+                """, [sku, year_start, year_end])
+
+                row = cursor.fetchone()
+                years_data[str(year)] = int(row[0]) if row and row[0] else 0
+
+        return JsonResponse({
+            'success': True,
+            'sku': sku,
+            'period': f"{start_date_str} to {end_date_str}",
+            'years': years_data
+        })
+
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
