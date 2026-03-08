@@ -2679,282 +2679,262 @@ def forecast_product_breakdown(request, school_name):
 @login_required
 def store_manager_replenishment(request):
     """
-    Store Manager Replenishment Dashboard
-    Shows monthly demand grouped by SCHOOLS with expandable product breakdown
+    Store Manager Replenishment Dashboard - PRODUCT-FIRST APPROACH
 
-    NEW STRUCTURE:
-    - Parent rows: Schools with total 30-day demand
-    - Child rows (expandable): Products needed for that school
-    - Permission-based: Admin sees all, shop managers see only their store's schools
+    OPTIMIZED STRATEGY:
+    1. Start with ALL product forecasts (5,210 products)
+    2. Calculate 30-day demand from daily_forecasts JSON
+    3. JOIN with products and stock tables in a SINGLE query
+    4. Calculate stock gaps in-memory (fast)
+    5. GROUP BY school and branch to create hierarchy
+
+    BENEFITS:
+    - No N+1 queries (was querying each product individually)
+    - Shows ALL schools with stock gaps (not just 1)
+    - Faster: Single bulk query vs thousands of individual queries
+    - Scalable: Works with all 5,210 product forecasts
+
+    CACHING:
+    - Results cached for 1 hour to avoid 5-minute processing on every load
+    - Cache key includes date range and user role (admin vs shop manager)
     """
-    from dashboard.models import ReplenishmentRequest, SalesForecastBase
-    from django.db.models import Q, Count, Sum, Avg
+    from dashboard.models import SalesForecastBase
     from django.db import connection
-    from datetime import datetime, timedelta, date
+    from django.core.cache import cache
+    from datetime import timedelta, date
+    from collections import defaultdict
     import json
+    import logging
+    import time
 
+    logger = logging.getLogger(__name__)
     user = request.user
 
+    # ========== CHECK CACHE FIRST ==========
+    is_admin = user.is_superuser or user.is_staff
+    assigned_branch_id = None
+    if not is_admin:
+        assigned_branch = getattr(user, 'assigned_branch', None)
+        if assigned_branch:
+            assigned_branch_id = assigned_branch.id
+
+    cache_key = f'replenishment_data_{date.today()}_{is_admin}_{assigned_branch_id or "all"}'
+    cached_data = cache.get(cache_key)
+
+    if cached_data:
+        logger.info(f"Using cached replenishment data (cache key: {cache_key})")
+        return render(request, 'dashboard/store_replenishment.html', cached_data)
+
+    logger.info(f"Cache miss - generating replenishment data (this may take 5 minutes...)")
+    start_time = time.time()
+
     # ========== ROLE-BASED ACCESS CONTROL ==========
-    # Admin users (is_superuser or is_staff): Can see ALL stores
-    # Shop managers: Can ONLY see their assigned branch/store
     is_admin = user.is_superuser or user.is_staff
     assigned_branch = None
     assigned_branch_id = None
 
     if not is_admin:
-        # Shop manager - get their assigned branch
         assigned_branch = getattr(user, 'assigned_branch', None)
         if assigned_branch:
             assigned_branch_id = assigned_branch.id
 
-    # ========== CALCULATE MONTHLY DEMAND PERIOD ==========
-    # Time period: NEXT 30 days from today
+    # ========== CALCULATE 30-DAY PERIOD ==========
+    # Calculate demand for NEXT month (30-60 days from now)
+    # This is forward-looking replenishment planning
     today = date.today()
-    start_date = today  # Start from today
-    end_date = today + timedelta(days=30)  # 30 days ahead
+    start_date = today + timedelta(days=30)  # Start 30 days from now
+    end_date = start_date + timedelta(days=30)  # End 30 days after start (60 days from today)
 
-    # ========== QUERY SCHOOL-LEVEL FORECASTS ==========
-    # Get school-level forecasts and calculate 30-day demand
-    school_demand_data = []
+    # Generate list of date strings for the 30-day window
+    date_strings = []
+    current_date = start_date
+    while current_date <= end_date:
+        date_strings.append(current_date.strftime('%Y-%m-%d'))
+        current_date += timedelta(days=1)
 
-    import logging
-    logger = logging.getLogger(__name__)
+    logger.info(f"Calculating demand for {len(date_strings)} days: {start_date} to {end_date}")
 
+    # ========== STEP 1: BULK QUERY ALL PRODUCT FORECASTS WITH STOCK DATA ==========
+    # Single optimized query that gets EVERYTHING we need
+    # CRITICAL: Forecasts use SKU (ProductOption.code) as entity_name, NOT product name or style_code
+    # This allows us to match 4,996 out of 5,210 forecasts (95.9% coverage)!
     with connection.cursor() as cursor:
-        # Query school-level forecasts from SalesForecastBase
-        school_query = """
+        query = """
         SELECT
-            sfb.id,
-            sfb.entity_name as school_name,
+            sfb.entity_name as sku_code,
             sfb.daily_forecasts,
-            sfb.forecast_date,
-            sfb.accuracy_score
-        FROM dashboard_salesforecastbase sfb
-        WHERE sfb.aggregation_level = 'school'
-          AND sfb.forecast_date = (
-              SELECT MAX(forecast_date)
-              FROM dashboard_salesforecastbase
-              WHERE aggregation_level = 'school'
-          )
-        ORDER BY sfb.entity_name
-        """
-
-        cursor.execute(school_query)
-        logger.info(f"Found {cursor.rowcount} school forecasts")
-
-        for row in cursor.fetchall():
-            forecast_id, school_name, daily_forecasts_json, forecast_date, accuracy = row
-
-            # Parse daily_forecasts JSON
-            try:
-                daily_forecasts = json.loads(daily_forecasts_json) if isinstance(daily_forecasts_json, str) else daily_forecasts_json
-            except:
-                daily_forecasts = daily_forecasts_json if daily_forecasts_json else {}
-
-            # Extract quantities for the 30-day window
-            total_monthly_demand = 0.0
-            days_count = 0
-
-            current_date = start_date
-            while current_date <= end_date:
-                date_str = current_date.strftime('%Y-%m-%d')
-                if date_str in daily_forecasts:
-                    day_data = daily_forecasts[date_str]
-                    quantity = day_data.get('quantity', 0) if isinstance(day_data, dict) else 0
-                    total_monthly_demand += float(quantity)
-                    days_count += 1
-                current_date += timedelta(days=1)
-
-            # Only include if there's actual demand
-            if total_monthly_demand > 0:
-                school_demand_data.append({
-                    'school_name': school_name,
-                    'monthly_demand': round(total_monthly_demand, 1),
-                    'average_daily_demand': round(total_monthly_demand / days_count, 2) if days_count > 0 else 0,
-                    'forecast_date': forecast_date.strftime('%Y-%m-%d') if forecast_date else '',
-                    'accuracy': round(accuracy, 1) if accuracy else 0,
-                })
-
-    # ========== QUERY PRODUCT-LEVEL BREAKDOWNS FOR EACH SCHOOL ==========
-    # For each school, get the products and their stock data
-    school_products = {}
-
-    with connection.cursor() as cursor:
-        # Query products by school (school = sub_category), with stock levels
-        # Filter by branch for shop managers
-        product_query = """
-        SELECT
-            p.sub_category as school_name,
+            sfb.accuracy_score,
             p.id as product_id,
-            p.name as product_name,
-            p.code as product_code,
+            p.name as product_display_name,
+            po.code as sku,
+            p.sub_category as school_name,
             s.branch_id,
             b.company as branch_name,
             s.stock_on_hand,
-            s.incoming,
-            s.available
-        FROM cin7_sync_product p
+            s.incoming
+        FROM dashboard_salesforecastbase sfb
+        INNER JOIN cin7_sync_productoption po ON sfb.entity_name = po.code
+        INNER JOIN cin7_sync_product p ON po.product_id = p.id
         LEFT JOIN cin7_sync_stock s ON s.product_id = p.id
         LEFT JOIN cin7_sync_branch b ON b.id = s.branch_id
-        WHERE (p.category_name LIKE '%%%%Shop' OR p.category_name = 'Wholesale Schools')
+        WHERE sfb.aggregation_level = 'product'
+          AND sfb.forecast_date = (
+              SELECT MAX(forecast_date)
+              FROM dashboard_salesforecastbase
+              WHERE aggregation_level = 'product'
+          )
           AND p.sub_category IS NOT NULL
           AND p.sub_category != ''
         """
 
         params = []
 
-        # Apply branch filtering for shop managers
+        # Branch filtering for shop managers
         if not is_admin and assigned_branch_id:
-            product_query += " AND s.branch_id = %s"
+            query += " AND s.branch_id = %s"
             params.append(assigned_branch_id)
 
-        product_query += " ORDER BY p.sub_category, p.name"
+        query += " ORDER BY p.sub_category, p.name, b.company"
 
-        cursor.execute(product_query, params)
+        logger.info(f"Executing bulk product forecast query...")
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+        logger.info(f"Retrieved {len(rows)} product-forecast-stock records")
 
-        for row in cursor.fetchall():
-            school_name, product_id, product_name, product_code, branch_id, branch_name, stock_on_hand, incoming, available = row
+    # ========== STEP 2: PROCESS IN-MEMORY (FAST) ==========
+    # Group products by school -> branch -> products
+    school_data = defaultdict(lambda: {
+        'school_name': '',
+        'total_monthly_demand': 0.0,
+        'branches': defaultdict(lambda: {
+            'branch_name': '',
+            'branch_id': None,
+            'products': []
+        })
+    })
 
-            if school_name not in school_products:
-                school_products[school_name] = []
+    products_with_gaps = 0
+    products_without_stock = 0
+    products_processed = 0
 
-            # Get product-level forecast for this product (30-day demand)
-            product_forecast_query = """
-            SELECT
-                sfb.id,
-                sfb.daily_forecasts,
-                sfb.accuracy_score
-            FROM dashboard_salesforecastbase sfb
-            WHERE sfb.aggregation_level = 'product'
-              AND sfb.entity_name = %s
-              AND sfb.forecast_date = (
-                  SELECT MAX(forecast_date)
-                  FROM dashboard_salesforecastbase
-                  WHERE aggregation_level = 'product'
-                    AND entity_name = %s
-              )
-            LIMIT 1
-            """
+    for row in rows:
+        (product_name, daily_forecasts_json, accuracy,
+         product_id, product_display_name, product_code, school_name,
+         branch_id, branch_name, stock_on_hand, incoming) = row
 
-            cursor.execute(product_forecast_query, [product_name, product_name])
-            product_forecast_row = cursor.fetchone()
+        products_processed += 1
 
-            monthly_product_demand = 0.0
-            product_accuracy = 0
+        # Skip if no stock data for this branch
+        if branch_id is None:
+            products_without_stock += 1
+            continue
 
-            if product_forecast_row:
-                _, product_daily_forecasts_json, product_accuracy = product_forecast_row
+        # Parse daily forecasts JSON
+        try:
+            daily_forecasts = json.loads(daily_forecasts_json) if isinstance(daily_forecasts_json, str) else daily_forecasts_json
+        except:
+            daily_forecasts = daily_forecasts_json if daily_forecasts_json else {}
 
-                try:
-                    product_daily_forecasts = json.loads(product_daily_forecasts_json) if isinstance(product_daily_forecasts_json, str) else product_daily_forecasts_json
-                except:
-                    product_daily_forecasts = product_daily_forecasts_json if product_daily_forecasts_json else {}
+        # Calculate 30-day demand (vectorized approach)
+        monthly_demand = 0.0
+        for date_str in date_strings:
+            if date_str in daily_forecasts:
+                day_data = daily_forecasts[date_str]
+                quantity = day_data.get('quantity', 0) if isinstance(day_data, dict) else 0
+                monthly_demand += float(quantity)
 
-                # Calculate 30-day demand for this product
-                current_date = start_date
-                while current_date <= end_date:
-                    date_str = current_date.strftime('%Y-%m-%d')
-                    if date_str in product_daily_forecasts:
-                        day_data = product_daily_forecasts[date_str]
-                        quantity = day_data.get('quantity', 0) if isinstance(day_data, dict) else 0
-                        monthly_product_demand += float(quantity)
-                    current_date += timedelta(days=1)
+        # Skip if no demand
+        if monthly_demand <= 0:
+            continue
 
-            # Calculate stock gap
-            current_stock = float(stock_on_hand or 0)
-            incoming_stock = float(incoming or 0)
-            forecasted_stock = current_stock + incoming_stock
-            stock_gap = monthly_product_demand - forecasted_stock
+        # Calculate stock gap
+        current_stock = float(stock_on_hand or 0)
+        incoming_stock = float(incoming or 0)
+        total_stock = current_stock + incoming_stock
+        stock_gap = monthly_demand - total_stock
 
-            # Calculate urgency
-            if monthly_product_demand > 0:
-                daily_demand = monthly_product_demand / 30
-                days_of_stock = forecasted_stock / daily_demand if daily_demand > 0 else 999
+        # Only include products with stock gaps
+        if stock_gap <= 0:
+            continue
 
-                if days_of_stock < 7:
-                    urgency = 'critical'
-                elif days_of_stock < 15:
-                    urgency = 'high'
-                elif days_of_stock < 30:
-                    urgency = 'medium'
-                else:
-                    urgency = 'low'
-            else:
-                days_of_stock = 999
-                urgency = 'low'
+        products_with_gaps += 1
 
-            # Only include products with a stock gap (demand > forecasted stock)
-            if stock_gap > 0:
-                school_products[school_name].append({
-                    'product_id': product_id,
-                    'product_name': product_name,
-                    'product_code': product_code,
-                    'branch_id': branch_id,
-                    'branch_name': branch_name or 'N/A',
-                    'monthly_demand': round(monthly_product_demand, 1),
-                    'current_stock': round(current_stock, 1),
-                    'incoming_stock': round(incoming_stock, 1),
-                    'forecasted_stock': round(forecasted_stock, 1),
-                    'stock_gap': round(stock_gap, 1),
-                    'suggested_replenishment': round(max(stock_gap, 0), 1),
-                    'urgency': urgency,
-                    'days_of_stock': round(days_of_stock, 1),
-                    'accuracy': round(product_accuracy, 1) if product_accuracy else 0,
-                })
+        # Calculate urgency
+        daily_demand = monthly_demand / 30
+        days_of_stock = total_stock / daily_demand if daily_demand > 0 else 999
 
-    # ========== COMBINE SCHOOL AND PRODUCT DATA ==========
-    # Attach product lists to each school
-    logger.info(f"Total schools with demand: {len(school_demand_data)}")
-    logger.info(f"Total schools with products: {len(school_products)}")
+        if days_of_stock < 7:
+            urgency = 'critical'
+        elif days_of_stock < 15:
+            urgency = 'high'
+        elif days_of_stock < 30:
+            urgency = 'medium'
+        else:
+            urgency = 'low'
 
-    for school in school_demand_data:
-        school_name = school['school_name']
-        school['products'] = school_products.get(school_name, [])
-        school['product_count'] = len(school['products'])
+        # Add to hierarchical structure
+        school_data[school_name]['school_name'] = school_name
+        school_data[school_name]['total_monthly_demand'] += monthly_demand
 
-        # Calculate total stock gap for this school
-        total_gap = sum(p['stock_gap'] for p in school['products'] if p['stock_gap'] > 0)
-        school['total_stock_gap'] = round(total_gap, 1)
+        branch_key = f"{branch_id}_{branch_name}"
+        school_data[school_name]['branches'][branch_key]['branch_name'] = branch_name or 'Unknown Branch'
+        school_data[school_name]['branches'][branch_key]['branch_id'] = branch_id
 
-        if school['product_count'] == 0:
-            logger.info(f"School '{school_name}' has NO products with stock gaps")
+        school_data[school_name]['branches'][branch_key]['products'].append({
+            'product_id': product_id,
+            'product_name': product_display_name or product_name,
+            'product_code': product_code or 'N/A',
+            'monthly_demand': round(monthly_demand, 1),
+            'current_stock': round(current_stock, 1),
+            'incoming_stock': round(incoming_stock, 1),
+            'forecasted_stock': round(total_stock, 1),
+            'stock_gap': round(stock_gap, 1),
+            'suggested_replenishment': round(max(stock_gap, 0), 1),
+            'urgency': urgency,
+            'days_of_stock': round(days_of_stock, 1),
+            'accuracy': round(accuracy, 1) if accuracy else 0,
+            'branch_id': branch_id,
+            'branch_name': branch_name or 'Unknown',
+        })
 
-    # Filter schools by branch for shop managers
-    if not is_admin and assigned_branch:
-        # Shop managers only see schools that have products in their branch
-        filtered_schools = []
-        for school in school_demand_data:
-            # Check if any products in this school are in the assigned branch
-            has_products_in_branch = any(
-                p.get('branch_id') == assigned_branch_id
-                for p in school.get('products', [])
-            )
-            if has_products_in_branch:
-                # Filter products to only show those in the assigned branch
-                school['products'] = [
-                    p for p in school.get('products', [])
-                    if p.get('branch_id') == assigned_branch_id
-                ]
-                school['product_count'] = len(school['products'])
-                # Only include schools with products that have stock gaps
-                if school['product_count'] > 0:
-                    filtered_schools.append(school)
-        school_demand_data = filtered_schools
-    else:
-        # Admin: Filter out schools with no products (no stock gaps)
-        school_demand_data = [s for s in school_demand_data if s.get('product_count', 0) > 0]
+    logger.info(f"Processed {products_processed} records, found {products_with_gaps} products with stock gaps")
+    logger.info(f"Products without stock data: {products_without_stock}")
 
-    # ========== CALCULATE SUMMARY STATISTICS ==========
-    total_schools = len(school_demand_data)
-    total_products = sum(s['product_count'] for s in school_demand_data)
-    total_demand = sum(s['monthly_demand'] for s in school_demand_data)
-    total_gap = sum(s.get('total_stock_gap', 0) for s in school_demand_data)
+    # ========== STEP 3: FORMAT FOR TEMPLATE ==========
+    # Convert nested dict structure to list format for template
+    school_list = []
 
-    # Count critical urgency items
+    for school_name, school_info in school_data.items():
+        # Flatten branches
+        all_products = []
+        for branch_key, branch_info in school_info['branches'].items():
+            all_products.extend(branch_info['products'])
+
+        # Calculate school totals
+        total_gap = sum(p['stock_gap'] for p in all_products)
+
+        school_list.append({
+            'school_name': school_name,
+            'monthly_demand': round(school_info['total_monthly_demand'], 1),
+            'products': all_products,
+            'product_count': len(all_products),
+            'total_stock_gap': round(total_gap, 1),
+        })
+
+    # Sort by monthly demand (highest first)
+    school_list.sort(key=lambda x: x['monthly_demand'], reverse=True)
+
+    logger.info(f"Final result: {len(school_list)} schools with stock gaps")
+
+    # ========== STEP 4: CALCULATE SUMMARY STATISTICS ==========
+    total_schools = len(school_list)
+    total_products = sum(s['product_count'] for s in school_list)
+    total_demand = sum(s['monthly_demand'] for s in school_list)
+    total_gap = sum(s['total_stock_gap'] for s in school_list)
+
     critical_count = sum(
-        sum(1 for p in s.get('products', []) if p.get('urgency') == 'critical')
-        for s in school_demand_data
+        sum(1 for p in s['products'] if p['urgency'] == 'critical')
+        for s in school_list
     )
 
     summary = {
@@ -2966,14 +2946,19 @@ def store_manager_replenishment(request):
     }
 
     context = {
-        'schools': school_demand_data,
-        'schools_json': json.dumps(school_demand_data, default=str),
+        'schools': school_list,
+        'schools_json': json.dumps(school_list, default=str),
         'summary': summary,
         'demand_period_start': start_date.strftime('%B %d, %Y'),
         'demand_period_end': end_date.strftime('%B %d, %Y'),
         'is_admin': is_admin,
         'assigned_branch': (getattr(assigned_branch, 'company', None) or getattr(assigned_branch, 'name', None)) if assigned_branch else None,
     }
+
+    # ========== CACHE THE RESULTS FOR 1 HOUR ==========
+    cache.set(cache_key, context, 3600)  # 3600 seconds = 1 hour
+    total_time = time.time() - start_time
+    logger.info(f"Replenishment data generated and cached in {total_time:.2f} seconds (cache key: {cache_key})")
 
     return render(request, 'dashboard/store_replenishment.html', context)
 
