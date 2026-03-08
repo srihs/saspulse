@@ -656,21 +656,47 @@ class Command(BaseCommand):
         except Exception as e:
             pass
 
+        # Calculate pre-aggregated monthly demands for performance
+        # monthly_demand_30: Sum of demand for days 30-60 (next month for replenishment)
+        # monthly_demand_60: Sum of demand for days 0-60 (two months ahead)
+        forecast_date_obj = datetime.now().date()
+        daily_forecasts = forecast_data['forecasts']
+
+        monthly_demand_30 = 0.0  # Days 30-60 from forecast_date
+        monthly_demand_60 = 0.0  # Days 0-60 from forecast_date
+
+        for day_offset in range(61):  # 0 to 60 days ahead
+            future_date = forecast_date_obj + timedelta(days=day_offset)
+            date_str = future_date.strftime('%Y-%m-%d')
+
+            if date_str in daily_forecasts:
+                day_data = daily_forecasts[date_str]
+                quantity = day_data.get('quantity', 0) if isinstance(day_data, dict) else 0
+
+                # Add to 60-day sum (days 0-60)
+                monthly_demand_60 += float(quantity)
+
+                # Add to 30-day sum only for days 30-60
+                if 30 <= day_offset <= 60:
+                    monthly_demand_30 += float(quantity)
+
         # Save to database (SalesForecastBase)
         SalesForecastBase.objects.update_or_create(
             entity_name=entity_name,
             aggregation_level=aggregation_level,
-            forecast_date=datetime.now().date(),
+            forecast_date=forecast_date_obj,
             defaults={
                 'forecast_id': forecast_id,
                 'model_type': model_type,
-                'daily_forecasts': forecast_data['forecasts'],  # Store as JSON with 365 days
+                'daily_forecasts': daily_forecasts,  # Store as JSON with 365 days
                 'training_data_start': training_data.index.min().date(),
                 'training_data_end': training_data.index.max().date(),
                 'mae': mae,
                 'mape': mape,
                 'rmse': rmse,
                 'accuracy_score': (100 - mape) if mape else None,
+                'monthly_demand_30': monthly_demand_30,  # Pre-calculated for performance
+                'monthly_demand_60': monthly_demand_60,  # Pre-calculated for performance
                 'model_params': {
                     'model': forecast_data.get('model', 'Unknown'),
                     'horizon_days': 365,

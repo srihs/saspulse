@@ -101,6 +101,10 @@ class SalesForecastBase(models.Model):
     rmse = models.FloatField(null=True, blank=True)  # Root Mean Square Error
     accuracy_score = models.FloatField(null=True, blank=True)  # Overall accuracy (0-100)
 
+    # Pre-calculated monthly demands (for performance optimization)
+    monthly_demand_30 = models.FloatField(null=True, blank=True, help_text="Sum of next 30 days demand (30-60 days from forecast_date)")
+    monthly_demand_60 = models.FloatField(null=True, blank=True, help_text="Sum of next 60 days demand (0-60 days from forecast_date)")
+
     # Model configuration
     model_params = models.JSONField(default=dict)  # Model hyperparameters
 
