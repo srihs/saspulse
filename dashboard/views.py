@@ -22,15 +22,15 @@ BTS_START_DATE = '2026-01-01'
 BTS_END_DATE = '2026-02-16'  # Fixed end date to match reporting period
 RISK_THRESHOLD = 2.0  # Stock ratio > 2.0 is considered risky
 
-# Category Filter: Only include "Wholesale Schools" and categories ending with " Shop"
+# Category Filter: Only include categories ending with " Shop"
 CATEGORY_FILTER = """
-    (p.category_name = 'Wholesale Schools' OR p.category_name LIKE '% Shop')
+    p.category_name LIKE '% Shop'
 """
 
 
 def calculate_summary_metrics(start_date=None, end_date=None):
     """
-    Calculate the top summary tiles metrics for Wholesale Schools category
+    Calculate the top summary tiles metrics for Shop categories
 
     Args:
         start_date: Start date for BTS period (default: BTS_START_DATE)
@@ -42,7 +42,7 @@ def calculate_summary_metrics(start_date=None, end_date=None):
     start = start_date or BTS_START_DATE
     end = end_date or BTS_END_DATE
 
-    # 1. Calculate Total BTS Sales (Wholesale Schools + Shop categories, excluding shop locations)
+    # 1. Calculate Total BTS Sales (Shop categories, excluding shop locations)
     # Sales = qty * unit_price for invoiced orders in the period
     with connection.cursor() as cursor:
         cursor.execute("""
@@ -51,7 +51,7 @@ def calculate_summary_metrics(start_date=None, end_date=None):
             JOIN cin7_sync_salesorderlineitem soli ON CAST(so.cin7_id AS CHAR) = soli.cin7_sales_order_id
             JOIN cin7_sync_product p ON soli.cin7_product_id = p.cin7_id
             WHERE so.invoice_date >= %s AND so.invoice_date <= %s
-              AND (p.category_name = 'Wholesale Schools' OR p.category_name LIKE %s)
+              AND p.category_name LIKE %s
               AND p.sub_category IS NOT NULL
               AND p.sub_category <> ''
               AND p.sub_category NOT LIKE %s
@@ -61,14 +61,14 @@ def calculate_summary_metrics(start_date=None, end_date=None):
         total_bts_sales = float(result[0] or 0)
 
     # 2. Calculate Total Stock Value (stock on hand × cost_price)
-    # Stock mapped via product sub_category (Wholesale Schools + Shop categories, excluding shop locations)
+    # Stock mapped via product sub_category (Shop categories, excluding shop locations)
     with connection.cursor() as cursor:
         cursor.execute("""
             SELECT SUM(COALESCE(s.stock_on_hand, 0) * COALESCE(po.cost_price, 0)) as total_value
             FROM cin7_sync_product p
             LEFT JOIN cin7_sync_stock s ON p.cin7_id = s.cin7_product_id
             LEFT JOIN cin7_sync_productoption po ON s.cin7_product_option_id = po.cin7_id
-            WHERE (p.category_name = 'Wholesale Schools' OR p.category_name LIKE %s)
+            WHERE p.category_name LIKE %s
               AND p.sub_category IS NOT NULL
               AND p.sub_category <> ''
               AND p.sub_category NOT LIKE %s
@@ -93,7 +93,7 @@ def calculate_summary_metrics(start_date=None, end_date=None):
                 FROM cin7_sync_product p
                 LEFT JOIN cin7_sync_stock s ON p.cin7_id = s.cin7_product_id
                 LEFT JOIN cin7_sync_productoption po ON s.cin7_product_option_id = po.cin7_id
-                WHERE (p.category_name = 'Wholesale Schools' OR p.category_name LIKE %s)
+                WHERE p.category_name LIKE %s
                   AND p.sub_category IS NOT NULL
                   AND p.sub_category <> ''
                   AND p.sub_category NOT LIKE %s
@@ -106,7 +106,7 @@ def calculate_summary_metrics(start_date=None, end_date=None):
                 FROM cin7_sync_salesorder so
                 JOIN cin7_sync_salesorderlineitem soli ON CAST(so.cin7_id AS CHAR) = soli.cin7_sales_order_id
                 JOIN cin7_sync_product p ON soli.cin7_product_id = p.cin7_id
-                WHERE (p.category_name = 'Wholesale Schools' OR p.category_name LIKE %s)
+                WHERE p.category_name LIKE %s
                   AND so.invoice_date >= %s
                   AND so.invoice_date <= %s
                   AND p.sub_category IS NOT NULL
@@ -163,7 +163,7 @@ def calculate_customer_rankings(start_date=None, end_date=None):
                 FROM cin7_sync_product p
                 LEFT JOIN cin7_sync_stock s ON p.cin7_id = s.cin7_product_id
                 LEFT JOIN cin7_sync_productoption po ON s.cin7_product_option_id = po.cin7_id
-                WHERE (p.category_name = 'Wholesale Schools' OR p.category_name LIKE '%% Shop')
+                WHERE p.category_name LIKE '%% Shop'
                   AND p.sub_category IS NOT NULL
                   AND p.sub_category <> ''
                   AND p.sub_category NOT LIKE '%%Shop%%'
@@ -176,7 +176,7 @@ def calculate_customer_rankings(start_date=None, end_date=None):
                 FROM cin7_sync_salesorder so
                 JOIN cin7_sync_salesorderlineitem soli ON CAST(so.cin7_id AS CHAR) = soli.cin7_sales_order_id
                 JOIN cin7_sync_product p ON soli.cin7_product_id = p.cin7_id
-                WHERE (p.category_name = 'Wholesale Schools' OR p.category_name LIKE '%% Shop')
+                WHERE p.category_name LIKE '%% Shop'
                   AND so.invoice_date >= %s
                   AND so.invoice_date <= %s
                   AND p.sub_category IS NOT NULL
@@ -312,7 +312,7 @@ def calculate_product_rankings(start_date=None, end_date=None):
                 FROM cin7_sync_product p
                 LEFT JOIN cin7_sync_stock s ON p.cin7_id = s.cin7_product_id
                 LEFT JOIN cin7_sync_productoption po ON s.cin7_product_option_id = po.cin7_id
-                WHERE (p.category_name = 'Wholesale Schools' OR p.category_name LIKE %s)
+                WHERE p.category_name LIKE %s
                   AND p.sub_category IS NOT NULL
                   AND p.sub_category <> ''
                   AND p.sub_category NOT LIKE %s
@@ -326,7 +326,7 @@ def calculate_product_rankings(start_date=None, end_date=None):
                 FROM cin7_sync_salesorder so
                 JOIN cin7_sync_salesorderlineitem soli ON CAST(so.cin7_id AS CHAR) = soli.cin7_sales_order_id
                 JOIN cin7_sync_product p ON soli.cin7_product_id = p.cin7_id
-                WHERE (p.category_name = 'Wholesale Schools' OR p.category_name LIKE %s)
+                WHERE p.category_name LIKE %s
                   AND so.invoice_date >= %s
                   AND so.invoice_date <= %s
                   AND p.sub_category IS NOT NULL
@@ -449,7 +449,7 @@ def calculate_product_rankings(start_date=None, end_date=None):
                 FROM cin7_sync_salesorder so
                 JOIN cin7_sync_salesorderlineitem soli ON CAST(so.cin7_id AS CHAR) = soli.cin7_sales_order_id
                 JOIN cin7_sync_product p ON soli.cin7_product_id = p.cin7_id
-                WHERE (p.category_name = 'Wholesale Schools' OR p.category_name LIKE %s)
+                WHERE p.category_name LIKE %s
                   AND p.sub_category = %s
                   AND p.sub_category NOT LIKE %s
             """, ['% Shop', top_critical_school, '%Shop%'])
@@ -562,7 +562,7 @@ def calculate_heatmap_data(start_date=None, end_date=None, top_n_products=10):
             FROM cin7_sync_product p
             LEFT JOIN cin7_sync_stock s ON p.cin7_id = s.cin7_product_id
             LEFT JOIN cin7_sync_productoption po ON s.cin7_product_option_id = po.cin7_id
-            WHERE (p.category_name = 'Wholesale Schools' OR p.category_name LIKE %s)
+            WHERE p.category_name LIKE %s
               AND p.sub_category IS NOT NULL
               AND p.sub_category <> ''
               AND p.sub_category NOT LIKE %s
@@ -586,7 +586,7 @@ def calculate_heatmap_data(start_date=None, end_date=None, top_n_products=10):
         cursor.execute("""
             SELECT DISTINCT p.sub_category as school
             FROM cin7_sync_product p
-            WHERE (p.category_name = 'Wholesale Schools' OR p.category_name LIKE %s)
+            WHERE p.category_name LIKE %s
               AND p.sub_category IS NOT NULL
               AND p.sub_category <> ''
               AND p.sub_category NOT LIKE %s
@@ -609,7 +609,7 @@ def calculate_heatmap_data(start_date=None, end_date=None, top_n_products=10):
             LEFT JOIN cin7_sync_stock s ON p.cin7_id = s.cin7_product_id
             LEFT JOIN cin7_sync_productoption po ON s.cin7_product_option_id = po.cin7_id
             WHERE p.cin7_id IN ({product_ids_str})
-              AND (p.category_name = 'Wholesale Schools' OR p.category_name LIKE %s)
+              AND p.category_name LIKE %s
               AND p.sub_category IS NOT NULL
               AND p.sub_category <> ''
               AND p.sub_category NOT LIKE %s
@@ -626,7 +626,7 @@ def calculate_heatmap_data(start_date=None, end_date=None, top_n_products=10):
             JOIN cin7_sync_salesorderlineitem soli ON CAST(so.cin7_id AS CHAR) = soli.cin7_sales_order_id
             JOIN cin7_sync_product p ON soli.cin7_product_id = p.cin7_id
             WHERE p.cin7_id IN ({product_ids_str})
-              AND (p.category_name = 'Wholesale Schools' OR p.category_name LIKE %s)
+              AND p.category_name LIKE %s
               AND so.invoice_date >= %s
               AND so.invoice_date <= %s
               AND p.sub_category IS NOT NULL
@@ -730,7 +730,7 @@ def calculate_top_performing_schools(start_date=None, end_date=None, limit=10):
             WITH all_schools AS (
                 SELECT DISTINCT p.sub_category as school
                 FROM cin7_sync_product p
-                WHERE (p.category_name = 'Wholesale Schools' OR p.category_name LIKE %s)
+                WHERE p.category_name LIKE %s
                   AND p.sub_category IS NOT NULL
                   AND p.sub_category <> ''
                   AND p.sub_category NOT LIKE %s
@@ -742,7 +742,7 @@ def calculate_top_performing_schools(start_date=None, end_date=None, limit=10):
                 FROM cin7_sync_salesorder so
                 JOIN cin7_sync_salesorderlineitem soli ON CAST(so.cin7_id AS CHAR) = soli.cin7_sales_order_id
                 JOIN cin7_sync_product p ON soli.cin7_product_id = p.cin7_id
-                WHERE (p.category_name = 'Wholesale Schools' OR p.category_name LIKE %s)
+                WHERE p.category_name LIKE %s
                   AND so.invoice_date >= %s
                   AND so.invoice_date <= %s
                   AND p.sub_category IS NOT NULL
@@ -757,7 +757,7 @@ def calculate_top_performing_schools(start_date=None, end_date=None, limit=10):
                 FROM cin7_sync_salesorder so
                 JOIN cin7_sync_salesorderlineitem soli ON CAST(so.cin7_id AS CHAR) = soli.cin7_sales_order_id
                 JOIN cin7_sync_product p ON soli.cin7_product_id = p.cin7_id
-                WHERE (p.category_name = 'Wholesale Schools' OR p.category_name LIKE %s)
+                WHERE p.category_name LIKE %s
                   AND so.invoice_date >= %s
                   AND so.invoice_date <= %s
                   AND p.sub_category IS NOT NULL
@@ -772,7 +772,7 @@ def calculate_top_performing_schools(start_date=None, end_date=None, limit=10):
                 FROM cin7_sync_salesorder so
                 JOIN cin7_sync_salesorderlineitem soli ON CAST(so.cin7_id AS CHAR) = soli.cin7_sales_order_id
                 JOIN cin7_sync_product p ON soli.cin7_product_id = p.cin7_id
-                WHERE (p.category_name = 'Wholesale Schools' OR p.category_name LIKE %s)
+                WHERE p.category_name LIKE %s
                   AND so.invoice_date >= %s
                   AND so.invoice_date <= %s
                   AND p.sub_category IS NOT NULL
@@ -789,7 +789,7 @@ def calculate_top_performing_schools(start_date=None, end_date=None, limit=10):
                 FROM cin7_sync_salesorder so
                 JOIN cin7_sync_salesorderlineitem soli ON CAST(so.cin7_id AS CHAR) = soli.cin7_sales_order_id
                 JOIN cin7_sync_product p ON soli.cin7_product_id = p.cin7_id
-                WHERE (p.category_name = 'Wholesale Schools' OR p.category_name LIKE %s)
+                WHERE p.category_name LIKE %s
                   AND so.invoice_date >= %s
                   AND so.invoice_date <= %s
                   AND p.sub_category IS NOT NULL
@@ -806,7 +806,7 @@ def calculate_top_performing_schools(start_date=None, end_date=None, limit=10):
                 FROM cin7_sync_salesorder so
                 JOIN cin7_sync_salesorderlineitem soli ON CAST(so.cin7_id AS CHAR) = soli.cin7_sales_order_id
                 JOIN cin7_sync_product p ON soli.cin7_product_id = p.cin7_id
-                WHERE (p.category_name = 'Wholesale Schools' OR p.category_name LIKE %s)
+                WHERE p.category_name LIKE %s
                   AND so.invoice_date >= %s
                   AND so.invoice_date <= %s
                   AND p.sub_category IS NOT NULL
@@ -823,7 +823,7 @@ def calculate_top_performing_schools(start_date=None, end_date=None, limit=10):
                 FROM cin7_sync_salesorder so
                 JOIN cin7_sync_salesorderlineitem soli ON CAST(so.cin7_id AS CHAR) = soli.cin7_sales_order_id
                 JOIN cin7_sync_product p ON soli.cin7_product_id = p.cin7_id
-                WHERE (p.category_name = 'Wholesale Schools' OR p.category_name LIKE %s)
+                WHERE p.category_name LIKE %s
                   AND so.invoice_date >= %s
                   AND so.invoice_date <= %s
                   AND p.sub_category IS NOT NULL
@@ -903,7 +903,7 @@ def calculate_slow_moving_schools(start_date=None, end_date=None, limit=10):
             WITH all_schools AS (
                 SELECT DISTINCT p.sub_category as school
                 FROM cin7_sync_product p
-                WHERE (p.category_name = 'Wholesale Schools' OR p.category_name LIKE %s)
+                WHERE p.category_name LIKE %s
                   AND p.sub_category IS NOT NULL
                   AND p.sub_category <> ''
                   AND p.sub_category NOT LIKE %s
@@ -916,7 +916,7 @@ def calculate_slow_moving_schools(start_date=None, end_date=None, limit=10):
                 FROM cin7_sync_salesorder so
                 JOIN cin7_sync_salesorderlineitem soli ON CAST(so.cin7_id AS CHAR) = soli.cin7_sales_order_id
                 JOIN cin7_sync_product p ON soli.cin7_product_id = p.cin7_id
-                WHERE (p.category_name = 'Wholesale Schools' OR p.category_name LIKE %s)
+                WHERE p.category_name LIKE %s
                   AND so.invoice_date >= %s
                   AND so.invoice_date <= %s
                   AND p.sub_category IS NOT NULL
@@ -1071,7 +1071,7 @@ def calculate_bts_historical_data():
             FROM cin7_sync_salesorder so
             JOIN cin7_sync_salesorderlineitem soli ON CAST(so.cin7_id AS CHAR) = soli.cin7_sales_order_id
             JOIN cin7_sync_product p ON soli.cin7_product_id = p.cin7_id
-            WHERE (p.category_name = 'Wholesale Schools' OR p.category_name LIKE %s)
+            WHERE p.category_name LIKE %s
               AND so.invoice_date IS NOT NULL
               AND MONTH(so.invoice_date) IN (1, 2)
               AND p.sub_category IS NOT NULL
@@ -1113,7 +1113,7 @@ def calculate_school_forecasts():
             FROM cin7_sync_salesorder so
             JOIN cin7_sync_salesorderlineitem soli ON CAST(so.cin7_id AS CHAR) = soli.cin7_sales_order_id
             JOIN cin7_sync_product p ON soli.cin7_product_id = p.cin7_id
-            WHERE (p.category_name = 'Wholesale Schools' OR p.category_name LIKE %s)
+            WHERE p.category_name LIKE %s
               AND so.invoice_date IS NOT NULL
               AND p.sub_category IS NOT NULL
               AND p.sub_category <> ''
@@ -1160,7 +1160,7 @@ def calculate_customer_lifetime_value():
             FROM cin7_sync_salesorder so
             JOIN cin7_sync_salesorderlineitem soli ON CAST(so.cin7_id AS CHAR) = soli.cin7_sales_order_id
             JOIN cin7_sync_product p ON soli.cin7_product_id = p.cin7_id
-            WHERE (p.category_name = 'Wholesale Schools' OR p.category_name LIKE %s)
+            WHERE p.category_name LIKE %s
               AND so.invoice_date IS NOT NULL
               AND p.sub_category IS NOT NULL
               AND p.sub_category <> ''
@@ -1295,7 +1295,7 @@ def calculate_product_forecasts():
             FROM cin7_sync_salesorder so
             JOIN cin7_sync_salesorderlineitem soli ON CAST(so.cin7_id AS CHAR) = soli.cin7_sales_order_id
             JOIN cin7_sync_product p ON soli.cin7_product_id = p.cin7_id
-            WHERE (p.category_name = 'Wholesale Schools' OR p.category_name LIKE %s)
+            WHERE p.category_name LIKE %s
               AND so.invoice_date IS NOT NULL
               AND p.sub_category IS NOT NULL
               AND p.sub_category <> ''
@@ -2008,16 +2008,20 @@ def sales_forecasting(request):
         if level == 'school':
             from django.db import connection
 
-            # Switch to product-level view, optionally filtered by school (sub_category)
+            # Query product-level forecasts, optionally filtered by school (sub_category)
             sql = """
                 SELECT DISTINCT sf.id, sf.forecast_id, sf.model_type, sf.aggregation_level,
                        sf.entity_name, sf.entity_id, sf.daily_forecasts, sf.forecast_date,
                        sf.training_data_start, sf.training_data_end, sf.mae, sf.mape, sf.rmse,
-                       sf.accuracy_score, sf.model_params, sf.created_at, sf.updated_at
+                       sf.accuracy_score, sf.model_params, sf.created_at, sf.updated_at,
+                       p.sub_category as school_name
                 FROM dashboard_salesforecastbase sf
                 LEFT JOIN cin7_sync_productoption po ON po.code = sf.entity_name
                 LEFT JOIN cin7_sync_product p ON p.cin7_id = po.cin7_product_id
                 WHERE sf.aggregation_level = 'product'
+                  AND p.category_name LIKE '%%Shop'
+                  AND p.sub_category IS NOT NULL
+                  AND p.sub_category != ''
             """
             params = []
 
@@ -2028,16 +2032,19 @@ def sales_forecasting(request):
 
             # Add search query if provided
             if search_query:
-                sql += " AND (sf.entity_name LIKE %s OR p.name LIKE %s)"
-                params.extend([f'%{search_query}%', f'%{search_query}%'])
+                sql += " AND (sf.entity_name LIKE %s OR p.name LIKE %s OR p.sub_category LIKE %s)"
+                params.extend([f'%{search_query}%', f'%{search_query}%', f'%{search_query}%'])
 
-            sql += " ORDER BY p.name, sf.entity_name, sf.forecast_date DESC"
+            sql += " ORDER BY p.sub_category, p.name, sf.entity_name, sf.forecast_date DESC"
 
             # Execute raw SQL and convert to model instances
             all_base_forecasts = SalesForecastBase.objects.raw(sql, params)
 
-            # IMPORTANT: Set level to 'product' for template rendering
-            level = 'product'
+            # IMPORTANT: Only switch to product rendering if a specific school is selected
+            # Otherwise, keep school level for nested school/product view
+            if school_filter:
+                level = 'product'  # Show products for specific school
+            # else: keep level = 'school' for nested view
         else:
             # Get all base forecasts for this level (latest forecast for each entity)
             query = SalesForecastBase.objects.filter(aggregation_level=level)
@@ -2284,8 +2291,154 @@ def sales_forecasting(request):
         # Sort by total quantity descending
         forecast_list = sorted(forecast_list, key=lambda x: x['total_quantity'], reverse=True)[:500]  # Increased limit to 500 products (was 200)
 
+    elif level == 'school':
+        # NESTED SCHOOL/PRODUCT VIEW: Group products by school (p.sub_category)
+        from collections import defaultdict
+        from cin7.models import ProductOption
+        import logging
+
+        logger = logging.getLogger(__name__)
+
+        # Group forecasts by school
+        school_groups = defaultdict(list)
+
+        # First, we need to get school name for each forecast
+        # Build a mapping of SKU -> school name
+        sku_to_school = {}
+        for f in forecasts:
+            # Try to get school name from the raw SQL result first
+            school_name = getattr(f, 'school_name', None)
+            if school_name:
+                sku_to_school[f.entity_name] = school_name
+            else:
+                # Fallback: query ProductOption
+                try:
+                    po = ProductOption.objects.select_related('product').get(code=f.entity_name)
+                    school_name = po.product.sub_category or 'Uncategorized'
+                    sku_to_school[f.entity_name] = school_name
+                except ProductOption.DoesNotExist:
+                    logger.warning(f'ProductOption not found for SKU: {f.entity_name}')
+                    continue
+
+        # Now group forecasts by school
+        for f in forecasts:
+            school_name = sku_to_school.get(f.entity_name)
+            if school_name:
+                school_groups[school_name].append(f)
+
+        # Process each school group
+        forecast_list = []
+        for school_name, school_forecasts in sorted(school_groups.items()):
+            # Group products within this school (same logic as product-level grouping)
+            grouped_products = defaultdict(list)
+
+            for f in school_forecasts:
+                size = extract_size_from_sku(f.entity_name)
+
+                # Extract forecast data for the selected date range
+                if use_legacy:
+                    date_range_data = {}
+                    for date_str, forecast_data in f.forecast_data.items():
+                        forecast_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+                        if start_date <= forecast_date <= end_date:
+                            date_range_data[date_str] = forecast_data
+                else:
+                    date_range_data = f.get_date_range_forecast(start_date, end_date)
+
+                # Calculate total quantity for this SKU within the date range
+                total_qty = sum([day['quantity'] for day in date_range_data.values()])
+
+                # Only include if total_qty > 0
+                if total_qty == 0:
+                    continue
+
+                # Get first 7 days detail
+                forecast_dates = sorted(date_range_data.keys())[:7]
+                next_7_days = [
+                    {
+                        'date': date,
+                        'quantity': date_range_data[date]['quantity'],
+                        'confidence_lower': date_range_data[date].get('confidence_lower', 0),
+                        'confidence_upper': date_range_data[date].get('confidence_upper', 0)
+                    }
+                    for date in forecast_dates
+                ]
+
+                # Get stock data and actual product name for this SKU
+                stock_info = get_stock_data(f.entity_name)
+                stock_on_hand = stock_info['stock_on_hand']
+                incoming_stock = stock_info['incoming']
+                product_name = stock_info['product_name']
+                forecasted_stock = round(total_qty, 1)
+                stock_gap = (stock_on_hand + incoming_stock) - forecasted_stock
+
+                # Filter: Only show products with negative stock gap (shortages)
+                if stock_gap >= 0:
+                    continue
+
+                variation_data = {
+                    'sku_code': f.entity_name,
+                    'product_name': product_name,
+                    'size': size,
+                    'total_quantity': forecasted_stock,
+                    'stock_on_hand': int(stock_on_hand),
+                    'incoming_stock': int(incoming_stock),
+                    'stock_gap': round(stock_gap, 1),
+                    'accuracy_score': round(f.accuracy_score, 1) if f.accuracy_score is not None else 'N/A',
+                    'model': f.model_params.get('model', 'Unknown'),
+                    'next_7_days': next_7_days,
+                    'forecast_data': date_range_data,
+                    'training_days': f.model_params.get('training_days', 0),
+                    'mae': round(f.mae, 2) if f.mae else None,
+                    'mape': round(f.mape, 2) if f.mape else None
+                }
+
+                grouped_products[product_name].append(variation_data)
+
+            # Create product summaries for this school
+            school_products = []
+            school_total_quantity = 0
+
+            for product_name, variations in sorted(grouped_products.items()):
+                # Calculate totals across all variations
+                total_forecast = sum([v['total_quantity'] for v in variations])
+                school_total_quantity += total_forecast
+
+                # Sort variations by size
+                variations_sorted = sorted(variations, key=lambda x: (
+                    int(x['size']) if x['size'].isdigit() else 999,
+                    x['size']
+                ))
+
+                school_products.append({
+                    'product_name': product_name,
+                    'variations': variations_sorted,
+                    'total_quantity': round(total_forecast, 1),
+                    'variation_count': len(variations),
+                    'is_grouped': True
+                })
+
+            # Only add school if it has products after filtering
+            if school_products:
+                # Sort products by total quantity descending
+                school_products = sorted(school_products, key=lambda x: x['total_quantity'], reverse=True)
+
+                # Add school group to forecast list
+                forecast_list.append({
+                    'school_name': school_name,
+                    'entity_name': school_name,  # For compatibility with existing template code
+                    'total_quantity': round(school_total_quantity, 1),
+                    'product_count': len(school_products),
+                    'products': school_products,
+                    'is_grouped': True,
+                    'is_school_grouped': True  # Special flag for school-level grouping
+                })
+
+        # Sort schools by total quantity descending
+        forecast_list = sorted(forecast_list, key=lambda x: x['total_quantity'], reverse=True)[:100]  # Limit to 100 schools
+
     else:
-        # Regular flat view for school/shop/category
+        # Regular flat view for shop/category
         forecast_list = []
         for f in forecasts:
             # Extract forecast data for the selected date range
@@ -2530,7 +2683,7 @@ def forecast_product_breakdown(request, school_name):
                     JOIN cin7_sync_product p ON p.id = li.product_id
                     LEFT JOIN cin7_sync_productoption po ON po.code = li.code
                     WHERE p.sub_category = %s
-                      AND (p.category_name LIKE '%%Shop' OR p.category_name = 'Wholesale Schools')
+                      AND p.category_name LIKE '%%Shop'
                 ) AS product_info ON product_info.sku_code = sf.entity_name
                 WHERE sf.aggregation_level = 'product'
                 ORDER BY product_info.product_name, product_info.size

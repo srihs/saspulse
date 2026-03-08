@@ -176,6 +176,20 @@ class Command(BaseCommand):
                 skipped_count += 1
                 continue
 
+            # Skip if sales frequency is too low (< 5 sales/year on average)
+            total_sales = ts_data['quantity'].sum()
+            training_days = len(ts_data)
+            sales_per_year = total_sales / (training_days / 365)
+
+            if sales_per_year < 5:
+                self.stdout.write(
+                    self.style.WARNING(
+                        f'  Skipping {entity_name}: Only {sales_per_year:.1f} sales/year (minimum: 5)'
+                    )
+                )
+                skipped_count += 1
+                continue
+
             # Generate 365-day forecast
             try:
                 if model_type == 'statistical':
@@ -232,7 +246,7 @@ class Command(BaseCommand):
         # Query sales for school products
         query = """
         SELECT
-            so.cin7_created_date as sale_date,
+            so.invoice_date as sale_date,
             {entity_field} as entity_name,
             SUM(li.qty) as quantity,
             SUM(li.line_total) as revenue,
@@ -240,11 +254,11 @@ class Command(BaseCommand):
         FROM cin7_sync_salesorderlineitem li
         JOIN cin7_sync_salesorder so ON so.id = li.sales_order_id
         JOIN cin7_sync_product p ON p.id = li.product_id
-        WHERE (p.category_name LIKE '%Shop' OR p.category_name = 'Wholesale Schools')
+        WHERE p.category_name LIKE '%%Shop'
           AND so.stage = 'Dispatched'
-          AND so.cin7_created_date IS NOT NULL
-          AND so.cin7_created_date >= DATE_SUB(CURDATE(), INTERVAL 730 DAY)
-        GROUP BY DATE(so.cin7_created_date), {entity_field}
+          AND so.invoice_date IS NOT NULL
+          AND so.invoice_date >= DATE_SUB(CURDATE(), INTERVAL 1460 DAY)
+        GROUP BY DATE(so.invoice_date), {entity_field}
         ORDER BY sale_date, entity_name
         """
 
