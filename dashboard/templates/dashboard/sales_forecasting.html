@@ -484,7 +484,7 @@
                                                                 </td>
                                                                 <td class="text-center align-middle">
                                                                     <button class="btn btn-sm btn-outline-success" data-sku="{{ variation.sku_code }}" data-forecast='{{ variation.forecast_data|tojson }}' onclick='viewChartFromButton(this)'>
-                                                                        <i class="fas fa-chart-line"></i> Chart
+                                                                        <i class="fas fa-chart-line"></i> Predicted Demand
                                                                     </button>
                                                                 </td>
                                                             </tr>
@@ -526,7 +526,7 @@
                                                     <i class="fas fa-calendar"></i> Next 7 Days
                                                 </button>
                                                 <button class="btn btn-sm btn-outline-success" onclick="viewChart('{{ forecast.entity_name|escapejs }}', {{ forecast.forecast_data|safe }})">
-                                                    <i class="fas fa-chart-line"></i> Chart
+                                                    <i class="fas fa-chart-line"></i> Predicted Demand
                                                 </button>
                                             </td>
                                         </tr>
@@ -915,7 +915,7 @@ $(document).ready(function() {
                 html += '<td class="text-center text-muted">N/A</td>';
                 html += '<td class="text-center">' + Math.round(v.total_quantity) + '</td>';
                 html += '<td class="text-center"><span class="badge bg-secondary">N/A</span></td>';
-                html += '<td class="text-center"><button class="btn btn-sm btn-outline-success"><i class="fas fa-chart-line"></i> Chart</button></td>';
+                html += '<td class="text-center"><button class="btn btn-sm btn-outline-success"><i class="fas fa-chart-line"></i> Predicted Demand</button></td>';
                 html += '</tr>';
             });
 
