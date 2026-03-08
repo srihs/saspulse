@@ -3241,7 +3241,27 @@ def past_sales_data(request):
         current_year = datetime.now().year
         years_data = {}
 
-        for year_offset in [0, 1, 2]:  # Current year, -1 year, -2 years
+        # Get style_code for the given SKU first
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT style_code
+                FROM cin7_sync_product
+                WHERE cin7_id = (
+                    SELECT cin7_product_id
+                    FROM cin7_sync_productoption
+                    WHERE code = %s
+                    LIMIT 1
+                )
+            """, [sku])
+
+            result = cursor.fetchone()
+            if not result or not result[0]:
+                return JsonResponse({'error': 'Style code not found for SKU'}, status=404)
+
+            style_code = result[0]
+
+        # Loop through last 3 COMPLETED years (offset 1, 2, 3)
+        for year_offset in [1, 2, 3]:  # Last 3 completed years
             year = current_year - year_offset
 
             # Try to create year-adjusted dates, handle leap year edge cases
@@ -3257,17 +3277,19 @@ def past_sales_data(request):
                 # Handle Feb 29 on non-leap years
                 year_end = end_date.replace(year=year, day=28)
 
-            # Query sales data from cin7_sync_salesorderlineitem
+            # Query sales data grouped by style_code
             with connection.cursor() as cursor:
                 cursor.execute("""
                     SELECT COALESCE(SUM(soli.qty), 0) as total_quantity
                     FROM cin7_sync_salesorderlineitem soli
                     INNER JOIN cin7_sync_salesorder so ON CAST(so.cin7_id AS CHAR) = soli.cin7_sales_order_id
-                    WHERE soli.code = %s
+                    INNER JOIN cin7_sync_productoption po ON soli.code = po.code
+                    INNER JOIN cin7_sync_product p ON po.cin7_product_id = p.cin7_id
+                    WHERE p.style_code = %s
                       AND so.invoice_date >= %s
                       AND so.invoice_date <= %s
                       AND so.status != 'Cancelled'
-                """, [sku, year_start, year_end])
+                """, [style_code, year_start, year_end])
 
                 row = cursor.fetchone()
                 years_data[str(year)] = int(row[0]) if row and row[0] else 0
@@ -3275,6 +3297,7 @@ def past_sales_data(request):
         return JsonResponse({
             'success': True,
             'sku': sku,
+            'style_code': style_code,
             'period': f"{start_date_str} to {end_date_str}",
             'years': years_data
         })
