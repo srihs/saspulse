@@ -315,6 +315,79 @@ class Command(BaseCommand):
 
         return ts
 
+    def calculate_active_months(self, ts_data, min_frequency=0.20):
+        """
+        Determine which months historically have sales
+
+        Args:
+            ts_data: Time series DataFrame with 'quantity' column
+            min_frequency: Minimum % of years where month must have sales (default: 20%)
+
+        Returns:
+            set: Months (1-12) where product is historically active
+        """
+        # Create a copy to avoid modifying original
+        ts_data_copy = ts_data.copy()
+        ts_data_copy['month'] = ts_data_copy.index.month
+        ts_data_copy['year'] = ts_data_copy.index.year
+
+        # Calculate number of unique years in dataset
+        years_span = ts_data_copy['year'].nunique()
+
+        # If less than 2 years of data, be more lenient
+        if years_span < 2:
+            min_frequency = 0.10  # Only need sales in 10% of period
+
+        active_months = set()
+
+        for month in range(1, 13):
+            month_data = ts_data_copy[ts_data_copy['month'] == month]
+            years_with_sales = month_data[month_data['quantity'] > 0]['year'].nunique()
+
+            # Calculate frequency (what % of years had sales in this month)
+            if years_span > 0:
+                frequency = years_with_sales / years_span
+
+                # Mark month as active if it meets minimum frequency
+                if frequency >= min_frequency:
+                    active_months.add(month)
+
+        # Safety: If no months are active (edge case), return all months
+        if not active_months:
+            return set(range(1, 13))
+
+        return active_months
+
+    def filter_forecast_by_active_months(self, forecast_dict, active_months):
+        """
+        Filter forecasts to only include historically active months
+
+        Args:
+            forecast_dict: Daily forecasts {date_str: {quantity, confidence_lower, confidence_upper}}
+            active_months: Set of active month numbers (1-12)
+
+        Returns:
+            dict: Filtered forecast with zeros for inactive months
+        """
+        from datetime import datetime
+
+        filtered = {}
+        for date_str, forecast_data in forecast_dict.items():
+            date_obj = datetime.strptime(date_str, '%Y-%m-%d')
+
+            if date_obj.month in active_months:
+                # Keep forecast for active months
+                filtered[date_str] = forecast_data
+            else:
+                # Set to zero for inactive months (product doesn't sell in this month)
+                filtered[date_str] = {
+                    'quantity': 0.0,
+                    'confidence_lower': 0.0,
+                    'confidence_upper': 0.0
+                }
+
+        return filtered
+
     def forecast_statistical(self, ts_data, horizon_days):
         """Generate forecast using Prophet (Facebook's time series forecasting model)"""
 
@@ -365,13 +438,18 @@ class Command(BaseCommand):
                             'confidence_upper': float(max(0, row['yhat_upper']))
                         }
 
+                    # FILTER BY ACTIVE MONTHS: Only forecast for months with historical sales
+                    active_months = self.calculate_active_months(ts_data, min_frequency=0.20)
+                    forecast_dict = self.filter_forecast_by_active_months(forecast_dict, active_months)
+
                     return {
                         'forecasts': forecast_dict,
                         'model': 'Prophet',
                         'fitted_params': {
                             'changepoint_prior_scale': 0.05,
                             'seasonality_mode': 'multiplicative',
-                            'data_points': len(prophet_df)
+                            'data_points': len(prophet_df),
+                            'active_months': sorted(list(active_months))  # Store for debugging
                         }
                     }
 
@@ -442,10 +520,16 @@ class Command(BaseCommand):
                             'confidence_upper': float(qty * 1.2)
                         }
 
+                    # FILTER BY ACTIVE MONTHS
+                    active_months = self.calculate_active_months(ts_data, min_frequency=0.20)
+                    forecast_dict = self.filter_forecast_by_active_months(forecast_dict, active_months)
+
                     return {
                         'forecasts': forecast_dict,
                         'model': model_name,
-                        'fitted_params': {}
+                        'fitted_params': {
+                            'active_months': sorted(list(active_months))
+                        }
                     }
                 except:
                     # Fall through to simple average method if ES fails
@@ -467,6 +551,10 @@ class Command(BaseCommand):
                     'confidence_upper': float(qty * 1.3)
                 }
 
+            # FILTER BY ACTIVE MONTHS
+            active_months = self.calculate_active_months(ts_data, min_frequency=0.20)
+            forecast_dict = self.filter_forecast_by_active_months(forecast_dict, active_months)
+
             return {
                 'forecasts': forecast_dict,
                 'model': 'Moving Average (Intermittent Demand)',
@@ -474,7 +562,8 @@ class Command(BaseCommand):
                     'avg_daily_demand': float(avg_daily_demand),
                     'demand_probability': float(demand_probability),
                     'avg_when_occurs': float(avg_demand_when_occurs),
-                    'days_with_sales_pct': float(days_with_sales / num_days * 100)
+                    'days_with_sales_pct': float(days_with_sales / num_days * 100),
+                    'active_months': sorted(list(active_months))
                 }
             }
 
