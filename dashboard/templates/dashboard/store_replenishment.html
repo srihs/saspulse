@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block title %}Store Replenishment Requests{% endblock %}
+{% block title %}Store Replenishment - Monthly Demand by School{% endblock %}
 
 {% block extra_css %}
 <link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet">
@@ -26,267 +26,375 @@
         background-color: #28a745;
         color: white;
     }
-    .stock-info {
+
+    /* DataTables expand/collapse styling */
+    table.dataTable tbody td.dt-control {
+        cursor: pointer;
+        text-align: center;
+    }
+
+    table.dataTable tbody td.dt-control:before {
+        content: '+';
+        display: inline-block;
+        font-weight: bold;
+        font-size: 18px;
+        color: #007bff;
+        background-color: #e7f1ff;
+        border-radius: 50%;
+        width: 24px;
+        height: 24px;
+        line-height: 24px;
+        text-align: center;
+    }
+
+    table.dataTable tbody tr.parent td.dt-control:before {
+        content: '-';
+        background-color: #ffc107;
+        color: #000;
+    }
+
+    /* Child row styling */
+    table.dataTable tbody tr.child {
+        background-color: #f8f9fa;
+    }
+
+    table.dataTable tbody tr.child td {
+        padding: 0 !important;
+    }
+
+    table.dataTable tbody tr.child .child-table {
+        width: 100%;
+        margin: 0;
+    }
+
+    table.dataTable tbody tr.child .child-table td,
+    table.dataTable tbody tr.child .child-table th {
+        padding: 8px 12px;
         font-size: 0.9rem;
+    }
+
+    table.dataTable tbody tr.child .child-table thead {
+        background-color: #e9ecef;
+    }
+
+    /* School row highlighting */
+    table.dataTable tbody tr.parent {
+        font-weight: 600;
+        background-color: #fff3cd;
+    }
+
+    table.dataTable tbody tr.parent:hover {
+        background-color: #ffe69c;
+    }
+
+    .school-name-cell {
+        font-weight: 700;
+        color: #0056b3;
     }
 </style>
 {% endblock %}
 
+{% block preloader %}
+<!-- Page Preloader - Active by default to show during page load -->
+<div id="pagePreloader" class="preloader-overlay active">
+    <div class="preloader-content">
+        <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <h4 class="mt-3">Loading School Demand...</h4>
+        <p class="text-muted">Processing forecasts, please wait...</p>
+    </div>
+</div>
+{% endblock %}
+
 {% block content %}
-<div class="content">
-    <div class="pb-5">
-        <div class="row g-4">
-            <div class="col-12 col-xxl-12">
-                <div class="mb-8">
-                    <h2 class="mb-2">Replenishment Requests - Store Manager</h2>
-                    <h5 class="text-body-tertiary fw-semibold">
-                        AI-Generated Stock Replenishment Recommendations
+<div class="pb-5">
+    <div class="row g-4">
+        <div class="col-12">
+            <div class="mb-8">
+                <h2 class="mb-2">Store Replenishment - Monthly Demand by School</h2>
+                <h5 class="text-body-tertiary fw-semibold">
+                    Next 30 Days: {{ demand_period_start }} - {{ demand_period_end }}
+                </h5>
+            </div>
+
+            <!-- User Info Banner -->
+            {% if not is_admin and assigned_branch %}
+            <div class="alert alert-info mb-4">
+                <i class="fas fa-store me-2"></i>
+                <strong>Shop Manager View:</strong> Showing schools with products in <strong>{{ assigned_branch }}</strong>
+            </div>
+            {% elif is_admin %}
+            <div class="alert alert-success mb-4">
+                <i class="fas fa-user-shield me-2"></i>
+                <strong>Admin View:</strong> Showing all schools across all stores
+            </div>
+            {% endif %}
+
+            <!-- Summary Cards -->
+            <div class="row mb-4">
+                <div class="col-md-3">
+                    <div class="card">
+                        <div class="card-body">
+                            <h6 class="text-muted">Total Schools</h6>
+                            <h3>{{ summary.total_schools }}</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card">
+                        <div class="card-body">
+                            <h6 class="text-muted">Total Products</h6>
+                            <h3>{{ summary.total_products }}</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card">
+                        <div class="card-body">
+                            <h6 class="text-muted">Monthly Demand</h6>
+                            <h3 class="text-primary">{{ summary.total_monthly_demand|floatformat:0 }}</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card">
+                        <div class="card-body">
+                            <h6 class="text-muted">Critical Items</h6>
+                            <h3 class="text-danger">{{ summary.critical_count }}</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- School Demand Table -->
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-school me-2"></i>
+                        Monthly Demand Grouped by Schools
                     </h5>
+                    <small>Click the + icon to expand and see product breakdown</small>
                 </div>
+                <div class="card-body">
+                    {% if schools %}
+                    <div class="table-responsive">
+                        <table id="schoolsTable" class="table table-sm table-striped">
+                            <thead>
+                                <tr>
+                                    <th></th> <!-- Expand/Collapse -->
+                                    <th>School Name</th>
+                                    <th>Total Monthly Demand</th>
+                                    <th>Products Count</th>
+                                    <th>Stock Gap</th>
+                                    <th>Forecast Accuracy</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for school in schools %}
+                                <tr class="parent" data-school="{{ school.school_name }}">
+                                    <td class="dt-control"></td>
+                                    <td class="school-name-cell">{{ school.school_name }}</td>
+                                    <td class="text-primary fw-bold">{{ school.monthly_demand }} units</td>
+                                    <td>
+                                        <span class="badge bg-info">{{ school.product_count }} products</span>
+                                    </td>
+                                    <td>
+                                        {% if school.total_stock_gap > 0 %}
+                                            <span class="text-danger fw-bold">{{ school.total_stock_gap }}</span>
+                                        {% else %}
+                                            <span class="text-success">0</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if school.accuracy >= 80 %}
+                                            <span class="badge bg-success">{{ school.accuracy }}%</span>
+                                        {% elif school.accuracy >= 60 %}
+                                            <span class="badge bg-warning">{{ school.accuracy }}%</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">{{ school.accuracy }}%</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        No school demand data available. Forecasts may not have been generated yet.
+                    </div>
+                    {% endif %}
 
-                <!-- Summary Cards -->
-                <div class="row mb-4">
-                    <div class="col-md-3">
-                        <div class="card">
-                            <div class="card-body">
-                                <h6 class="text-muted">Total Requests</h6>
-                                <h3>{{ summary.total_requests }}</h3>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="card">
-                            <div class="card-body">
-                                <h6 class="text-muted">Pending Review</h6>
-                                <h3 class="text-warning">{{ summary.pending_count }}</h3>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="card">
-                            <div class="card-body">
-                                <h6 class="text-muted">Critical Urgency</h6>
-                                <h3 class="text-danger">{{ summary.critical_count }}</h3>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="card">
-                            <div class="card-body">
-                                <h6 class="text-muted">Total Units Needed</h6>
-                                <h3>{{ summary.total_units|floatformat:0 }}</h3>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Filters -->
-                <div class="card mb-4">
-                    <div class="card-body">
-                        <form method="get" class="row g-3">
-                            <div class="col-md-3">
-                                <label class="form-label">Status</label>
-                                <select name="status" class="form-select" onchange="this.form.submit()">
-                                    <option value="all" {% if current_status == 'all' %}selected{% endif %}>All Status</option>
-                                    {% for value, label in status_choices %}
-                                    <option value="{{ value }}" {% if current_status == value %}selected{% endif %}>{{ label }}</option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                            <div class="col-md-3">
-                                <label class="form-label">Urgency</label>
-                                <select name="urgency" class="form-select" onchange="this.form.submit()">
-                                    <option value="all" {% if current_urgency == 'all' %}selected{% endif %}>All Urgency</option>
-                                    {% for value, label in urgency_choices %}
-                                    <option value="{{ value }}" {% if current_urgency == value %}selected{% endif %}>{{ label }}</option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                            <div class="col-md-3">
-                                <label class="form-label">Week</label>
-                                <select name="week" class="form-select" onchange="this.form.submit()">
-                                    <option value="current" {% if current_week == 'current' %}selected{% endif %}>Current Week</option>
-                                    <option value="all" {% if current_week == 'all' %}selected{% endif %}>All Weeks</option>
-                                </select>
-                            </div>
-                            <div class="col-md-3 d-flex align-items-end">
-                                <button type="submit" class="btn btn-primary w-100">Apply Filters</button>
-                            </div>
-                        </form>
+                    <div class="alert alert-info mt-4 mb-0">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>How to Use:</strong>
+                        <ul class="mb-0 mt-2">
+                            <li>Click the <strong>+</strong> icon to expand a school and see which products are needed</li>
+                            <li>Monthly demand is calculated from the next 30 days starting today</li>
+                            <li>Stock gap shows how many units are needed beyond current + incoming stock</li>
+                            <li>Urgency levels: Critical (&lt;7 days), High (7-15 days), Medium (15-30 days), Low (&gt;30 days)</li>
+                        </ul>
                     </div>
                 </div>
-
-                <!-- Requests Table -->
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="mb-0">Replenishment Requests ({{ requests|length }} showing)</h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="table-responsive">
-                            <table id="requestsTable" class="table table-sm table-striped">
-                                <thead>
-                                    <tr>
-                                        <th>Request ID</th>
-                                        <th>School</th>
-                                        <th>Product</th>
-                                        <th>Branch</th>
-                                        <th>Current Stock</th>
-                                        <th>Forecast (30d)</th>
-                                        <th>Gap</th>
-                                        <th>AI Suggested</th>
-                                        <th>Days Left</th>
-                                        <th>Urgency</th>
-                                        <th>Confidence</th>
-                                        <th>Status</th>
-                                        <th>Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for req in requests %}
-                                    <tr>
-                                        <td><small>{{ req.request_id }}</small></td>
-                                        <td><small>{{ req.school_name }}</small></td>
-                                        <td><small>{{ req.product_name|truncatechars:30 }}</small></td>
-                                        <td><small>{{ req.branch_name|truncatechars:20 }}</small></td>
-                                        <td>{{ req.current_stock }}</td>
-                                        <td>{{ req.forecasted_demand }}</td>
-                                        <td class="fw-bold">{{ req.stock_gap }}</td>
-                                        <td class="fw-bold text-primary">{{ req.suggested_quantity }}</td>
-                                        <td>{{ req.days_of_stock|floatformat:1 }}</td>
-                                        <td>
-                                            <span class="badge urgency-badge urgency-{{ req.urgency }}">
-                                                {{ req.urgency|upper }}
-                                            </span>
-                                        </td>
-                                        <td>{{ req.ai_confidence }}%</td>
-                                        <td>
-                                            <span class="badge bg-secondary">{{ req.status }}</span>
-                                        </td>
-                                        <td>
-                                            {% if req.status == 'pending' %}
-                                            <button class="btn btn-sm btn-success" onclick="approveRequest({{ req.id }}, '{{ req.suggested_quantity }}')">
-                                                <i class="fas fa-check"></i> Approve
-                                            </button>
-                                            <button class="btn btn-sm btn-warning" onclick="modifyRequest({{ req.id }}, '{{ req.suggested_quantity }}', '{{ req.product_name }}')">
-                                                <i class="fas fa-edit"></i> Modify
-                                            </button>
-                                            <button class="btn btn-sm btn-danger" onclick="rejectRequest({{ req.id }})">
-                                                <i class="fas fa-times"></i> Reject
-                                            </button>
-                                            {% else %}
-                                            <span class="text-muted">{{ req.status|title }}</span>
-                                            {% endif %}
-                                        </td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-
             </div>
+
         </div>
     </div>
 </div>
-
-<!-- Modify Modal -->
-<div class="modal fade" id="modifyModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Modify Replenishment Request</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <p id="modalProduct"></p>
-                <div class="mb-3">
-                    <label class="form-label">Approved Quantity</label>
-                    <input type="number" class="form-control" id="modifyQuantity" step="1" min="0">
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Comment (Optional)</label>
-                    <textarea class="form-control" id="modifyComment" rows="3"></textarea>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" onclick="submitModify()">Save Changes</button>
-            </div>
-        </div>
-    </div>
-</div>
-
 {% endblock %}
 
 {% block extra_js %}
 <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
 <script>
+// Store school data from backend
+const schoolsData = {{ schools_json|safe }};
+
+// Format product breakdown table
+function formatProductTable(schoolName) {
+    // Find the school data
+    const school = schoolsData.find(s => s.school_name === schoolName);
+
+    if (!school || !school.products || school.products.length === 0) {
+        return '<div class="p-3 text-muted">No product data available for this school</div>';
+    }
+
+    let html = '<table class="table table-bordered table-sm child-table mb-0">';
+    html += '<thead>';
+    html += '<tr>';
+    html += '<th>Product Name</th>';
+    html += '<th>SKU</th>';
+    html += '<th>Monthly Demand</th>';
+    html += '<th>Current Stock</th>';
+    html += '<th>Incoming</th>';
+    html += '<th>Forecasted Stock</th>';
+    html += '<th>Stock Gap</th>';
+    html += '<th>Suggested Qty</th>';
+    html += '<th>Days of Stock</th>';
+    html += '<th>Urgency</th>';
+    html += '</tr>';
+    html += '</thead>';
+    html += '<tbody>';
+
+    school.products.forEach(product => {
+        const urgencyClass = `urgency-${product.urgency}`;
+        const gapClass = product.stock_gap > 0 ? 'text-danger fw-bold' : 'text-success';
+
+        html += '<tr>';
+        html += `<td><small>${product.product_name}</small></td>`;
+        html += `<td><small>${product.product_code || 'N/A'}</small></td>`;
+        html += `<td class="text-primary">${product.monthly_demand}</td>`;
+        html += `<td>${product.current_stock}</td>`;
+        html += `<td>${product.incoming_stock}</td>`;
+        html += `<td>${product.forecasted_stock}</td>`;
+        html += `<td class="${gapClass}">${product.stock_gap}</td>`;
+        html += `<td class="fw-bold">${product.suggested_replenishment}</td>`;
+        html += `<td>${product.days_of_stock}</td>`;
+        html += `<td><span class="badge urgency-badge ${urgencyClass}">${product.urgency.toUpperCase()}</span></td>`;
+        html += '</tr>';
+    });
+
+    html += '</tbody>';
+    html += '</table>';
+
+    return html;
+}
+
 $(document).ready(function() {
-    $('#requestsTable').DataTable({
-        order: [[9, 'asc'], [6, 'desc']], // Sort by urgency then gap
+    console.log('=== SCHOOL DEMAND PRELOADER DEBUG START ===');
+    console.log('Time:', new Date().toISOString());
+    console.log('Preloader active:', $('#pagePreloader').hasClass('active'));
+
+    console.log('Before DataTable init:', new Date().toISOString());
+
+    // Initialize DataTables
+    const table = $('#schoolsTable').DataTable({
+        order: [[2, 'desc']], // Sort by monthly demand descending
         pageLength: 50,
-        dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>rtip'
-    });
-});
-
-let currentRequestId = null;
-
-function approveRequest(requestId, suggestedQty) {
-    if (confirm('Approve this replenishment request with quantity: ' + suggestedQty + '?')) {
-        submitAction(requestId, 'approve', null, '');
-    }
-}
-
-function modifyRequest(requestId, suggestedQty, productName) {
-    currentRequestId = requestId;
-    document.getElementById('modalProduct').textContent = 'Product: ' + productName;
-    document.getElementById('modifyQuantity').value = suggestedQty;
-    document.getElementById('modifyComment').value = '';
-    new bootstrap.Modal(document.getElementById('modifyModal')).show();
-}
-
-function submitModify() {
-    const quantity = document.getElementById('modifyQuantity').value;
-    const comment = document.getElementById('modifyComment').value;
-    submitAction(currentRequestId, 'modify', quantity, comment);
-    bootstrap.Modal.getInstance(document.getElementById('modifyModal')).hide();
-}
-
-function rejectRequest(requestId) {
-    const comment = prompt('Please provide a reason for rejection:');
-    if (comment !== null) {
-        submitAction(requestId, 'reject', null, comment);
-    }
-}
-
-function submitAction(requestId, action, quantity, comment) {
-    fetch(`/dashboard/replenishment/store/approve/${requestId}/`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': '{{ csrf_token }}'
-        },
-        body: JSON.stringify({
-            action: action,
-            quantity: quantity,
-            comment: comment
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            alert(data.message);
-            location.reload();
-        } else {
-            alert('Error: ' + data.error);
+        dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>rtip',
+        columnDefs: [
+            {
+                orderable: false,
+                className: 'dt-control',
+                targets: 0
+            },
+            {
+                targets: [2, 4],
+                type: 'num',
+                render: function(data, type, row) {
+                    if (type === 'sort' || type === 'type') {
+                        return parseFloat(data) || 0;
+                    }
+                    return data;
+                }
+            }
+        ],
+        initComplete: function() {
+            console.log('initComplete fired:', new Date().toISOString());
         }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('An error occurred');
     });
-}
+
+    console.log('After DataTable constructor:', new Date().toISOString());
+
+    // Add event listener for opening and closing details
+    $('#schoolsTable tbody').on('click', 'td.dt-control', function() {
+        const tr = $(this).closest('tr');
+        const row = table.row(tr);
+
+        if (row.child.isShown()) {
+            // This row is already open - close it
+            row.child.hide();
+            tr.removeClass('parent');
+        } else {
+            // Open this row
+            const schoolName = tr.data('school');
+            row.child(formatProductTable(schoolName)).show();
+            tr.addClass('parent');
+        }
+    });
+
+    // Wait for table to be fully drawn before hiding preloader
+    table.one('draw.dt', function() {
+        console.log('draw.dt fired:', new Date().toISOString());
+
+        // Use requestAnimationFrame to ensure browser has painted
+        requestAnimationFrame(function() {
+            console.log('RAF 1 fired:', new Date().toISOString());
+
+            requestAnimationFrame(function() {
+                console.log('RAF 2 fired:', new Date().toISOString());
+
+                // Increased delay to ensure DataTables CSS and rendering is complete
+                setTimeout(function() {
+                    console.log('setTimeout fired:', new Date().toISOString());
+
+                    const tableVisible = $('#schoolsTable').is(':visible');
+                    const rowCount = $('#schoolsTable tbody tr').length;
+                    const hasDataTablesClass = $('#schoolsTable').hasClass('dataTable');
+
+                    console.log('Table visible:', tableVisible);
+                    console.log('Row count:', rowCount);
+                    console.log('Has DataTables class:', hasDataTablesClass);
+                    console.log('Hiding preloader NOW');
+
+                    $('#pagePreloader').removeClass('active');
+
+                    console.log('Preloader hidden:', new Date().toISOString());
+                    console.log('=== SCHOOL DEMAND PRELOADER DEBUG END ===');
+                }, 500);
+            });
+        });
+    });
+
+    // Fallback: if draw.dt doesn't fire within 5 seconds, hide preloader anyway
+    setTimeout(function() {
+        if ($('#pagePreloader').hasClass('active')) {
+            console.warn('FALLBACK: draw.dt did not fire, hiding preloader anyway');
+            $('#pagePreloader').removeClass('active');
+        }
+    }, 5000);
+});
 </script>
 {% endblock %}

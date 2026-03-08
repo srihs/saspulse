@@ -71,6 +71,16 @@ class CustomUser(models.Model):
         help_text="Roles assigned to this user"
     )
 
+    # Branch Assignment (for shop managers)
+    assigned_branch = models.ForeignKey(
+        'cin7.Branch',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='assigned_managers',
+        help_text="Assigned branch/shop for store managers"
+    )
+
     # Status & Flags
     is_active = models.BooleanField(
         default=False,
