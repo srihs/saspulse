@@ -486,6 +486,9 @@
                                                                     <button class="btn btn-sm btn-outline-success" data-sku="{{ variation.sku_code }}" data-forecast='{{ variation.forecast_data|tojson }}' onclick='viewChartFromButton(this)'>
                                                                         <i class="fas fa-chart-line"></i> Predicted Demand
                                                                     </button>
+                                                                    <button class="btn btn-sm btn-outline-primary ms-1" data-sku="{{ variation.sku_code }}" onclick="viewPastSales(this)">
+                                                                        <i class="fas fa-history"></i> Past Sales
+                                                                    </button>
                                                                 </td>
                                                             </tr>
                                                             {% endfor %}
@@ -527,6 +530,9 @@
                                                 </button>
                                                 <button class="btn btn-sm btn-outline-success" onclick="viewChart('{{ forecast.entity_name|escapejs }}', {{ forecast.forecast_data|safe }})">
                                                     <i class="fas fa-chart-line"></i> Predicted Demand
+                                                </button>
+                                                <button class="btn btn-sm btn-outline-primary ms-1" data-sku="{{ forecast.entity_name|escapejs }}" onclick="viewPastSales(this)">
+                                                    <i class="fas fa-history"></i> Past Sales
                                                 </button>
                                             </td>
                                         </tr>
@@ -589,6 +595,28 @@
             </div>
             <div class="modal-body">
                 <div id="forecastChart" style="width: 100%; height: 500px;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Past Sales Modal -->
+<div class="modal fade" id="pastSalesModal" tabindex="-1" aria-labelledby="pastSalesModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="pastSalesModalLabel">Past Sales History</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="pastSalesContent">
+                    <div class="text-center p-4">
+                        <div class="spinner-border" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-2">Loading historical sales data...</p>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -915,7 +943,10 @@ $(document).ready(function() {
                 html += '<td class="text-center text-muted">N/A</td>';
                 html += '<td class="text-center">' + Math.round(v.total_quantity) + '</td>';
                 html += '<td class="text-center"><span class="badge bg-secondary">N/A</span></td>';
-                html += '<td class="text-center"><button class="btn btn-sm btn-outline-success"><i class="fas fa-chart-line"></i> Predicted Demand</button></td>';
+                html += '<td class="text-center">';
+                html += '<button class="btn btn-sm btn-outline-success" data-sku="' + v.product_code + '" onclick="alert(\'Chart feature coming soon\')"><i class="fas fa-chart-line"></i> Predicted Demand</button>';
+                html += '<button class="btn btn-sm btn-outline-primary ms-1" data-sku="' + v.product_code + '" onclick="viewPastSales(this)"><i class="fas fa-history"></i> Past Sales</button>';
+                html += '</td>';
                 html += '</tr>';
             });
 
@@ -1394,6 +1425,62 @@ function viewChartFromButton(button) {
         console.error('Error parsing forecast data:', error);
         alert('Error loading forecast data. Please try again.');
     }
+}
+
+function viewPastSales(button) {
+    var sku = button.getAttribute('data-sku');
+    var startDate = '{{ start_date }}';
+    var endDate = '{{ end_date }}';
+
+    // Show modal
+    var modal = new bootstrap.Modal(document.getElementById('pastSalesModal'));
+    modal.show();
+
+    // Set modal title with SKU
+    document.getElementById('pastSalesModalLabel').textContent = 'Past Sales History - ' + sku;
+
+    // Show loading state
+    document.getElementById('pastSalesContent').innerHTML = `
+        <div class="text-center p-4">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2">Loading historical sales data...</p>
+        </div>
+    `;
+
+    // Fetch historical sales data via AJAX
+    // TODO: This will need a backend endpoint to fetch actual sales data
+    // For now, show a placeholder table
+    setTimeout(function() {
+        var currentYear = new Date().getFullYear();
+        var html = `
+            <h6 class="mb-3">Sales for period: ${startDate} to ${endDate}</h6>
+            <table class="table table-bordered table-hover">
+                <thead class="table-light">
+                    <tr>
+                        <th>Period</th>
+                        <th class="text-end">${currentYear - 2}</th>
+                        <th class="text-end">${currentYear - 1}</th>
+                        <th class="text-end">${currentYear}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Total Units Sold</strong></td>
+                        <td class="text-end">Loading...</td>
+                        <td class="text-end">Loading...</td>
+                        <td class="text-end">Loading...</td>
+                    </tr>
+                </tbody>
+            </table>
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle me-2"></i>
+                <strong>Note:</strong> Backend API endpoint needed to fetch actual historical sales data.
+            </div>
+        `;
+        document.getElementById('pastSalesContent').innerHTML = html;
+    }, 500);
 }
 
 // Dynamic Filter Management
