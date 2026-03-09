@@ -3124,25 +3124,31 @@ def forecast_product_breakdown(request, school_name):
 @login_required
 def store_manager_replenishment(request):
     """
-    Store Manager Replenishment Dashboard - PRODUCT-FIRST APPROACH
+    Store Manager Replenishment Dashboard
 
-    OPTIMIZED STRATEGY:
-    1. Start with ALL product forecasts (5,210 products)
-    2. Calculate 30-day demand from daily_forecasts JSON
-    3. JOIN with products and stock tables in a SINGLE query
-    4. Calculate stock gaps in-memory (fast)
-    5. GROUP BY school and branch to create hierarchy
-
-    BENEFITS:
-    - No N+1 queries (was querying each product individually)
-    - Shows ALL schools with stock gaps (not just 1)
-    - Faster: Single bulk query vs thousands of individual queries
-    - Scalable: Works with all 5,210 product forecasts
-
-    CACHING:
-    - Results cached for 1 hour to avoid 5-minute processing on every load
-    - Cache key includes date range and user role (admin vs shop manager)
+    Uses the same logic as school-level forecasting but with a fixed 30-60 day forward window.
+    This ensures identical UI and data processing while maintaining replenishment-specific time range.
     """
+    from datetime import date, timedelta
+    from django.http import QueryDict
+
+    # Calculate 30-60 day forward window for replenishment planning
+    today = date.today()
+    start_date = today + timedelta(days=30)
+    end_date = start_date + timedelta(days=30)  # 60 days from today
+
+    # Create a modified request with fixed date range and level=school
+    modified_GET = QueryDict(mutable=True)
+    modified_GET.update(request.GET)
+    modified_GET['level'] = 'school'
+    modified_GET['start_date'] = start_date.strftime('%Y-%m-%d')
+    modified_GET['end_date'] = end_date.strftime('%Y-%m-%d')
+    request.GET = modified_GET
+
+    # Call the sales_forecasting view with modified parameters
+    return sales_forecasting(request)
+
+    # OLD CODE BELOW (kept for reference but not executed)
     from dashboard.models import SalesForecastBase
     from django.db import connection
     from django.core.cache import cache
@@ -3227,6 +3233,8 @@ def store_manager_replenishment(request):
               FROM dashboard_salesforecastbase
               WHERE aggregation_level = 'product'
           )
+          AND p.category_name LIKE '%%Shop'
+          AND p.category_name NOT LIKE 'Wholesale%%'
           AND p.sub_category IS NOT NULL
           AND p.sub_category != ''
           AND sfb.monthly_demand_30 IS NOT NULL
