@@ -1935,7 +1935,8 @@ def sales_forecasting(request):
             'generating_forecasts': False,
             'no_forecasts_available': False,
             'using_365d_base': True,
-            'initial_load': True  # Flag to indicate this is initial page load without data
+            'initial_load': True,  # Flag to indicate this is initial page load without data
+            'is_replenishment_view': getattr(request, 'is_replenishment_view', False)
         }
         return render(request, 'dashboard/sales_forecasting.html', context)
 
@@ -1943,6 +1944,7 @@ def sales_forecasting(request):
     if cached_data:
         context = cached_data
         context['from_cache'] = True
+        context['is_replenishment_view'] = getattr(request, 'is_replenishment_view', False)
         return render(request, 'dashboard/sales_forecasting.html', context)
 
     # Try to use new SalesForecastBase model
@@ -2861,7 +2863,8 @@ def sales_forecasting(request):
         'no_forecasts_available': no_forecasts_available,  # New flag to distinguish "none available" vs "generating"
         'using_365d_base': not use_legacy,  # Flag to indicate using new 365-day base system
         'display_name': display_name,  # Dynamic display name based on filter
-        'has_filter': has_filter  # Boolean to indicate if any filter is active
+        'has_filter': has_filter,  # Boolean to indicate if any filter is active
+        'is_replenishment_view': getattr(request, 'is_replenishment_view', False)  # Hide filters for replenishment view
     }
 
     # Cache the context only if we have data (don't cache empty state)
@@ -3144,6 +3147,9 @@ def store_manager_replenishment(request):
     modified_GET['start_date'] = start_date.strftime('%Y-%m-%d')
     modified_GET['end_date'] = end_date.strftime('%Y-%m-%d')
     request.GET = modified_GET
+
+    # Mark this as a replenishment view (to hide filters in template)
+    request.is_replenishment_view = True
 
     # Call the sales_forecasting view with modified parameters
     return sales_forecasting(request)

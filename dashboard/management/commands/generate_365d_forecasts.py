@@ -176,6 +176,23 @@ class Command(BaseCommand):
                 skipped_count += 1
                 continue
 
+            # Check for recent sales - skip discontinued products
+            max_date = ts_data.index.max()
+            if isinstance(max_date, pd.Timestamp):
+                max_date = max_date.date()
+
+            import datetime as dt_module
+            days_since_last_sale = (dt_module.date.today() - max_date).days
+
+            if days_since_last_sale > 365:
+                self.stdout.write(
+                    self.style.WARNING(
+                        f'  Skipping {entity_name}: No sales in last {days_since_last_sale} days (discontinued product)'
+                    )
+                )
+                skipped_count += 1
+                continue
+
             # Skip if sales frequency is too low (< 5 sales/year on average)
             total_sales = ts_data['quantity'].sum()
             training_days = len(ts_data)
