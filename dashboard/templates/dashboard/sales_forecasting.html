@@ -121,16 +121,16 @@
 
     /* DataTables child row - Add left padding for visual indentation */
     table.dataTable tbody tr.child td {
-        padding-left: 58px !important;
-        padding-right: 0 !important;
+        padding-left: 15px !important;
+        padding-right: 10px !important;
         padding-top: 0 !important;
         padding-bottom: 0 !important;
         margin: 0 !important;
     }
 
     table.dataTable tbody tr.child td.child {
-        padding-left: 58px !important;
-        padding-right: 0 !important;
+        padding-left: 15px !important;
+        padding-right: 10px !important;
         padding-top: 0 !important;
         padding-bottom: 0 !important;
         margin: 0 !important;
@@ -143,8 +143,8 @@
 
     /* Inner variation table - Add left padding for indentation */
     .variation-group > td {
-        padding-left: 58px !important;
-        padding-right: 0 !important;
+        padding-left: 15px !important;
+        padding-right: 10px !important;
         padding-top: 0 !important;
         padding-bottom: 0 !important;
         margin: 0 !important;
@@ -152,8 +152,8 @@
 
     /* Also target any td inside shown parent row */
     tr.shown + tr > td {
-        padding-left: 58px !important;
-        padding-right: 0 !important;
+        padding-left: 15px !important;
+        padding-right: 10px !important;
         padding-top: 0 !important;
         padding-bottom: 0 !important;
     }
@@ -211,6 +211,34 @@
     }
 
     .variation-group table.table {
+        margin-bottom: 0 !important;
+    }
+
+    /* Location parent rows (3-level shop view) */
+    .location-parent-row {
+        cursor: pointer;
+        background-color: #e8f5e9 !important; /* Light green for locations */
+    }
+
+    .location-parent-row:hover {
+        background-color: #c8e6c9 !important; /* Darker green on hover */
+    }
+
+    /* School rows within location (3-level shop view) */
+    .location-school-row {
+        cursor: pointer;
+        background-color: #e3f2fd !important; /* Light blue for schools */
+    }
+
+    .location-school-row:hover {
+        background-color: #bbdefb !important; /* Darker blue on hover */
+    }
+
+    .location-schools-group table {
+        margin-bottom: 0 !important;
+    }
+
+    .location-school-variations-group table {
         margin-bottom: 0 !important;
     }
 </style>
@@ -441,6 +469,12 @@
                                                style="font-size: 0.85rem; cursor: help;"></i>
                                         </th>
                                         <th>Actions</th>
+                                        {% elif render_level == 'shop' %}
+                                        <th></th>
+                                        <th width="30%">Location / School</th>
+                                        <th>Total Forecast</th>
+                                        <th>Count</th>
+                                        <th>Actions</th>
                                         {% else %}
                                         <th></th>
                                         <th>{{ summary.level_display }}</th>
@@ -456,7 +490,104 @@
                                 </thead>
                                 <tbody>
                                     {% for forecast in forecasts %}
-                                        {% if forecast.is_school_grouped %}
+                                        {% if forecast.is_shop_grouped %}
+                                        <!-- ========== 3-LEVEL NESTED VIEW: LOCATION -> SCHOOL -> PRODUCT ========== -->
+                                        <tr class="location-parent-row clickable" data-location-id="{{ forloop.counter }}" style="background-color: #e8f5e9;">
+                                            <td class="dt-control"></td>
+                                            <td>
+                                                <strong><i class="fas fa-map-marker-alt me-2"></i>{{ forecast.location_name }}</strong>
+                                            </td>
+                                            <td><strong>{{ forecast.total_quantity|floatformat:0 }} units</strong></td>
+                                            <td>
+                                                <span class="badge bg-success">{{ forecast.school_count }} school{{ forecast.school_count|pluralize }}</span>
+                                            </td>
+                                            <td>
+                                                <small class="text-muted">Click to expand</small>
+                                            </td>
+                                        </tr>
+
+                                        <!-- Location Schools (Collapsed by default) -->
+                                        <tr class="location-schools-group" id="location-schools-{{ forloop.counter }}">
+                                            <td colspan="5" style="padding: 0 !important; margin: 0 !important; background-color: #f5f5f5;">
+                                                <!-- Nested table for schools within location -->
+                                                <div style="padding-left: 58px; padding-right: 0; padding-top: 0.5rem; padding-bottom: 0.5rem;">
+                                                    <table class="table table-sm mb-0" style="width: 100%; background-color: white;">
+                                                        <tbody>
+                                                            {% for school in forecast.schools %}
+                                                            <!-- School Parent Row (within location) -->
+                                                            <tr class="location-school-row clickable" data-location-school-id="{{ forloop.parentloop.counter }}-{{ forloop.counter }}" style="background-color: #e3f2fd;">
+                                                                <td style="width: 40px;">
+                                                                    <span class="dt-control-nested"></span>
+                                                                </td>
+                                                                <td>
+                                                                    <strong><i class="fas fa-school me-2"></i>{{ school.school_name }}</strong>
+                                                                </td>
+                                                                <td><strong>{{ school.total_quantity|floatformat:0 }} units</strong></td>
+                                                                <td>
+                                                                    <span class="badge bg-primary">{{ school.variation_count }} variation{{ school.variation_count|pluralize }}</span>
+                                                                </td>
+                                                                <td>
+                                                                    <small class="text-muted">Click to expand</small>
+                                                                </td>
+                                                            </tr>
+
+                                                            <!-- School Variations (Collapsed by default) -->
+                                                            <tr class="location-school-variations-group" id="location-school-variations-{{ forloop.parentloop.counter }}-{{ forloop.counter }}" style="display: none;">
+                                                                <td colspan="5" style="padding: 0 !important; background-color: #fafafa;">
+                                                                    <!-- Variations Table -->
+                                                                    <div style="padding-left: 15px; padding-right: 10px; padding-top: 0.5rem; padding-bottom: 0.5rem;">
+                                                                        <table class="table table-sm mb-0" style="width: 100%; background-color: white; font-size: 0.9rem;">
+                                                                            <thead class="table-light">
+                                                                                <tr>
+                                                                                    <th class="text-start">Product Name</th>
+                                                                                    <th class="text-start">SKU Code</th>
+                                                                                    <th class="text-start">Variation</th>
+                                                                                    <th class="text-end">Stock in Hand</th>
+                                                                                    <th class="text-end">Incoming Stock</th>
+                                                                                    <th class="text-end">Forecasted Stock</th>
+                                                                                    <th class="text-center">Stock Shortage</th>
+                                                                                    <th class="text-center">Actions</th>
+                                                                                </tr>
+                                                                            </thead>
+                                                                            <tbody>
+                                                                                {% for variation in school.variations %}
+                                                                                <tr>
+                                                                                    <td class="text-start align-middle">{{ variation.product_name }}</td>
+                                                                                    <td class="text-start align-middle"><code>{{ variation.sku_code }}</code></td>
+                                                                                    <td class="text-start align-middle"><strong>{{ variation.size }}</strong></td>
+                                                                                    <td class="text-end align-middle">{{ variation.stock_on_hand|floatformat:0 }}</td>
+                                                                                    <td class="text-end align-middle">{{ variation.incoming_stock|floatformat:0 }}</td>
+                                                                                    <td class="text-end align-middle">{{ variation.total_quantity|floatformat:0 }}</td>
+                                                                                    <td class="text-center align-middle">
+                                                                                        {% if variation.stock_gap < 0 %}
+                                                                                            <span class="badge bg-danger">{{ variation.stock_gap|floatformat:0 }}</span>
+                                                                                        {% else %}
+                                                                                            <span class="badge bg-secondary">{{ variation.stock_gap|floatformat:0 }}</span>
+                                                                                        {% endif %}
+                                                                                    </td>
+                                                                                    <td class="text-center align-middle">
+                                                                                        <button class="btn btn-sm btn-outline-success" data-sku="{{ variation.sku_code }}" data-forecast='{{ variation.forecast_data|safe }}' onclick='viewChartFromButton(this)'>
+                                                                                            <i class="fas fa-chart-line"></i>
+                                                                                        </button>
+                                                                                        <button class="btn btn-sm btn-outline-primary ms-1" data-sku="{{ variation.sku_code }}" onclick="viewPastSales(this)">
+                                                                                            <i class="fas fa-history"></i>
+                                                                                        </button>
+                                                                                    </td>
+                                                                                </tr>
+                                                                                {% endfor %}
+                                                                            </tbody>
+                                                                        </table>
+                                                                    </div>
+                                                                </td>
+                                                            </tr>
+                                                            {% endfor %}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </td>
+                                        </tr>
+
+                                        {% elif forecast.is_school_grouped %}
                                         <!-- School Parent Row (Simplified 2-Level View) -->
                                         <tr class="school-parent-row clickable" data-school-id="{{ forloop.counter }}" style="background-color: #e3f2fd;">
                                             <td class="dt-control"></td>
@@ -476,14 +607,14 @@
                                         <tr class="school-variations-group" id="school-variations-{{ forloop.counter }}">
                                             <td colspan="5" style="padding: 0 !important; margin: 0 !important; background-color: #f5f5f5;">
                                                 <!-- Info Alert -->
-                                                <div class="alert alert-info mb-0" style="font-size: 0.85rem; padding: 0.5rem 1rem; margin: 0.5rem 58px 0 58px !important;">
+                                                <div class="alert alert-info mb-0" style="font-size: 0.85rem; padding: 0.5rem 1rem; margin: 0.5rem 15px 0 15px !important;">
                                                     <i class="fas fa-info-circle me-2"></i>
                                                     <strong>Note:</strong> Only variations with at least 10 historical sales are forecasted to ensure statistical accuracy.
                                                     Low-volume sizes (e.g., 2XS, 3XL, 4XL) may not appear if they have insufficient sales history.
                                                 </div>
 
                                                 <!-- Variations Table (Direct under school) -->
-                                                <div style="padding-left: 58px; padding-right: 0; padding-top: 0.5rem; padding-bottom: 0.5rem;">
+                                                <div style="padding-left: 15px; padding-right: 10px; padding-top: 0.5rem; padding-bottom: 0.5rem;">
                                                     <table class="table table-sm mb-0" style="width: 100%; table-layout: auto; background-color: white; font-size: 0.9rem;">
                                                         <thead class="table-light">
                                                             <tr>
@@ -493,7 +624,7 @@
                                                                 <th class="text-end">Stock in Hand</th>
                                                                 <th class="text-end">Incoming Stock</th>
                                                                 <th class="text-end">Forecasted Stock</th>
-                                                                <th class="text-center">Stock Gap</th>
+                                                                <th class="text-center">Stock Shortage</th>
                                                                 <th class="text-center">Actions</th>
                                                             </tr>
                                                         </thead>
@@ -507,10 +638,10 @@
                                                                 <td class="text-end align-middle">{{ variation.incoming_stock|floatformat:0 }}</td>
                                                                 <td class="text-end align-middle">{{ variation.total_quantity|floatformat:0 }}</td>
                                                                 <td class="text-center align-middle">
-                                                                    {% if variation.stock_gap >= 0 %}
-                                                                        <span class="badge bg-success">+{{ variation.stock_gap|floatformat:0 }}</span>
-                                                                    {% else %}
+                                                                    {% if variation.stock_gap < 0 %}
                                                                         <span class="badge bg-danger">{{ variation.stock_gap|floatformat:0 }}</span>
+                                                                    {% else %}
+                                                                        <span class="badge bg-secondary">{{ variation.stock_gap|floatformat:0 }}</span>
                                                                     {% endif %}
                                                                 </td>
                                                                 <td class="text-center align-middle">
@@ -546,7 +677,7 @@
 
                                         <!-- Variation Rows (Collapsed by default) -->
                                         <tr class="variation-group" id="variations-{{ forloop.counter }}">
-                                            <td colspan="5" style="padding-top: 0 !important; padding-bottom: 0 !important; padding-left: 58px !important; padding-right: 0 !important; margin: 0 !important; background-color: #f8f9fa;">
+                                            <td colspan="5" style="padding-top: 0 !important; padding-bottom: 0 !important; padding-left: 15px !important; padding-right: 10px !important; margin: 0 !important; background-color: #f8f9fa;">
                                                 <!-- Info Alert -->
                                                 <div class="alert alert-info mb-0" style="font-size: 0.85rem; padding: 0.5rem 1rem; margin: 0.5rem 0 0 0 !important; border-radius: 0 !important; width: 100%;">
                                                     <i class="fas fa-info-circle me-2"></i>
@@ -562,7 +693,7 @@
                                                                 <th class="text-end">Stock in Hand</th>
                                                                 <th class="text-end">Incoming Stock</th>
                                                                 <th class="text-end">Forecasted Stock</th>
-                                                                <th class="text-center">Stock Gap</th>
+                                                                <th class="text-center">Stock Shortage</th>
                                                                 <th class="text-center">Actions</th>
                                                             </tr>
                                                         </thead>
@@ -576,10 +707,10 @@
                                                                 <td class="text-end align-middle">{{ variation.incoming_stock|floatformat:0 }}</td>
                                                                 <td class="text-end align-middle">{{ variation.total_quantity|floatformat:0 }}</td>
                                                                 <td class="text-center align-middle">
-                                                                    {% if variation.stock_gap >= 0 %}
-                                                                        <span class="badge bg-success">+{{ variation.stock_gap|floatformat:0 }}</span>
-                                                                    {% else %}
+                                                                    {% if variation.stock_gap < 0 %}
                                                                         <span class="badge bg-danger">{{ variation.stock_gap|floatformat:0 }}</span>
+                                                                    {% else %}
+                                                                        <span class="badge bg-secondary">{{ variation.stock_gap|floatformat:0 }}</span>
                                                                     {% endif %}
                                                                 </td>
                                                                 <td class="text-center align-middle">
@@ -783,7 +914,70 @@ $(document).ready(function() {
     console.log('School grouped view:', isSchoolGroupedView);
     console.log('Preloader active:', $('#pagePreloader').hasClass('active'));
 
-    if (isSchoolGroupedView) {
+    // Detect if this is a shop-grouped view (3-level: location -> school -> product)
+    var isShopGroupedView = $('.location-parent-row').length > 0;
+
+    console.log('View type detection:', {
+        isShopGroupedView: isShopGroupedView,
+        isSchoolGroupedView: isSchoolGroupedView,
+        isGroupedView: isGroupedView
+    });
+
+    if (isShopGroupedView) {
+        // ========== 3-LEVEL NESTED VIEW: LOCATION -> SCHOOL -> PRODUCT ==========
+        // Store location schools data before DataTables processes the table
+        var locationSchoolsData = {};
+
+        $('.location-parent-row').each(function() {
+            var locationId = $(this).data('location-id');
+            var locationSchoolsRow = $(this).next('.location-schools-group');
+            if (locationSchoolsRow.length && locationId) {
+                locationSchoolsData[locationId] = locationSchoolsRow.html();
+            }
+        });
+
+        // Remove location schools rows from DOM before DataTables init
+        $('.location-schools-group').remove();
+
+        console.log('Initializing DataTable for shop-grouped view');
+
+        // Initialize DataTables on clean location parent rows only
+        var table = $('#forecastsTable').DataTable({
+            order: [[1, 'asc']], // Order by Location Name
+            pageLength: 25,
+            dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>rtip',
+            columnDefs: [
+                { className: 'dt-control', orderable: false, targets: 0 },
+                { orderable: false, targets: [3, 4] }
+            ],
+            displayLength: 25,
+            initComplete: function() {
+                console.log('✓ DataTable initComplete (shop-grouped)');
+            }
+        });
+
+        table.one('draw.dt', function() {
+            console.log('✓ DataTable draw.dt (shop-grouped)');
+
+            requestAnimationFrame(function() {
+                requestAnimationFrame(function() {
+                    setTimeout(function() {
+                        $('#pagePreloader').removeClass('active');
+                        console.log('✓ Preloader hidden (shop-grouped)');
+                    }, 500);
+                });
+            });
+        });
+
+        // Fallback timeout
+        setTimeout(function() {
+            if ($('#pagePreloader').hasClass('active')) {
+                console.warn('⚠ FALLBACK: Hiding preloader (shop-grouped)');
+                $('#pagePreloader').removeClass('active');
+            }
+        }, 5000);
+
+    } else if (isSchoolGroupedView) {
         // For school-grouped view, we need to handle school/variation rows (2-level structure)
         // Store school variations data before DataTables processes the table
         var schoolVariationsData = {};
@@ -1010,6 +1204,29 @@ $(document).ready(function() {
         }, 5000);
     }
 
+    // Format function for location schools (3-level view)
+    function formatLocationSchools(locationId) {
+        return locationSchoolsData[locationId] || '<p>No school data available</p>';
+    }
+
+    // Click handler for nested school rows within locations
+    function attachSchoolClickHandlers() {
+        $('.location-school-row').off('click').on('click', function(e) {
+            e.stopPropagation();
+
+            var schoolId = $(this).data('location-school-id');
+            var variationsRow = $('#location-school-variations-' + schoolId);
+
+            if (variationsRow.is(':visible')) {
+                variationsRow.hide();
+                $(this).removeClass('shown');
+            } else {
+                variationsRow.show();
+                $(this).addClass('shown');
+            }
+        });
+    }
+
     // Format function for school variations child rows
     function formatSchoolVariations(schoolId) {
         return schoolVariationsData[schoolId] || '<p>No variation data available</p>';
@@ -1105,7 +1322,7 @@ $(document).ready(function() {
             html += '</tr>';
 
             // Child rows (hidden by default)
-            html += '<tr id="' + rowId + '" style="display: none;"><td colspan="5" style="padding-top: 0 !important; padding-bottom: 0 !important; padding-left: 58px !important; padding-right: 0 !important; margin: 0; background-color: #fff;">';
+            html += '<tr id="' + rowId + '" style="display: none;"><td colspan="5" style="padding-top: 0 !important; padding-bottom: 0 !important; padding-left: 15px !important; padding-right: 10px !important; margin: 0; background-color: #fff;">';
             html += '<table class="table table-sm mb-0" style="font-size: 0.85rem; table-layout: auto; width: 100%;">';
             html += '<thead style="background-color: #e9ecef;"><tr>';
             html += '<th>Product Name</th>';
@@ -1114,7 +1331,7 @@ $(document).ready(function() {
             html += '<th class="text-center">Stock in Hand</th>';
             html += '<th class="text-center">Incoming Stock</th>';
             html += '<th class="text-center">Forecasted Stock</th>';
-            html += '<th class="text-center">Stock Gap</th>';
+            html += '<th class="text-center">Stock Shortage</th>';
             html += '<th>Actions</th>';
             html += '</tr></thead><tbody>';
 
@@ -1174,7 +1391,15 @@ $(document).ready(function() {
             tr.removeClass('shown');
         } else {
             // Show child row
-            if (isSchoolGroupedView) {
+            if (isShopGroupedView) {
+                // Shop grouped view: show schools within location
+                var locationId = tr.data('location-id');
+                row.child(formatLocationSchools(locationId)).show();
+                tr.addClass('shown');
+
+                // Attach click handlers to nested school rows
+                attachSchoolClickHandlers();
+            } else if (isSchoolGroupedView) {
                 // School grouped view: show variations within school
                 var schoolId = tr.data('school-id');
                 row.child(formatSchoolVariations(schoolId)).show();

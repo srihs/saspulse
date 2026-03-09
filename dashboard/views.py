@@ -1517,12 +1517,13 @@ def forecasting_filter_options(request):
         'categories': []
     }
 
-    # Get schools (sub_category from Shop categories only, NOT Wholesale Schools)
+    # Get schools (sub_category from Shop categories only, excluding Wholesale)
     with connection.cursor() as cursor:
         cursor.execute("""
             SELECT DISTINCT sub_category
             FROM cin7_sync_product
-            WHERE category_name LIKE '%% Shop'
+            WHERE category_name LIKE '%%Shop'
+              AND category_name NOT LIKE 'Wholesale%%'
               AND sub_category IS NOT NULL
               AND sub_category != ''
             ORDER BY sub_category
@@ -1534,7 +1535,8 @@ def forecasting_filter_options(request):
         cursor.execute("""
             SELECT DISTINCT p.name, p.cin7_id
             FROM cin7_sync_product p
-            WHERE p.category_name LIKE '%% Shop'
+            WHERE p.category_name LIKE '%%Shop'
+              AND p.category_name NOT LIKE 'Wholesale%%'
               AND p.name IS NOT NULL
             ORDER BY p.name
         """)
@@ -1955,14 +1957,16 @@ def sales_forecasting(request):
         logger.info(f'=== SHOP-LEVEL FORECAST REQUEST ===')
         logger.info(f'Date range: {start_date_str} to {end_date_str}')
         logger.info(f'Search query: {search_query}')
-        logger.info('Showing product breakdown for shop')
+        logger.info(f'Shop filter: {shop_filter}')
 
-        # Switch to product-level view, optionally filtered by shop (category_name)
+        # Query product-level forecasts, optionally filtered by shop (category_name)
         sql = """
             SELECT DISTINCT sf.id, sf.forecast_id, sf.model_type, sf.aggregation_level,
                    sf.entity_name, sf.entity_id, sf.daily_forecasts, sf.forecast_date,
                    sf.training_data_start, sf.training_data_end, sf.mae, sf.mape, sf.rmse,
-                   sf.accuracy_score, sf.model_params, sf.created_at, sf.updated_at
+                   sf.accuracy_score, sf.model_params, sf.created_at, sf.updated_at,
+                   p.category_name as location_name,
+                   p.sub_category as school_name
             FROM dashboard_salesforecastbase sf
             LEFT JOIN cin7_sync_productoption po ON po.code = sf.entity_name
             LEFT JOIN cin7_sync_product p ON p.cin7_id = po.cin7_product_id
@@ -1975,22 +1979,25 @@ def sales_forecasting(request):
             sql += " AND p.category_name = %s"
             params.append(shop_filter)
         else:
-            # Show all shop products (exclude Wholesale Schools)
-            sql += " AND p.category_name LIKE %s"
-            params.append('% Shop')
+            # Show all shop products
+            sql += " AND p.category_name LIKE '%%Shop'"
+
+        # Filter out products without school assignment
+        sql += " AND p.sub_category IS NOT NULL AND p.sub_category != ''"
 
         # Add search query if provided
         if search_query:
-            sql += " AND (sf.entity_name LIKE %s OR p.name LIKE %s)"
-            params.extend([f'%{search_query}%', f'%{search_query}%'])
+            sql += " AND (sf.entity_name LIKE %s OR p.name LIKE %s OR p.sub_category LIKE %s OR p.category_name LIKE %s)"
+            params.extend([f'%{search_query}%', f'%{search_query}%', f'%{search_query}%', f'%{search_query}%'])
 
-        sql += " ORDER BY p.name, sf.entity_name, sf.forecast_date DESC"
+        sql += " ORDER BY p.category_name, p.sub_category, p.name, sf.entity_name, sf.forecast_date DESC"
 
         # Execute raw SQL and convert to model instances
         all_base_forecasts = SalesForecastBase.objects.raw(sql, params)
 
-        # IMPORTANT: Set level to 'product' for template rendering
-        level = 'product'
+        # IMPORTANT: Keep level as 'shop' for template rendering (don't switch to 'product')
+        # The template will detect shop_filter and render accordingly
+        # level stays as 'shop'
 
         # Keep only the latest forecast for each entity_name
         seen_entities = set()
@@ -2020,6 +2027,7 @@ def sales_forecasting(request):
                 LEFT JOIN cin7_sync_product p ON p.cin7_id = po.cin7_product_id
                 WHERE sf.aggregation_level = 'product'
                   AND p.category_name LIKE '%%Shop'
+                  AND p.category_name NOT LIKE 'Wholesale%%'
                   AND p.sub_category IS NOT NULL
                   AND p.sub_category != ''
             """
@@ -2186,24 +2194,16 @@ def sales_forecasting(request):
             # Set flag to show "no data" message instead of "generating" message
             # This prevents the auto-refresh JavaScript from triggering
             no_forecasts_available = True
-            if level == 'shop':
-                logger.warning(f'No shop-level forecasts found in database (neither base nor legacy)')
-                logger.warning(f'Returning no_forecasts_available=True to prevent infinite refresh')
         else:
             no_forecasts_available = False
-    elif level != 'shop':
-        # For non-shop levels, use base_forecasts
+    else:
+        # For shop and other levels with base_forecasts, use base_forecasts
         forecasts = base_forecasts
         use_legacy = False
         no_forecasts_available = False
 
     # Check if we need to group by parent product
-    if level == 'shop':
-        # Shop forecasts are already in forecast_list from aggregation above
-        # No further processing needed - skip to summary
-        pass
-
-    elif level == 'product':
+    if level == 'product':
         # Group SKU variations by parent product
         grouped_products = defaultdict(list)
 
@@ -2244,6 +2244,10 @@ def sales_forecasting(request):
             product_name = stock_info['product_name']
             forecasted_stock = round(total_qty, 1)
             stock_gap = (stock_on_hand + incoming_stock) - forecasted_stock
+
+            # Filter: Only show products with negative stock gap (shortages)
+            if total_qty == 0 or stock_gap >= 0:
+                continue
 
             variation_data = {
                 'sku_code': f.entity_name,
@@ -2290,6 +2294,280 @@ def sales_forecasting(request):
 
         # Sort by total quantity descending
         forecast_list = sorted(forecast_list, key=lambda x: x['total_quantity'], reverse=True)[:500]  # Increased limit to 500 products (was 200)
+
+    elif level == 'shop':
+        # SHOP-LEVEL NESTED VIEW: 3-level (location → school → product) or 2-level (school → product)
+        from collections import defaultdict
+        from cin7.models import ProductOption
+        import logging
+
+        logger = logging.getLogger(__name__)
+
+        # Initialize forecast_list to prevent UnboundLocalError if forecasts is empty
+        forecast_list = []
+
+        if shop_filter:
+            # WITH shop_filter: 2-level school/product grouping (similar to school view)
+            logger.info(f'Shop filter provided: {shop_filter} - Using 2-level school/product view')
+
+            # Group forecasts by school
+            school_groups = defaultdict(list)
+
+            # Build SKU -> school mapping
+            sku_to_school = {}
+            for f in forecasts:
+                school_name = getattr(f, 'school_name', None)
+                if school_name:
+                    sku_to_school[f.entity_name] = school_name
+                else:
+                    try:
+                        po = ProductOption.objects.select_related('product').get(code=f.entity_name)
+                        school_name = po.product.sub_category or 'Uncategorized'
+                        sku_to_school[f.entity_name] = school_name
+                    except ProductOption.DoesNotExist:
+                        logger.warning(f'ProductOption not found for SKU: {f.entity_name}')
+                        continue
+
+            # Group forecasts by school
+            for f in forecasts:
+                school_name = sku_to_school.get(f.entity_name)
+                if school_name:
+                    school_groups[school_name].append(f)
+
+            # Process each school group
+            forecast_list = []
+            for school_name, school_forecasts in sorted(school_groups.items()):
+                school_variations = []
+                school_total_quantity = 0
+
+                for f in school_forecasts:
+                    size = extract_size_from_sku(f.entity_name)
+
+                    # Extract forecast data for the selected date range
+                    if use_legacy:
+                        date_range_data = {}
+                        for date_str, forecast_data in f.forecast_data.items():
+                            forecast_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+                            if start_date <= forecast_date <= end_date:
+                                date_range_data[date_str] = forecast_data
+                    else:
+                        date_range_data = f.get_date_range_forecast(start_date, end_date)
+
+                    # Calculate total quantity
+                    total_qty = sum([day['quantity'] for day in date_range_data.values()])
+
+                    # Skip if zero
+                    if total_qty == 0:
+                        continue
+
+                    # Get first 7 days detail
+                    forecast_dates = sorted(date_range_data.keys())[:7]
+                    next_7_days = [
+                        {
+                            'date': date,
+                            'quantity': date_range_data[date]['quantity'],
+                            'confidence_lower': date_range_data[date].get('confidence_lower', 0),
+                            'confidence_upper': date_range_data[date].get('confidence_upper', 0)
+                        }
+                        for date in forecast_dates
+                    ]
+
+                    # Get stock data
+                    stock_info = get_stock_data(f.entity_name)
+                    stock_on_hand = stock_info['stock_on_hand']
+                    incoming_stock = stock_info['incoming']
+                    product_name = stock_info['product_name']
+                    forecasted_stock = round(total_qty, 1)
+                    stock_gap = (stock_on_hand + incoming_stock) - forecasted_stock
+
+                    # Filter: Only show products with negative stock gap (shortages)
+                    if stock_gap >= 0:
+                        continue
+
+                    variation_data = {
+                        'sku_code': f.entity_name,
+                        'product_name': product_name,
+                        'size': size,
+                        'total_quantity': forecasted_stock,
+                        'stock_on_hand': int(stock_on_hand),
+                        'incoming_stock': int(incoming_stock),
+                        'stock_gap': round(stock_gap, 1),
+                        'accuracy_score': round(f.accuracy_score, 1) if f.accuracy_score is not None else 'N/A',
+                        'model': f.model_params.get('model', 'Unknown'),
+                        'next_7_days': next_7_days,
+                        'forecast_data': date_range_data,
+                        'training_days': f.model_params.get('training_days', 0),
+                        'mae': round(f.mae, 2) if f.mae else None,
+                        'mape': round(f.mape, 2) if f.mape else None
+                    }
+
+                    school_variations.append(variation_data)
+                    school_total_quantity += forecasted_stock
+
+                # Add school if it has variations
+                if school_variations:
+                    # Sort variations by product name, then by size
+                    school_variations = sorted(school_variations, key=lambda x: (
+                        x['product_name'],
+                        int(x['size']) if x['size'].isdigit() else 999,
+                        x['size']
+                    ))
+
+                    forecast_list.append({
+                        'school_name': school_name,
+                        'entity_name': school_name,
+                        'total_quantity': round(school_total_quantity, 1),
+                        'variation_count': len(school_variations),
+                        'variations': school_variations,
+                        'is_school_grouped': True  # Use same flag as school view
+                    })
+
+            # Sort schools by total quantity descending
+            forecast_list = sorted(forecast_list, key=lambda x: x['total_quantity'], reverse=True)[:100]
+
+        else:
+            # WITHOUT shop_filter: 3-level location/school/product nested view
+            logger.info('No shop filter - Using 3-level location/school/product view')
+
+            # Group forecasts by location -> school
+            location_groups = defaultdict(lambda: defaultdict(list))
+
+            # Build SKU -> location/school mapping
+            sku_to_location = {}
+            sku_to_school = {}
+            for f in forecasts:
+                location_name = getattr(f, 'location_name', None)
+                school_name = getattr(f, 'school_name', None)
+
+                if location_name and school_name:
+                    sku_to_location[f.entity_name] = location_name
+                    sku_to_school[f.entity_name] = school_name
+                else:
+                    try:
+                        po = ProductOption.objects.select_related('product').get(code=f.entity_name)
+                        location_name = po.product.category_name
+                        school_name = po.product.sub_category or 'Uncategorized'
+                        sku_to_location[f.entity_name] = location_name
+                        sku_to_school[f.entity_name] = school_name
+                    except ProductOption.DoesNotExist:
+                        logger.warning(f'ProductOption not found for SKU: {f.entity_name}')
+                        continue
+
+            # Group forecasts by location -> school
+            for f in forecasts:
+                location_name = sku_to_location.get(f.entity_name)
+                school_name = sku_to_school.get(f.entity_name)
+                if location_name and school_name:
+                    location_groups[location_name][school_name].append(f)
+
+            # Process each location
+            forecast_list = []
+            for location_name, schools in sorted(location_groups.items()):
+                location_schools = []
+                location_total_quantity = 0
+
+                # Process each school within this location
+                for school_name, school_forecasts in sorted(schools.items()):
+                    school_variations = []
+                    school_total_quantity = 0
+
+                    for f in school_forecasts:
+                        size = extract_size_from_sku(f.entity_name)
+
+                        # Extract forecast data for the selected date range
+                        if use_legacy:
+                            date_range_data = {}
+                            for date_str, forecast_data in f.forecast_data.items():
+                                forecast_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+                                if start_date <= forecast_date <= end_date:
+                                    date_range_data[date_str] = forecast_data
+                        else:
+                            date_range_data = f.get_date_range_forecast(start_date, end_date)
+
+                        # Calculate total quantity
+                        total_qty = sum([day['quantity'] for day in date_range_data.values()])
+
+                        # Skip if zero
+                        if total_qty == 0:
+                            continue
+
+                        # Get first 7 days detail
+                        forecast_dates = sorted(date_range_data.keys())[:7]
+                        next_7_days = [
+                            {
+                                'date': date,
+                                'quantity': date_range_data[date]['quantity'],
+                                'confidence_lower': date_range_data[date].get('confidence_lower', 0),
+                                'confidence_upper': date_range_data[date].get('confidence_upper', 0)
+                            }
+                            for date in forecast_dates
+                        ]
+
+                        # Get stock data
+                        stock_info = get_stock_data(f.entity_name)
+                        stock_on_hand = stock_info['stock_on_hand']
+                        incoming_stock = stock_info['incoming']
+                        product_name = stock_info['product_name']
+                        forecasted_stock = round(total_qty, 1)
+                        stock_gap = (stock_on_hand + incoming_stock) - forecasted_stock
+
+                        # Filter: Only show products with negative stock gap (shortages)
+                        if stock_gap >= 0:
+                            continue
+
+                        variation_data = {
+                            'sku_code': f.entity_name,
+                            'product_name': product_name,
+                            'size': size,
+                            'total_quantity': forecasted_stock,
+                            'stock_on_hand': int(stock_on_hand),
+                            'incoming_stock': int(incoming_stock),
+                            'stock_gap': round(stock_gap, 1),
+                            'accuracy_score': round(f.accuracy_score, 1) if f.accuracy_score is not None else 'N/A',
+                            'model': f.model_params.get('model', 'Unknown'),
+                            'next_7_days': next_7_days,
+                            'forecast_data': date_range_data,
+                            'training_days': f.model_params.get('training_days', 0),
+                            'mae': round(f.mae, 2) if f.mae else None,
+                            'mape': round(f.mape, 2) if f.mape else None
+                        }
+
+                        school_variations.append(variation_data)
+                        school_total_quantity += forecasted_stock
+
+                    # Add school if it has variations
+                    if school_variations:
+                        # Sort variations by product name, then by size
+                        school_variations = sorted(school_variations, key=lambda x: (
+                            x['product_name'],
+                            int(x['size']) if x['size'].isdigit() else 999,
+                            x['size']
+                        ))
+
+                        location_schools.append({
+                            'school_name': school_name,
+                            'total_quantity': round(school_total_quantity, 1),
+                            'variation_count': len(school_variations),
+                            'variations': school_variations
+                        })
+                        location_total_quantity += school_total_quantity
+
+                # Add location if it has schools
+                if location_schools:
+                    # Sort schools by total quantity descending
+                    location_schools = sorted(location_schools, key=lambda x: x['total_quantity'], reverse=True)
+
+                    forecast_list.append({
+                        'location_name': location_name,
+                        'entity_name': location_name,  # For compatibility
+                        'total_quantity': round(location_total_quantity, 1),
+                        'school_count': len(location_schools),
+                        'schools': location_schools,
+                        'is_shop_grouped': True  # NEW FLAG for 3-level view
+                    })
+
+            # Sort locations by total quantity descending
+            forecast_list = sorted(forecast_list, key=lambda x: x['total_quantity'], reverse=True)[:50]  # Limit to 50 locations
 
     elif level == 'school':
         # SIMPLIFIED SCHOOL VIEW: Group variations by school (2-level structure)
@@ -2466,12 +2744,41 @@ def sales_forecasting(request):
     # Get summary statistics
     # Calculate average accuracy from the forecast list
     if level == 'shop':
-        # For shop level, forecast_list is already populated by aggregation
-        accuracy_scores = [f['accuracy_score'] for f in forecast_list if f.get('accuracy_score') != 'N/A']
+        # For shop level, extract accuracy scores from nested variations within schools
+        accuracy_scores = []
+        for location in forecast_list:
+            if location.get('is_shop_grouped'):
+                for school in location.get('schools', []):
+                    for variation in school.get('variations', []):
+                        acc = variation.get('accuracy_score')
+                        if acc is not None and acc != 'N/A':
+                            accuracy_scores.append(acc)
+            elif location.get('is_school_grouped'):
+                # 2-level shop view (when shop filter is provided)
+                for variation in location.get('variations', []):
+                    acc = variation.get('accuracy_score')
+                    if acc is not None and acc != 'N/A':
+                        accuracy_scores.append(acc)
+        avg_accuracy = round(sum(accuracy_scores) / len(accuracy_scores), 1) if accuracy_scores else 0
+    elif level == 'school':
+        # For school level, extract accuracy scores from nested variations
+        accuracy_scores = []
+        for school in forecast_list:
+            if school.get('is_school_grouped'):
+                for variation in school.get('variations', []):
+                    acc = variation.get('accuracy_score')
+                    if acc is not None and acc != 'N/A':
+                        accuracy_scores.append(acc)
         avg_accuracy = round(sum(accuracy_scores) / len(accuracy_scores), 1) if accuracy_scores else 0
     elif level == 'product':
-        # For product level, forecasts is a list, calculate manually
-        accuracy_scores = [f.accuracy_score for f in forecasts if f.accuracy_score is not None]
+        # For product level, extract from nested variations
+        accuracy_scores = []
+        for product in forecast_list:
+            if product.get('is_grouped'):
+                for variation in product.get('variations', []):
+                    acc = variation.get('accuracy_score')
+                    if acc is not None and acc != 'N/A':
+                        accuracy_scores.append(acc)
         avg_accuracy = round(sum(accuracy_scores) / len(accuracy_scores), 1) if accuracy_scores else 0
     else:
         # For other levels, forecasts is a list (not QuerySet)

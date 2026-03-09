@@ -105,6 +105,20 @@ class SalesForecastBase(models.Model):
     monthly_demand_30 = models.FloatField(null=True, blank=True, help_text="Sum of next 30 days demand (30-60 days from forecast_date)")
     monthly_demand_60 = models.FloatField(null=True, blank=True, help_text="Sum of next 60 days demand (0-60 days from forecast_date)")
 
+    # Simple Monthly Forecast Fields (NEW - Simple Approach)
+    monthly_breakdown = models.JSONField(
+        default=dict,
+        help_text="Monthly forecast breakdown: {'2027-01': {'quantity': 59, 'avg_last_3_years': 51.7, 'min': 45, 'max': 58, 'confidence': 'high', 'is_peak_month': True, 'historical_sales': [45, 52, 58]}}"
+    )
+    seasonal_profile = models.JSONField(
+        default=dict,
+        help_text="Seasonal pattern analysis: {'peak_months': [1, 2, 11, 12], 'medium_months': [3, 10], 'low_months': [4, 5, 9], 'zero_months': [6, 7, 8], 'peak_season_label': 'Back-to-School (Jan-Feb)', 'annual_forecast': 450}"
+    )
+    growth_metrics = models.JSONField(
+        default=dict,
+        help_text="Growth trend analysis: {'direction': 'growth', 'annual_rate': 14.5, 'trend_strength': 'moderate', 'last_year_total': 420, 'forecast_year_total': 480}"
+    )
+
     # Model configuration
     model_params = models.JSONField(default=dict)  # Model hyperparameters
 
@@ -207,6 +221,278 @@ class SalesForecastBase(models.Model):
             'days': len(date_range_data),
             'daily_data': date_range_data
         }
+
+    def calculate_safety_stock(self, month_key, lead_time_days=14):
+        """
+        Calculate intelligent safety stock for a specific month
+
+        Uses season-based multipliers + lead time buffer
+
+        Args:
+            month_key (str): Month in format 'YYYY-MM' (e.g., '2027-01')
+            lead_time_days (int): Supplier lead time in days (default: 14)
+
+        Returns:
+            dict: {
+                'recommended_stock': Total units needed,
+                'base_forecast': Monthly forecast quantity,
+                'safety_buffer': Extra buffer for seasonality,
+                'lead_time_buffer': Buffer for supplier lead time,
+                'season_multiplier': Multiplier used (1.1, 1.3, or 1.8),
+                'urgency': 'CRITICAL' | 'MODERATE' | 'LOW' | 'NONE',
+                'reason': Human-readable explanation
+            }
+        """
+        from datetime import datetime
+
+        # Get monthly breakdown and seasonal profile
+        if not self.monthly_breakdown or month_key not in self.monthly_breakdown:
+            return {
+                'recommended_stock': 0,
+                'base_forecast': 0,
+                'safety_buffer': 0,
+                'lead_time_buffer': 0,
+                'season_multiplier': 0,
+                'urgency': 'NONE',
+                'reason': 'No forecast data for this month'
+            }
+
+        monthly_data = self.monthly_breakdown[month_key]
+        monthly_forecast = monthly_data.get('quantity', 0)
+
+        # Extract month number
+        month = int(month_key.split('-')[1])
+
+        # Determine season multiplier based on seasonal profile
+        seasonal_profile = self.seasonal_profile or {}
+        peak_months = seasonal_profile.get('peak_months', [])
+        medium_months = seasonal_profile.get('medium_months', [])
+        zero_months = seasonal_profile.get('zero_months', [])
+
+        if monthly_forecast == 0 or month in zero_months:
+            # Off-season - no stock needed
+            return {
+                'recommended_stock': 0,
+                'base_forecast': 0,
+                'safety_buffer': 0,
+                'lead_time_buffer': 0,
+                'season_multiplier': 0,
+                'urgency': 'NONE',
+                'reason': 'Off-season - no sales expected'
+            }
+
+        if month in peak_months:
+            season_multiplier = 1.8  # Peak: 80% buffer
+            urgency = 'CRITICAL'
+            season_label = 'Peak season'
+        elif month in medium_months:
+            season_multiplier = 1.3  # Medium: 30% buffer
+            urgency = 'MODERATE'
+            season_label = 'Medium season'
+        else:
+            season_multiplier = 1.1  # Low: 10% buffer
+            urgency = 'LOW'
+            season_label = 'Low season'
+
+        # Calculate safety buffer
+        safety_buffer = monthly_forecast * (season_multiplier - 1)
+
+        # Calculate lead time buffer
+        daily_forecast = monthly_forecast / 30
+        lead_time_buffer = daily_forecast * lead_time_days
+
+        # Total recommended stock
+        recommended_stock = (monthly_forecast * season_multiplier) + lead_time_buffer
+
+        # Build human-readable reason
+        reason = f'{season_label} - {int((season_multiplier-1)*100)}% safety buffer + {lead_time_days}-day lead time'
+
+        return {
+            'recommended_stock': round(recommended_stock, 1),
+            'base_forecast': round(monthly_forecast, 1),
+            'safety_buffer': round(safety_buffer, 1),
+            'lead_time_buffer': round(lead_time_buffer, 1),
+            'season_multiplier': season_multiplier,
+            'urgency': urgency,
+            'reason': reason
+        }
+
+    def generate_recommendations(self, current_stock=0, supplier_lead_time_days=14, order_preparation_days=7):
+        """
+        Generate actionable business recommendations based on forecasts and safety stock
+
+        Args:
+            current_stock: Current inventory level (default 0)
+            supplier_lead_time_days: Days for supplier to deliver (default 14)
+            order_preparation_days: Days needed to prepare order (default 7)
+
+        Returns:
+            dict with inventory, marketing, and staffing recommendations
+        """
+        from datetime import datetime, timedelta
+        from dateutil.relativedelta import relativedelta
+
+        if not self.monthly_breakdown or not self.seasonal_profile:
+            return {
+                'inventory': [],
+                'marketing': [],
+                'staffing': [],
+                'summary': 'Insufficient data for recommendations'
+            }
+
+        recommendations = {
+            'inventory': [],
+            'marketing': [],
+            'staffing': [],
+            'summary': ''
+        }
+
+        # Get seasonal profile data
+        seasonal_profile = self.seasonal_profile
+        peak_months = seasonal_profile.get('peak_months', [])
+        low_months = seasonal_profile.get('low_months', [])
+        zero_months = seasonal_profile.get('zero_months', [])
+
+        # Analyze next 12 months
+        today = datetime.now().date()
+        total_preparation_days = supplier_lead_time_days + order_preparation_days
+
+        for i in range(12):
+            target_date = today + relativedelta(months=i+1)
+            month_key = target_date.strftime('%Y-%m')
+            month_num = target_date.month
+            month_name = target_date.strftime('%B %Y')
+
+            if month_key not in self.monthly_breakdown:
+                continue
+
+            month_data = self.monthly_breakdown[month_key]
+            forecast_qty = month_data.get('quantity', 0)
+
+            # Calculate safety stock for this month
+            safety_stock = self.calculate_safety_stock(month_key, supplier_lead_time_days)
+            recommended_stock = safety_stock['recommended_stock']
+            urgency = safety_stock['urgency']
+
+            # === INVENTORY RECOMMENDATIONS ===
+            if forecast_qty > 0:
+                # Calculate order deadline
+                order_by_date = target_date - timedelta(days=total_preparation_days)
+                days_until_order = (order_by_date - today).days
+
+                # Only recommend if order date is in the future
+                if days_until_order > 0:
+                    # Determine if urgent
+                    if month_num in peak_months:
+                        priority = 'CRITICAL'
+                        reason = f"Peak season ({seasonal_profile.get('peak_season_label', 'High demand period')})"
+                    elif month_num in low_months:
+                        priority = 'LOW'
+                        reason = "Low season - maintain minimum stock"
+                    else:
+                        priority = 'MEDIUM'
+                        reason = "Regular season"
+
+                    # Calculate order quantity based on current stock
+                    order_qty = max(0, recommended_stock - current_stock)
+
+                    if order_qty > 0 or priority == 'CRITICAL':
+                        recommendations['inventory'].append({
+                            'type': 'ORDER',
+                            'priority': priority,
+                            'month': month_name,
+                            'action': f"Order {int(order_qty)} units by {order_by_date.strftime('%b %d, %Y')}",
+                            'details': {
+                                'forecast': int(forecast_qty),
+                                'recommended_stock': int(recommended_stock),
+                                'current_stock': int(current_stock),
+                                'order_quantity': int(order_qty),
+                                'order_deadline': order_by_date.strftime('%Y-%m-%d'),
+                                'days_until_order': days_until_order
+                            },
+                            'reason': reason
+                        })
+
+            # === MARKETING RECOMMENDATIONS ===
+            # Suggest clearance sales for low/zero months
+            if month_num in low_months or month_num in zero_months:
+                if i >= 1 and i <= 6:  # Only recommend for next 6 months
+                    recommendations['marketing'].append({
+                        'type': 'CLEARANCE_SALE',
+                        'priority': 'MEDIUM',
+                        'month': month_name,
+                        'action': f"Run clearance sale to move excess inventory",
+                        'details': {
+                            'forecast': int(forecast_qty),
+                            'season': 'Off-season' if month_num in zero_months else 'Low season',
+                            'suggested_discount': '15-25%'
+                        },
+                        'reason': f"{'No' if month_num in zero_months else 'Low'} demand expected - clear old stock"
+                    })
+
+            # Suggest promotional campaigns 1 month before peak
+            if i > 0 and i <= 3:  # Next 3 months
+                prev_month = (month_num - 1) if month_num > 1 else 12
+                if prev_month in peak_months:
+                    recommendations['marketing'].append({
+                        'type': 'PROMOTIONAL_CAMPAIGN',
+                        'priority': 'HIGH',
+                        'month': today.strftime('%B %Y'),  # This month
+                        'action': f"Launch promotional campaign before {month_name} peak",
+                        'details': {
+                            'peak_forecast': int(forecast_qty),
+                            'campaign_start': today.strftime('%Y-%m-%d'),
+                            'channels': ['Email', 'Social Media', 'Website Banner']
+                        },
+                        'reason': f"Peak season approaching - build awareness"
+                    })
+
+            # === STAFFING RECOMMENDATIONS ===
+            # Suggest hiring for peak months
+            if month_num in peak_months and i <= 3:  # Next 3 months
+                peak_percentage = seasonal_profile.get('peak_percentage', 0)
+
+                # Estimate staff based on forecast volume
+                # Assume 1 staff can handle 500 units/month
+                base_staff = 1
+                additional_staff_needed = max(0, int(forecast_qty / 500))
+
+                if additional_staff_needed > 0:
+                    hire_by_date = target_date - timedelta(days=30)  # Hire 1 month before
+
+                    recommendations['staffing'].append({
+                        'type': 'HIRE_TEMPORARY',
+                        'priority': 'HIGH',
+                        'month': month_name,
+                        'action': f"Hire {additional_staff_needed} temporary staff by {hire_by_date.strftime('%b %d, %Y')}",
+                        'details': {
+                            'forecast': int(forecast_qty),
+                            'peak_percentage': peak_percentage,
+                            'staff_needed': additional_staff_needed,
+                            'hire_deadline': hire_by_date.strftime('%Y-%m-%d'),
+                            'duration': '2-3 months'
+                        },
+                        'reason': f"Peak season - {peak_percentage}% of annual demand"
+                    })
+
+        # Sort recommendations by priority and date
+        priority_order = {'CRITICAL': 0, 'HIGH': 1, 'MEDIUM': 2, 'LOW': 3}
+        for category in ['inventory', 'marketing', 'staffing']:
+            recommendations[category].sort(key=lambda x: priority_order.get(x['priority'], 99))
+
+        # Generate summary
+        total_recommendations = sum(len(v) for v in recommendations.values() if isinstance(v, list))
+        critical_count = sum(1 for cat in ['inventory', 'marketing', 'staffing']
+                           for rec in recommendations[cat]
+                           if rec['priority'] == 'CRITICAL')
+
+        recommendations['summary'] = f"{total_recommendations} recommendations generated " \
+                                    f"({critical_count} critical, " \
+                                    f"{len(recommendations['inventory'])} inventory, " \
+                                    f"{len(recommendations['marketing'])} marketing, " \
+                                    f"{len(recommendations['staffing'])} staffing)"
+
+        return recommendations
 
 
 class ForecastSchedule(models.Model):
