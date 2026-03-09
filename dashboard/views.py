@@ -2207,6 +2207,37 @@ def sales_forecasting(request):
         use_legacy = False
         no_forecasts_available = False
 
+    # Check if this is a replenishment view and preload already requested items for efficiency
+    requested_items_set = set()
+    is_replenishment_view = getattr(request, 'is_replenishment_view', False)
+
+    if is_replenishment_view:
+        # Get all SKU+size combos that are already in active requests for this user's schools
+        # Use a single efficient query to avoid per-variation lookups
+        from dashboard.models import StoreReplenishmentRequestItem, StoreReplenishmentRequestBatch
+
+        # Get the user's school(s) - admin can see all, store managers see their assigned branch's school
+        user = request.user
+        school_filter_value = school_filter  # From URL parameters
+
+        # Build query to get already requested items
+        requested_query = StoreReplenishmentRequestItem.objects.filter(
+            batch__status__in=['store_approved', 'dp_approved']
+        )
+
+        # Filter by school if user is not admin or if school filter is applied
+        if school_filter_value:
+            requested_query = requested_query.filter(batch__school=school_filter_value)
+        elif not (user.is_superuser or user.is_staff):
+            # For non-admin users, get their assigned branch's schools
+            # This requires knowing the user's branch and filtering accordingly
+            # For now, we'll check all their requests
+            requested_query = requested_query.filter(batch__requested_by=user)
+
+        # Fetch all SKU+size combinations that are already requested
+        requested_items = requested_query.values_list('sku', 'size')
+        requested_items_set = set(requested_items)
+
     # Check if we need to group by parent product
     if level == 'product':
         # Group SKU variations by parent product
@@ -2254,6 +2285,9 @@ def sales_forecasting(request):
             if total_qty == 0 or stock_gap >= 0:
                 continue
 
+            # Check if this variation has already been requested
+            already_requested = (f.entity_name, size or '') in requested_items_set
+
             variation_data = {
                 'sku_code': f.entity_name,
                 'product_name': product_name,
@@ -2268,7 +2302,8 @@ def sales_forecasting(request):
                 'forecast_data': date_range_data,
                 'training_days': f.model_params.get('training_days', 0),
                 'mae': round(f.mae, 2) if f.mae else None,
-                'mape': round(f.mape, 2) if f.mape else None
+                'mape': round(f.mape, 2) if f.mape else None,
+                'already_requested': already_requested
             }
 
             grouped_products[product_name].append(variation_data)
@@ -2389,6 +2424,9 @@ def sales_forecasting(request):
                     if stock_gap >= 0:
                         continue
 
+                    # Check if this variation has already been requested
+                    already_requested = (f.entity_name, size or '') in requested_items_set
+
                     variation_data = {
                         'sku_code': f.entity_name,
                         'product_name': product_name,
@@ -2403,7 +2441,8 @@ def sales_forecasting(request):
                         'forecast_data': date_range_data,
                         'training_days': f.model_params.get('training_days', 0),
                         'mae': round(f.mae, 2) if f.mae else None,
-                        'mape': round(f.mape, 2) if f.mape else None
+                        'mape': round(f.mape, 2) if f.mape else None,
+                        'already_requested': already_requested
                     }
 
                     school_variations.append(variation_data)
@@ -2520,6 +2559,9 @@ def sales_forecasting(request):
                         if stock_gap >= 0:
                             continue
 
+                        # Check if this variation has already been requested
+                        already_requested = (f.entity_name, size or '') in requested_items_set
+
                         variation_data = {
                             'sku_code': f.entity_name,
                             'product_name': product_name,
@@ -2534,7 +2576,8 @@ def sales_forecasting(request):
                             'forecast_data': date_range_data,
                             'training_days': f.model_params.get('training_days', 0),
                             'mae': round(f.mae, 2) if f.mae else None,
-                            'mape': round(f.mape, 2) if f.mape else None
+                            'mape': round(f.mape, 2) if f.mape else None,
+                            'already_requested': already_requested
                         }
 
                         school_variations.append(variation_data)
@@ -2660,6 +2703,9 @@ def sales_forecasting(request):
                 if stock_gap >= 0:
                     continue
 
+                # Check if this variation has already been requested
+                already_requested = (f.entity_name, size or '') in requested_items_set
+
                 variation_data = {
                     'sku_code': f.entity_name,
                     'product_name': product_name,
@@ -2674,7 +2720,8 @@ def sales_forecasting(request):
                     'forecast_data': date_range_data,
                     'training_days': f.model_params.get('training_days', 0),
                     'mae': round(f.mae, 2) if f.mae else None,
-                    'mape': round(f.mape, 2) if f.mape else None
+                    'mape': round(f.mape, 2) if f.mape else None,
+                    'already_requested': already_requested
                 }
 
                 school_variations.append(variation_data)
@@ -3690,6 +3737,272 @@ def dp_approve_replenishment(request, request_id):
             'success': False,
             'error': str(e)
         }, status=400)
+
+
+@login_required
+@require_http_methods(["POST"])
+def submit_store_replenishment_request(request):
+    """
+    Submit store manager's replenishment request batch
+    Creates a batch and items from the cart data
+    """
+    from dashboard.models import StoreReplenishmentRequestBatch, StoreReplenishmentRequestItem
+    from django.utils import timezone
+    from django.db import transaction
+    import json
+
+    try:
+        data = json.loads(request.body)
+        items_by_school = data.get('items_by_school', {})
+
+        if not items_by_school:
+            return JsonResponse({
+                'success': False,
+                'error': 'No items provided'
+            }, status=400)
+
+        created_batches = []
+
+        # Create a batch for each school
+        with transaction.atomic():
+            for school, items in items_by_school.items():
+                # Generate request number
+                today = timezone.now()
+                year_month = today.strftime('%Y%m')
+                # Count existing requests this month
+                existing_count = StoreReplenishmentRequestBatch.objects.filter(
+                    request_number__startswith=f'REQ-{year_month}'
+                ).count()
+                request_number = f'REQ-{year_month}-{existing_count + 1:04d}'
+
+                # Create batch
+                batch = StoreReplenishmentRequestBatch.objects.create(
+                    request_number=request_number,
+                    school=school,
+                    requested_by=request.user,
+                    status='submitted',
+                    notes=f'Created from replenishment cart with {len(items)} items'
+                )
+
+                # Create items
+                for item in items:
+                    StoreReplenishmentRequestItem.objects.create(
+                        batch=batch,
+                        sku=item.get('sku'),
+                        product_name=item.get('product_name'),
+                        size=item.get('size', ''),
+                        color=item.get('color', ''),
+                        stock_on_hand=item.get('stock_on_hand', 0),
+                        incoming_stock=item.get('incoming_stock', 0),
+                        forecasted_stock=item.get('forecasted_stock', 0),
+                        stock_gap=item.get('stock_gap', 0),
+                        requested_quantity=item.get('requested_quantity'),
+                        is_modified=item.get('is_modified', False),
+                        original_quantity=item.get('original_quantity'),
+                        modification_reason=item.get('modification_reason', '')
+                    )
+
+                # Store manager auto-approves their request
+                batch.status = 'store_approved'
+                batch.submitted_date = timezone.now()
+                batch.store_approved_by = request.user
+                batch.store_approved_date = timezone.now()
+                batch.save()
+
+                created_batches.append({
+                    'request_number': batch.request_number,
+                    'school': batch.school,
+                    'items_count': batch.items.count()
+                })
+
+        return JsonResponse({
+            'success': True,
+            'message': f'Successfully created {len(created_batches)} replenishment request(s)',
+            'batches': created_batches
+        })
+
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=400)
+
+
+@login_required
+def store_replenishment_requests_list(request):
+    """
+    View all replenishment requests for current user
+    """
+    from dashboard.models import StoreReplenishmentRequestBatch
+
+    # Get all requests for this user
+    requests = StoreReplenishmentRequestBatch.objects.filter(
+        requested_by=request.user
+    ).order_by('-request_date')
+
+    # Calculate summary statistics
+    total_requests = requests.count()
+    submitted_count = requests.filter(status='submitted').count()
+    store_approved_count = requests.filter(status='store_approved').count()
+    dp_approved_count = requests.filter(status='dp_approved').count()
+    rejected_count = requests.filter(status='rejected').count()
+    fulfilled_count = requests.filter(status='fulfilled').count()
+
+    context = {
+        'requests': requests,
+        'total_requests': total_requests,
+        'submitted_count': submitted_count,
+        'store_approved_count': store_approved_count,
+        'dp_approved_count': dp_approved_count,
+        'rejected_count': rejected_count,
+        'fulfilled_count': fulfilled_count,
+    }
+
+    return render(request, 'dashboard/store_replenishment_requests.html', context)
+
+
+@login_required
+def store_replenishment_request_detail(request, request_number):
+    """
+    View details of a specific replenishment request
+    """
+    from dashboard.models import StoreReplenishmentRequestBatch
+    from django.shortcuts import get_object_or_404
+
+    batch = get_object_or_404(
+        StoreReplenishmentRequestBatch,
+        request_number=request_number,
+        requested_by=request.user
+    )
+
+    items = batch.items.all()
+
+    context = {
+        'batch': batch,
+        'items': items,
+    }
+
+    return render(request, 'dashboard/store_replenishment_request_detail.html', context)
+
+
+@login_required
+def dp_replenishment_approval(request):
+    """
+    DP Team view to review and approve/reject store-approved replenishment requests
+    """
+    from dashboard.models import StoreReplenishmentRequestBatch
+
+    # Get all store-approved requests awaiting DP review
+    requests = StoreReplenishmentRequestBatch.objects.filter(
+        status='store_approved'
+    ).order_by('-request_date')
+
+    # Calculate summary statistics
+    total_pending = requests.count()
+
+    context = {
+        'requests': requests,
+        'total_pending': total_pending,
+    }
+
+    return render(request, 'dashboard/dp_replenishment_approval.html', context)
+
+
+@login_required
+@require_http_methods(["POST"])
+def dp_approve_request(request, batch_id):
+    """
+    DP Team approves a store replenishment request
+    Changes status to 'dp_approved' (becomes an order)
+    """
+    from dashboard.models import StoreReplenishmentRequestBatch
+    from django.utils import timezone
+    from django.shortcuts import get_object_or_404
+
+    try:
+        batch = get_object_or_404(StoreReplenishmentRequestBatch, id=batch_id)
+
+        # Verify status is store_approved
+        if batch.status != 'store_approved':
+            return JsonResponse({
+                'success': False,
+                'error': 'Request is not in store_approved status'
+            }, status=400)
+
+        # Update to DP approved
+        batch.status = 'dp_approved'
+        batch.dp_approved_by = request.user
+        batch.dp_approved_date = timezone.now()
+        batch.save()
+
+        return JsonResponse({
+            'success': True,
+            'message': f'Request {batch.request_number} approved successfully',
+            'request_number': batch.request_number
+        })
+
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=400)
+
+
+@login_required
+@require_http_methods(["POST"])
+def dp_reject_request(request, batch_id):
+    """
+    DP Team rejects a store replenishment request
+    Changes status to 'rejected' with reason
+    """
+    from dashboard.models import StoreReplenishmentRequestBatch
+    from django.utils import timezone
+    from django.shortcuts import get_object_or_404
+    import json
+
+    try:
+        batch = get_object_or_404(StoreReplenishmentRequestBatch, id=batch_id)
+
+        # Verify status is store_approved
+        if batch.status != 'store_approved':
+            return JsonResponse({
+                'success': False,
+                'error': 'Request is not in store_approved status'
+            }, status=400)
+
+        # Get rejection reason from request body
+        data = json.loads(request.body)
+        rejection_reason = data.get('reason', '')
+
+        if not rejection_reason:
+            return JsonResponse({
+                'success': False,
+                'error': 'Rejection reason is required'
+            }, status=400)
+
+        # Update to rejected
+        batch.status = 'rejected'
+        batch.rejection_reason = rejection_reason
+        batch.save()
+
+        return JsonResponse({
+            'success': True,
+            'message': f'Request {batch.request_number} rejected',
+            'request_number': batch.request_number
+        })
+
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=400)
+
 
 @login_required
 def forecast_health_dashboard(request):

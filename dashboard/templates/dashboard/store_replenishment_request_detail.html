@@ -1,0 +1,181 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Request {{ batch.request_number }} - Details{% endblock %}
+
+{% block extra_css %}
+<style>
+    .status-badge {
+        font-size: 1.1rem;
+        padding: 0.5rem 1rem;
+    }
+    .info-label {
+        font-weight: 600;
+        color: #6c757d;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="pb-5">
+    <div class="row g-4">
+        <div class="col-12">
+            <div class="mb-4">
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb">
+                        <li class="breadcrumb-item"><a href="{% url 'dashboard:home' %}">Dashboard</a></li>
+                        <li class="breadcrumb-item"><a href="{% url 'dashboard:store_replenishment_requests_list' %}">My Requests</a></li>
+                        <li class="breadcrumb-item active">{{ batch.request_number }}</li>
+                    </ol>
+                </nav>
+                <h2 class="mb-2">Replenishment Request Details</h2>
+                <h5 class="text-body-tertiary fw-semibold">{{ batch.request_number }}</h5>
+            </div>
+
+            <!-- Request Information Card -->
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-info-circle me-2"></i>
+                        Request Information
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><span class="info-label">Request Number:</span> <strong>{{ batch.request_number }}</strong></p>
+                            <p><span class="info-label">School:</span> {{ batch.school }}</p>
+                            <p><span class="info-label">Requested By:</span> {{ batch.requested_by.get_full_name|default:batch.requested_by.username }}</p>
+                            <p><span class="info-label">Total Items:</span> <span class="badge bg-info">{{ batch.total_items }}</span></p>
+                        </div>
+                        <div class="col-md-6">
+                            <p>
+                                <span class="info-label">Status:</span>
+                                {% if batch.status == 'draft' %}
+                                    <span class="badge bg-secondary status-badge">Draft</span>
+                                {% elif batch.status == 'submitted' %}
+                                    <span class="badge bg-warning status-badge">Submitted - Awaiting Approval</span>
+                                {% elif batch.status == 'approved' %}
+                                    <span class="badge bg-success status-badge">Approved</span>
+                                {% elif batch.status == 'rejected' %}
+                                    <span class="badge bg-danger status-badge">Rejected</span>
+                                {% elif batch.status == 'fulfilled' %}
+                                    <span class="badge bg-primary status-badge">Fulfilled</span>
+                                {% endif %}
+                            </p>
+                            <p><span class="info-label">Request Date:</span> {{ batch.request_date|date:"F d, Y H:i" }}</p>
+                            {% if batch.submitted_date %}
+                            <p><span class="info-label">Submitted Date:</span> {{ batch.submitted_date|date:"F d, Y H:i" }}</p>
+                            {% endif %}
+                            <p><span class="info-label">Total Quantity:</span> <strong>{{ batch.total_quantity }} units</strong></p>
+                        </div>
+                    </div>
+
+                    {% if batch.notes %}
+                    <div class="mt-3">
+                        <span class="info-label">Notes:</span>
+                        <p class="mb-0">{{ batch.notes }}</p>
+                    </div>
+                    {% endif %}
+
+                    {% if batch.status == 'approved' and batch.approved_by %}
+                    <div class="alert alert-success mt-3 mb-0">
+                        <i class="fas fa-check-circle me-2"></i>
+                        <strong>Approved by:</strong> {{ batch.approved_by.get_full_name|default:batch.approved_by.username }}
+                        on {{ batch.approved_date|date:"F d, Y H:i" }}
+                    </div>
+                    {% elif batch.status == 'rejected' and batch.approved_by %}
+                    <div class="alert alert-danger mt-3 mb-0">
+                        <i class="fas fa-times-circle me-2"></i>
+                        <strong>Rejected by:</strong> {{ batch.approved_by.get_full_name|default:batch.approved_by.username }}
+                        on {{ batch.approved_date|date:"F d, Y H:i" }}
+                        {% if batch.rejection_reason %}
+                        <br><strong>Reason:</strong> {{ batch.rejection_reason }}
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Items Table -->
+            <div class="card">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-box me-2"></i>
+                        Requested Items ({{ items.count }})
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Product Name</th>
+                                    <th>SKU</th>
+                                    <th>Size</th>
+                                    <th>Stock on Hand</th>
+                                    <th>Incoming Stock</th>
+                                    <th>Forecasted Demand</th>
+                                    <th>Stock Gap</th>
+                                    <th>Requested Qty</th>
+                                    <th>Modified</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in items %}
+                                <tr {% if item.is_modified %}class="table-warning"{% endif %}>
+                                    <td>{{ item.product_name }}</td>
+                                    <td><code>{{ item.sku }}</code></td>
+                                    <td><strong>{{ item.size|default:"N/A" }}</strong></td>
+                                    <td>{{ item.stock_on_hand }}</td>
+                                    <td>{{ item.incoming_stock }}</td>
+                                    <td>{{ item.forecasted_stock }}</td>
+                                    <td>
+                                        {% if item.stock_gap < 0 %}
+                                            <span class="badge bg-danger">{{ item.stock_gap }}</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">{{ item.stock_gap }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td><strong class="text-primary">{{ item.requested_quantity }}</strong></td>
+                                    <td>
+                                        {% if item.is_modified %}
+                                            <span class="badge bg-warning">Yes</span>
+                                            {% if item.modification_reason %}
+                                            <br><small class="text-muted">{{ item.modification_reason }}</small>
+                                            {% endif %}
+                                        {% else %}
+                                            <span class="badge bg-secondary">No</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                            <tfoot>
+                                <tr class="table-light">
+                                    <td colspan="7" class="text-end"><strong>Total Requested:</strong></td>
+                                    <td><strong class="text-primary fs-5">{{ batch.total_quantity }} units</strong></td>
+                                    <td></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="mt-4">
+                <a href="{% url 'dashboard:store_replenishment_requests_list' %}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Back to Requests
+                </a>
+                {% if batch.status == 'submitted' %}
+                <button class="btn btn-info" onclick="alert('Request tracking coming soon!')">
+                    <i class="fas fa-bell"></i> Request Status Update
+                </button>
+                {% endif %}
+            </div>
+
+        </div>
+    </div>
+</div>
+{% endblock %}

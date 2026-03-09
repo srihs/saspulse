@@ -241,6 +241,44 @@
     .location-school-variations-group table {
         margin-bottom: 0 !important;
     }
+
+    /* Gray out already requested items in replenishment view */
+    .already-requested {
+        background-color: #f0f0f0 !important;
+        opacity: 0.65;
+    }
+
+    .already-requested td {
+        color: #6c757d !important;
+    }
+
+    .already-requested .badge {
+        opacity: 1;
+    }
+
+    .already-requested code {
+        background-color: #e9ecef !important;
+        color: #6c757d !important;
+    }
+
+    /* Items currently in cart (light blue to distinguish from already requested) */
+    .in-cart {
+        background-color: #e7f3ff !important;
+        opacity: 0.7;
+    }
+
+    .in-cart td {
+        color: #0066cc !important;
+    }
+
+    .in-cart .badge {
+        opacity: 1;
+    }
+
+    .in-cart code {
+        background-color: #d0e7ff !important;
+        color: #0066cc !important;
+    }
 </style>
 {% endblock %}
 
@@ -555,7 +593,7 @@
                                                                             </thead>
                                                                             <tbody>
                                                                                 {% for variation in school.variations %}
-                                                                                <tr>
+                                                                                <tr class="{% if variation.already_requested %}already-requested{% endif %}">
                                                                                     <td class="text-start align-middle">{{ variation.product_name }}</td>
                                                                                     <td class="text-start align-middle"><code>{{ variation.sku_code }}</code></td>
                                                                                     {% if not is_replenishment_view %}
@@ -572,12 +610,40 @@
                                                                                         {% endif %}
                                                                                     </td>
                                                                                     <td class="text-center align-middle">
+                                                                                        {% if is_replenishment_view %}
+                                                                                            {% if variation.already_requested %}
+                                                                                                <span class="badge bg-secondary"><i class="fas fa-check-circle"></i> Already Requested</span>
+                                                                                            {% else %}
+                                                                                        <button class="btn btn-sm btn-success approve-btn"
+                                                                                                data-sku="{{ variation.sku_code }}"
+                                                                                                data-product="{{ variation.product_name }}"
+                                                                                                data-size="{{ variation.size }}"
+                                                                                                data-color="{{ variation.color|default:'' }}"
+                                                                                                data-school="{{ school.school_name }}"
+                                                                                                data-stock-on-hand="{{ variation.stock_on_hand|floatformat:0 }}"
+                                                                                                data-incoming-stock="{{ variation.incoming_stock|floatformat:0 }}"
+                                                                                                data-forecasted-stock="{{ variation.total_quantity|floatformat:0 }}"
+                                                                                                data-stock-gap="{{ variation.stock_gap|floatformat:0 }}">
+                                                                                            <i class="fas fa-check"></i> Approve
+                                                                                        </button>
+                                                                                        <button class="btn btn-sm btn-warning modify-btn"
+                                                                                                data-sku="{{ variation.sku_code }}"
+                                                                                                data-product="{{ variation.product_name }}"
+                                                                                                data-size="{{ variation.size }}"
+                                                                                                data-color="{{ variation.color|default:'' }}"
+                                                                                                data-school="{{ school.school_name }}"
+                                                                                                data-stock-gap="{{ variation.stock_gap|floatformat:0 }}">
+                                                                                            <i class="fas fa-edit"></i> Modify
+                                                                                        </button>
+                                                                                            {% endif %}
+                                                                                        {% else %}
                                                                                         <button class="btn btn-sm btn-outline-success" data-sku="{{ variation.sku_code }}" data-forecast='{{ variation.forecast_data|safe }}' onclick='viewChartFromButton(this)'>
                                                                                             <i class="fas fa-chart-line"></i>
                                                                                         </button>
                                                                                         <button class="btn btn-sm btn-outline-primary ms-1" data-sku="{{ variation.sku_code }}" onclick="viewPastSales(this)">
                                                                                             <i class="fas fa-history"></i>
                                                                                         </button>
+                                                                                        {% endif %}
                                                                                     </td>
                                                                                 </tr>
                                                                                 {% endfor %}
@@ -638,7 +704,7 @@
                                                         </thead>
                                                         <tbody>
                                                             {% for variation in forecast.variations %}
-                                                            <tr>
+                                                            <tr class="{% if variation.already_requested %}already-requested{% endif %}">
                                                                 <td class="text-start align-middle">{{ variation.product_name }}</td>
                                                                 <td class="text-start align-middle"><code>{{ variation.sku_code }}</code></td>
                                                                 {% if not is_replenishment_view %}
@@ -655,12 +721,40 @@
                                                                     {% endif %}
                                                                 </td>
                                                                 <td class="text-center align-middle">
+                                                                    {% if is_replenishment_view %}
+                                                                        {% if variation.already_requested %}
+                                                                            <span class="badge bg-secondary"><i class="fas fa-check-circle"></i> Already Requested</span>
+                                                                        {% else %}
+                                                                    <button class="btn btn-sm btn-success approve-btn"
+                                                                            data-sku="{{ variation.sku_code }}"
+                                                                            data-product="{{ variation.product_name }}"
+                                                                            data-size="{{ variation.size }}"
+                                                                            data-color="{{ variation.color|default:'' }}"
+                                                                            data-school="{{ forecast.school_name }}"
+                                                                            data-stock-on-hand="{{ variation.stock_on_hand|floatformat:0 }}"
+                                                                            data-incoming-stock="{{ variation.incoming_stock|floatformat:0 }}"
+                                                                            data-forecasted-stock="{{ variation.total_quantity|floatformat:0 }}"
+                                                                            data-stock-gap="{{ variation.stock_gap|floatformat:0 }}">
+                                                                        <i class="fas fa-check"></i> Approve
+                                                                    </button>
+                                                                    <button class="btn btn-sm btn-warning modify-btn"
+                                                                            data-sku="{{ variation.sku_code }}"
+                                                                            data-product="{{ variation.product_name }}"
+                                                                            data-size="{{ variation.size }}"
+                                                                            data-color="{{ variation.color|default:'' }}"
+                                                                            data-school="{{ forecast.school_name }}"
+                                                                            data-stock-gap="{{ variation.stock_gap|floatformat:0 }}">
+                                                                        <i class="fas fa-edit"></i> Modify
+                                                                    </button>
+                                                                        {% endif %}
+                                                                    {% else %}
                                                                     <button class="btn btn-sm btn-outline-success" data-sku="{{ variation.sku_code }}" data-forecast='{{ variation.forecast_data|tojson }}' onclick='viewChartFromButton(this)'>
                                                                         <i class="fas fa-chart-line"></i> Predicted Demand
                                                                     </button>
                                                                     <button class="btn btn-sm btn-outline-primary ms-1" data-sku="{{ variation.sku_code }}" onclick="viewPastSales(this)">
                                                                         <i class="fas fa-history"></i> Past Sales
                                                                     </button>
+                                                                    {% endif %}
                                                                 </td>
                                                             </tr>
                                                             {% endfor %}
@@ -711,7 +805,7 @@
                                                         </thead>
                                                         <tbody>
                                                             {% for variation in forecast.variations %}
-                                                            <tr>
+                                                            <tr class="{% if variation.already_requested %}already-requested{% endif %}">
                                                                 <td class="text-start align-middle">{{ variation.product_name }}</td>
                                                                 <td class="text-start align-middle"><code>{{ variation.sku_code }}</code></td>
                                                                 {% if not is_replenishment_view %}
@@ -728,12 +822,40 @@
                                                                     {% endif %}
                                                                 </td>
                                                                 <td class="text-center align-middle">
+                                                                    {% if is_replenishment_view %}
+                                                                        {% if variation.already_requested %}
+                                                                            <span class="badge bg-secondary"><i class="fas fa-check-circle"></i> Already Requested</span>
+                                                                        {% else %}
+                                                                    <button class="btn btn-sm btn-success approve-btn"
+                                                                            data-sku="{{ variation.sku_code }}"
+                                                                            data-product="{{ variation.product_name }}"
+                                                                            data-size="{{ variation.size }}"
+                                                                            data-color="{{ variation.color|default:'' }}"
+                                                                            data-school="{{ forecast.entity_name }}"
+                                                                            data-stock-on-hand="{{ variation.stock_on_hand|floatformat:0 }}"
+                                                                            data-incoming-stock="{{ variation.incoming_stock|floatformat:0 }}"
+                                                                            data-forecasted-stock="{{ variation.total_quantity|floatformat:0 }}"
+                                                                            data-stock-gap="{{ variation.stock_gap|floatformat:0 }}">
+                                                                        <i class="fas fa-check"></i> Approve
+                                                                    </button>
+                                                                    <button class="btn btn-sm btn-warning modify-btn"
+                                                                            data-sku="{{ variation.sku_code }}"
+                                                                            data-product="{{ variation.product_name }}"
+                                                                            data-size="{{ variation.size }}"
+                                                                            data-color="{{ variation.color|default:'' }}"
+                                                                            data-school="{{ forecast.entity_name }}"
+                                                                            data-stock-gap="{{ variation.stock_gap|floatformat:0 }}">
+                                                                        <i class="fas fa-edit"></i> Modify
+                                                                    </button>
+                                                                        {% endif %}
+                                                                    {% else %}
                                                                     <button class="btn btn-sm btn-outline-success" data-sku="{{ variation.sku_code }}" data-forecast='{{ variation.forecast_data|tojson }}' onclick='viewChartFromButton(this)'>
                                                                         <i class="fas fa-chart-line"></i> Predicted Demand
                                                                     </button>
                                                                     <button class="btn btn-sm btn-outline-primary ms-1" data-sku="{{ variation.sku_code }}" onclick="viewPastSales(this)">
                                                                         <i class="fas fa-history"></i> Past Sales
                                                                     </button>
+                                                                    {% endif %}
                                                                 </td>
                                                             </tr>
                                                             {% endfor %}
@@ -866,6 +988,84 @@
         </div>
     </div>
 </div>
+
+<!-- Modify Quantity Modal -->
+<div class="modal fade" id="modifyModal" tabindex="-1" aria-labelledby="modifyModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modifyModalLabel">Modify Replenishment Quantity</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <p><strong>Product:</strong> <span id="modify-product-name"></span></p>
+                    <p><strong>Size:</strong> <span id="modify-size"></span></p>
+                    <p><strong>School:</strong> <span id="modify-school"></span></p>
+                    <p><strong>Stock Shortage:</strong> <span id="modify-stock-gap" class="badge bg-danger"></span></p>
+                </div>
+                <div class="mb-3">
+                    <label for="modify-quantity" class="form-label">Requested Quantity</label>
+                    <input type="number" class="form-control" id="modify-quantity" min="1" required>
+                    <small class="form-text text-muted">Enter the quantity you want to request</small>
+                </div>
+                <div class="mb-3">
+                    <label for="modify-reason" class="form-label">Reason for Modification (Optional)</label>
+                    <textarea class="form-control" id="modify-reason" rows="2" placeholder="Why are you modifying the quantity?"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="confirm-modify-btn">Confirm Modification</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if is_replenishment_view %}
+<!-- Replenishment Request Cart Summary (Fixed Bottom Bar) -->
+<div id="replenishment-cart" style="position: fixed; bottom: 0; left: 0; right: 0; background: white; border-top: 3px solid #28a745; box-shadow: 0 -2px 10px rgba(0,0,0,0.1); padding: 15px 20px; z-index: 1040; display: none;">
+    <div class="container-fluid">
+        <div class="row align-items-center">
+            <div class="col-md-6">
+                <h5 class="mb-0">
+                    <i class="fas fa-shopping-cart text-success me-2"></i>
+                    Replenishment Request Cart
+                    <span class="badge bg-success ms-2" id="cart-item-count">0</span> items
+                </h5>
+            </div>
+            <div class="col-md-6 text-end">
+                <button class="btn btn-outline-primary me-2" id="view-cart-btn">
+                    <i class="fas fa-eye"></i> View Cart
+                </button>
+                <button class="btn btn-success" id="submit-request-btn" disabled>
+                    <i class="fas fa-paper-plane"></i> Submit Request
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Cart Details Modal -->
+<div class="modal fade" id="cartModal" tabindex="-1" aria-labelledby="cartModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="cartModalLabel">Replenishment Request Cart</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="cart-items-list"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-danger" id="clear-cart-btn">Clear Cart</button>
+                <button type="button" class="btn btn-success" id="submit-from-cart-btn">Submit Request</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
 
 {% endblock %}
 
@@ -2097,5 +2297,455 @@ function viewPastSales(button) {
         initializeFilters();
     }
 })();
+
+{% if is_replenishment_view %}
+// Replenishment Request Cart Handling
+(function() {
+    let cartItems = [];
+    let modifyItemData = null;
+
+    // Helper function to get CSRF token
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    // Update cart display
+    function updateCartDisplay() {
+        const cartCount = cartItems.length;
+        $('#cart-item-count').text(cartCount);
+
+        if (cartCount > 0) {
+            $('#replenishment-cart').slideDown();
+            $('#submit-request-btn').prop('disabled', false);
+        } else {
+            $('#replenishment-cart').slideUp();
+            $('#submit-request-btn').prop('disabled', true);
+        }
+    }
+
+    // Add item to cart
+    function addToCart(itemData, isModified = false, modificationReason = '') {
+        // Check if item already exists (using SKU + size as unique identifier)
+        const existingIndex = cartItems.findIndex(item =>
+            item.sku === itemData.sku &&
+            item.size === itemData.size &&
+            item.school === itemData.school
+        );
+
+        if (existingIndex >= 0) {
+            // Show warning toast - item already in cart
+            showToast('warning', 'This item is already in your cart');
+            return false; // Don't add
+        }
+
+        // Add new item
+        cartItems.push({
+            ...itemData,
+            is_modified: isModified,
+            modification_reason: modificationReason,
+            original_quantity: Math.abs(itemData.stock_gap)
+        });
+
+        // Gray out the row in DataTable
+        grayOutCartItem(itemData.sku, itemData.size, itemData.school);
+
+        updateCartDisplay();
+
+        // Show success message
+        const message = isModified ? 'Item added to cart with modified quantity' : 'Item approved and added to cart';
+        showToast('success', message);
+        return true;
+    }
+
+    // Gray out cart item in the DataTable
+    function grayOutCartItem(sku, size, school) {
+        // Find all rows with matching SKU, size, and school
+        $('.approve-btn').each(function() {
+            let button = $(this);
+            if (button.data('sku') === sku &&
+                button.data('size') === size &&
+                button.data('school') === school) {
+                let row = button.closest('tr');
+                let actionCell = button.closest('td');
+
+                // Store all the button data in the row before replacing
+                row.data('cart-sku', sku);
+                row.data('cart-size', size);
+                row.data('cart-school', school);
+                row.data('cart-product', button.data('product'));
+                row.data('cart-color', button.data('color'));
+                row.data('cart-stock-on-hand', button.data('stock-on-hand'));
+                row.data('cart-incoming-stock', button.data('incoming-stock'));
+                row.data('cart-forecasted-stock', button.data('forecasted-stock'));
+                row.data('cart-stock-gap', button.data('stock-gap'));
+
+                // Add CSS class for graying out
+                row.addClass('in-cart');
+
+                // Replace buttons with "In Cart" badge in the action cell
+                actionCell.html('<span class="badge bg-info"><i class="fas fa-shopping-cart"></i> In Cart</span>');
+            }
+        });
+    }
+
+    // Un-gray cart item when removed from cart
+    function unGrayCartItem(sku, size, school) {
+        // Find all rows with matching SKU, size, and school
+        $('tr.in-cart').each(function() {
+            let row = $(this);
+
+            // Check if this row matches the removed item using stored data
+            if (row.data('cart-sku') === sku &&
+                row.data('cart-size') === size &&
+                row.data('cart-school') === school) {
+
+                // Get stored data from row
+                let skuCode = row.data('cart-sku');
+                let productName = row.data('cart-product');
+                let sizeValue = row.data('cart-size');
+                let color = row.data('cart-color');
+                let schoolName = row.data('cart-school');
+                let stockOnHand = row.data('cart-stock-on-hand');
+                let incomingStock = row.data('cart-incoming-stock');
+                let forecastedStock = row.data('cart-forecasted-stock');
+                let stockGap = row.data('cart-stock-gap');
+
+                // Find action cell (last cell)
+                let actionCell = row.find('td').last();
+
+                // Rebuild buttons HTML with original data
+                actionCell.html(`
+                    <button class="btn btn-sm btn-success approve-btn"
+                            data-sku="${skuCode}"
+                            data-product="${productName}"
+                            data-size="${sizeValue}"
+                            data-color="${color}"
+                            data-school="${schoolName}"
+                            data-stock-on-hand="${stockOnHand}"
+                            data-incoming-stock="${incomingStock}"
+                            data-forecasted-stock="${forecastedStock}"
+                            data-stock-gap="${stockGap}">
+                        <i class="fas fa-check"></i> Approve
+                    </button>
+                    <button class="btn btn-sm btn-warning modify-btn"
+                            data-sku="${skuCode}"
+                            data-product="${productName}"
+                            data-size="${sizeValue}"
+                            data-color="${color}"
+                            data-school="${schoolName}"
+                            data-stock-gap="${stockGap}">
+                        <i class="fas fa-edit"></i> Modify
+                    </button>
+                `);
+
+                // Remove gray class and clear stored data
+                row.removeClass('in-cart');
+                row.removeData('cart-sku');
+                row.removeData('cart-size');
+                row.removeData('cart-school');
+                row.removeData('cart-product');
+                row.removeData('cart-color');
+                row.removeData('cart-stock-on-hand');
+                row.removeData('cart-incoming-stock');
+                row.removeData('cart-forecasted-stock');
+                row.removeData('cart-stock-gap');
+            }
+        });
+    }
+
+    // Show toast notification
+    function showToast(type, message) {
+        let alertClass, icon;
+
+        switch(type) {
+            case 'success':
+                alertClass = 'alert-success';
+                icon = 'fa-check-circle';
+                break;
+            case 'warning':
+                alertClass = 'alert-warning';
+                icon = 'fa-exclamation-triangle';
+                break;
+            case 'danger':
+            case 'error':
+                alertClass = 'alert-danger';
+                icon = 'fa-exclamation-circle';
+                break;
+            default:
+                alertClass = 'alert-info';
+                icon = 'fa-info-circle';
+        }
+
+        const toast = $(`
+            <div class="alert ${alertClass} alert-dismissible fade show position-fixed" role="alert" style="top: 80px; right: 20px; z-index: 9999; min-width: 300px;">
+                <i class="fas ${icon} me-2"></i>${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        `);
+
+        $('body').append(toast);
+
+        setTimeout(() => {
+            toast.alert('close');
+        }, 3000);
+    }
+
+    // Approve button handler
+    $(document).on('click', '.approve-btn', function() {
+        const button = $(this);
+        const itemData = {
+            sku: button.data('sku'),
+            product_name: button.data('product'),
+            size: button.data('size') || '',
+            color: button.data('color') || '',
+            school: button.data('school'),
+            stock_on_hand: parseInt(button.data('stock-on-hand') || 0),
+            incoming_stock: parseInt(button.data('incoming-stock') || 0),
+            forecasted_stock: parseInt(button.data('forecasted-stock') || 0),
+            stock_gap: parseInt(button.data('stock-gap') || 0),
+            requested_quantity: Math.abs(parseInt(button.data('stock-gap') || 0))
+        };
+
+        // Only apply visual feedback if item was successfully added
+        const added = addToCart(itemData, false, '');
+        if (!added) {
+            return; // Item was already in cart, warning toast shown
+        }
+    });
+
+    // Modify button handler
+    $(document).on('click', '.modify-btn', function() {
+        const button = $(this);
+        modifyItemData = {
+            sku: button.data('sku'),
+            product_name: button.data('product'),
+            size: button.data('size') || '',
+            color: button.data('color') || '',
+            school: button.data('school'),
+            stock_gap: parseInt(button.data('stock-gap') || 0)
+        };
+
+        // Populate modal
+        $('#modify-product-name').text(modifyItemData.product_name);
+        $('#modify-size').text(modifyItemData.size || 'N/A');
+        $('#modify-school').text(modifyItemData.school);
+        $('#modify-stock-gap').text(Math.abs(modifyItemData.stock_gap));
+        $('#modify-quantity').val(Math.abs(modifyItemData.stock_gap));
+        $('#modify-reason').val('');
+
+        // Show modal
+        const modal = new bootstrap.Modal(document.getElementById('modifyModal'));
+        modal.show();
+    });
+
+    // Confirm modify button
+    $('#confirm-modify-btn').on('click', function() {
+        const quantity = parseInt($('#modify-quantity').val());
+        const reason = $('#modify-reason').val();
+
+        if (!quantity || quantity < 1) {
+            alert('Please enter a valid quantity');
+            return;
+        }
+
+        // Get additional data from the button (or from the in-cart row if button was replaced)
+        let button = $(`.modify-btn[data-sku="${modifyItemData.sku}"][data-school="${modifyItemData.school}"]`);
+
+        // If button doesn't exist (already in cart), check if row has stored data
+        if (button.length === 0) {
+            // Item might already be in cart - check in-cart rows
+            let inCartRow = $('tr.in-cart').filter(function() {
+                return $(this).data('cart-sku') === modifyItemData.sku &&
+                       $(this).data('cart-size') === modifyItemData.size &&
+                       $(this).data('cart-school') === modifyItemData.school;
+            });
+
+            if (inCartRow.length > 0) {
+                // Use stored data from the row
+                const itemData = {
+                    ...modifyItemData,
+                    stock_on_hand: inCartRow.data('cart-stock-on-hand'),
+                    incoming_stock: inCartRow.data('cart-incoming-stock'),
+                    forecasted_stock: inCartRow.data('cart-forecasted-stock'),
+                    requested_quantity: quantity
+                };
+
+                const added = addToCart(itemData, true, reason);
+                if (!added) {
+                    // Item already in cart, just close modal
+                    bootstrap.Modal.getInstance(document.getElementById('modifyModal')).hide();
+                    return;
+                }
+            }
+        } else {
+            // Button exists, use its data
+            const itemData = {
+                ...modifyItemData,
+                stock_on_hand: parseInt(button.data('stock-on-hand') || 0),
+                incoming_stock: parseInt(button.data('incoming-stock') || 0),
+                forecasted_stock: parseInt(button.data('forecasted-stock') || 0),
+                requested_quantity: quantity
+            };
+
+            const added = addToCart(itemData, true, reason);
+            if (!added) {
+                // Item already in cart, just close modal
+                bootstrap.Modal.getInstance(document.getElementById('modifyModal')).hide();
+                return;
+            }
+        }
+
+        // Close modal
+        bootstrap.Modal.getInstance(document.getElementById('modifyModal')).hide();
+    });
+
+
+    // View cart button
+    $('#view-cart-btn').on('click', function() {
+        renderCartModal();
+        const modal = new bootstrap.Modal(document.getElementById('cartModal'));
+        modal.show();
+    });
+
+    // Render cart modal content
+    function renderCartModal() {
+        if (cartItems.length === 0) {
+            $('#cart-items-list').html('<p class="text-muted">No items in cart</p>');
+            return;
+        }
+
+        let html = '<table class="table table-sm">';
+        html += '<thead><tr>';
+        html += '<th>Product</th><th>Size</th><th>School</th><th>Stock Gap</th><th>Requested Qty</th><th>Modified</th><th>Action</th>';
+        html += '</tr></thead><tbody>';
+
+        cartItems.forEach((item, index) => {
+            html += `<tr>`;
+            html += `<td>${item.product_name}</td>`;
+            html += `<td>${item.size || 'N/A'}</td>`;
+            html += `<td>${item.school}</td>`;
+            html += `<td><span class="badge bg-danger">${item.stock_gap}</span></td>`;
+            html += `<td><strong>${item.requested_quantity}</strong></td>`;
+            html += `<td>${item.is_modified ? '<span class="badge bg-warning">Yes</span>' : '<span class="badge bg-secondary">No</span>'}</td>`;
+            html += `<td><button class="btn btn-sm btn-danger remove-item-btn" data-index="${index}"><i class="fas fa-trash"></i></button></td>`;
+            html += `</tr>`;
+        });
+
+        html += '</tbody></table>';
+        $('#cart-items-list').html(html);
+    }
+
+    // Remove item from cart
+    $(document).on('click', '.remove-item-btn', function() {
+        const index = $(this).data('index');
+        const removedItem = cartItems[index];
+
+        // Remove from cart array
+        cartItems.splice(index, 1);
+
+        // Un-gray the row in DataTable
+        unGrayCartItem(removedItem.sku, removedItem.size, removedItem.school);
+
+        // Update cart display
+        updateCartDisplay();
+        renderCartModal();
+
+        showToast('success', 'Item removed from cart');
+    });
+
+    // Clear cart
+    $('#clear-cart-btn').on('click', function() {
+        if (cartItems.length === 0) {
+            showToast('info', 'Cart is already empty');
+            return;
+        }
+
+        if (confirm('Are you sure you want to clear all items from the cart?')) {
+            // Un-gray all items before clearing
+            cartItems.forEach(item => {
+                unGrayCartItem(item.sku, item.size, item.school);
+            });
+
+            // Clear cart
+            cartItems = [];
+            updateCartDisplay();
+            renderCartModal();
+
+            showToast('success', 'Cart cleared');
+        }
+    });
+
+    // Submit request
+    function submitReplenishmentRequest() {
+        if (cartItems.length === 0) {
+            alert('Cart is empty');
+            return;
+        }
+
+        // Show loading
+        const submitBtn = $('#submit-request-btn, #submit-from-cart-btn');
+        const originalHtml = submitBtn.html();
+        submitBtn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Submitting...');
+
+        // Group items by school
+        const itemsBySchool = {};
+        cartItems.forEach(item => {
+            if (!itemsBySchool[item.school]) {
+                itemsBySchool[item.school] = [];
+            }
+            itemsBySchool[item.school].push(item);
+        });
+
+        // Submit request via AJAX
+        $.ajax({
+            url: '/dashboard/replenishment/store/submit/',
+            method: 'POST',
+            contentType: 'application/json',
+            headers: {
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            data: JSON.stringify({
+                items_by_school: itemsBySchool
+            }),
+            success: function(response) {
+                showToast('success', 'Replenishment request submitted successfully!');
+
+                // Clear cart
+                cartItems = [];
+                updateCartDisplay();
+
+                // Close modal if open
+                const cartModal = bootstrap.Modal.getInstance(document.getElementById('cartModal'));
+                if (cartModal) {
+                    cartModal.hide();
+                }
+
+                // Redirect to requests page after 2 seconds
+                setTimeout(() => {
+                    window.location.href = '/dashboard/replenishment/store/requests/';
+                }, 2000);
+            },
+            error: function(xhr, status, error) {
+                console.error('Error submitting request:', error);
+                showToast('error', 'Error submitting request. Please try again.');
+                submitBtn.prop('disabled', false).html(originalHtml);
+            }
+        });
+    }
+
+    $('#submit-request-btn, #submit-from-cart-btn').on('click', submitReplenishmentRequest);
+})();
+{% endif %}
 </script>
 {% endblock %}

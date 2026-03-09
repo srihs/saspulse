@@ -850,3 +850,118 @@ class ReplenishmentNotification(models.Model):
 
     def __str__(self):
         return f"{self.get_notification_type_display()} to {self.recipient.username}"
+
+
+class StoreReplenishmentRequestBatch(models.Model):
+    """
+    Batch/cart of replenishment items created by store managers
+    This is the parent container for multiple items that will be submitted together
+    """
+    STATUS_CHOICES = [
+        ('submitted', 'Submitted'),           # Store manager created request (draft)
+        ('store_approved', 'Store Approved'), # Store manager approved, awaiting DP
+        ('dp_approved', 'DP Approved'),       # DP team approved (becomes order)
+        ('rejected', 'Rejected'),             # DP team rejected
+        ('fulfilled', 'Fulfilled'),           # Order fulfilled
+    ]
+
+    # Request metadata
+    request_number = models.CharField(max_length=50, unique=True, db_index=True)  # e.g., REQ-2026-001
+    school = models.CharField(max_length=255, db_index=True)
+    requested_by = models.ForeignKey('users.CustomUser', on_delete=models.CASCADE, related_name='store_replenishment_batches')
+    request_date = models.DateTimeField(auto_now_add=True, db_index=True)
+    submitted_date = models.DateTimeField(null=True, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='submitted', db_index=True)
+
+    # Store Manager Approval
+    store_approved_by = models.ForeignKey('users.CustomUser', on_delete=models.SET_NULL, null=True, blank=True, related_name='store_approved_requests')
+    store_approved_date = models.DateTimeField(null=True, blank=True)
+
+    # DP Team Approval
+    dp_approved_by = models.ForeignKey('users.CustomUser', on_delete=models.SET_NULL, null=True, blank=True, related_name='dp_approved_requests')
+    dp_approved_date = models.DateTimeField(null=True, blank=True)
+
+    # Legacy approval tracking (kept for backward compatibility)
+    approved_by = models.ForeignKey('users.CustomUser', on_delete=models.SET_NULL, null=True, blank=True, related_name='approved_store_requests')
+    approved_date = models.DateTimeField(null=True, blank=True)
+    rejection_reason = models.TextField(null=True, blank=True)
+
+    # Notes
+    notes = models.TextField(null=True, blank=True)
+
+    # Metadata
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'dashboard_store_replenishment_batch'
+        ordering = ['-request_date']
+        indexes = [
+            models.Index(fields=['request_number']),
+            models.Index(fields=['status', 'school']),
+            models.Index(fields=['requested_by', 'status']),
+        ]
+
+    def __str__(self):
+        return f"{self.request_number} - {self.school} ({self.get_status_display()})"
+
+    @property
+    def total_items(self):
+        """Count of items in this batch"""
+        return self.items.count()
+
+    @property
+    def total_quantity(self):
+        """Total requested quantity across all items"""
+        return sum(item.requested_quantity for item in self.items.all())
+
+
+class StoreReplenishmentRequestItem(models.Model):
+    """
+    Individual replenishment item within a batch
+    Created when store manager clicks Approve/Modify on a product variation
+    """
+    # Link to parent request batch
+    batch = models.ForeignKey(StoreReplenishmentRequestBatch, on_delete=models.CASCADE, related_name='items')
+
+    # Product details (stored as strings to avoid FK dependencies)
+    sku = models.CharField(max_length=100, db_index=True)
+    product_name = models.CharField(max_length=255)
+    size = models.CharField(max_length=50, null=True, blank=True)
+    color = models.CharField(max_length=100, null=True, blank=True)
+
+    # Stock data at time of request
+    stock_on_hand = models.IntegerField(default=0)
+    incoming_stock = models.IntegerField(default=0)
+    forecasted_stock = models.IntegerField(default=0)
+    stock_gap = models.IntegerField(default=0)  # Negative value = shortage
+
+    # Request details
+    requested_quantity = models.IntegerField()
+    approved_quantity = models.IntegerField(null=True, blank=True)  # Admin can modify
+    unit_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+
+    # Modification tracking
+    is_modified = models.BooleanField(default=False)
+    original_quantity = models.IntegerField(null=True, blank=True)  # Original stock_gap for tracking modifications
+    modification_reason = models.TextField(null=True, blank=True)
+
+    # Metadata
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'dashboard_store_replenishment_item'
+        ordering = ['product_name', 'size']
+        indexes = [
+            models.Index(fields=['batch', 'sku']),
+            models.Index(fields=['sku']),
+        ]
+
+    def __str__(self):
+        return f"{self.product_name} ({self.size}) - {self.requested_quantity} units"
+
+    @property
+    def final_quantity(self):
+        """Get the final quantity (approved or requested)"""
+        return self.approved_quantity if self.approved_quantity is not None else self.requested_quantity
