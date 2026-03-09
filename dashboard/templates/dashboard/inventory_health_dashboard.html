@@ -1,0 +1,306 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block title %}Inventory Health Score Dashboard - SAS Pulse{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
+<style>
+.health-gauge-container {
+    text-align: center;
+    padding: 2rem;
+}
+.health-score {
+    font-size: 4rem;
+    font-weight: bold;
+    margin: 1rem 0;
+}
+.health-score.excellent { color: #28a745; }
+.health-score.good { color: #5cb85c; }
+.health-score.fair { color: #ffc107; }
+.health-score.poor { color: #dc3545; }
+
+.component-card {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 0.5rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    margin-bottom: 1rem;
+}
+.component-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+.component-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+.component-score {
+    font-size: 1.5rem;
+    font-weight: bold;
+}
+.progress {
+    height: 30px;
+    font-size: 1rem;
+}
+.metric-detail {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 0.5rem;
+    color: #6c757d;
+    font-size: 0.875rem;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4">
+    <!-- Page Header -->
+    <div class="row g-3 mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2 class="mb-0">Inventory Health Score Dashboard</h2>
+                    <p class="text-muted mb-0">Overall inventory performance score (0-100)</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Overall Health Score Gauge -->
+    <div class="row g-3 mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <div class="health-gauge-container">
+                        <h4>Overall Inventory Health Score</h4>
+                        <div class="health-score {% if health_score >= 80 %}excellent{% elif health_score >= 60 %}good{% elif health_score >= 40 %}fair{% else %}poor{% endif %}">
+                            {{ health_score }}
+                        </div>
+                        <div class="progress" style="height: 40px; max-width: 600px; margin: 0 auto;">
+                            <div class="progress-bar {% if health_score >= 80 %}bg-success{% elif health_score >= 60 %}bg-info{% elif health_score >= 40 %}bg-warning{% else %}bg-danger{% endif %}"
+                                 role="progressbar"
+                                 style="width: {{ health_score }}%"
+                                 aria-valuenow="{{ health_score }}"
+                                 aria-valuemin="0"
+                                 aria-valuemax="100">
+                                {{ health_score }}%
+                            </div>
+                        </div>
+                        <p class="text-muted mt-3">
+                            {% if health_score >= 80 %}
+                                Excellent - Your inventory is well-optimized
+                            {% elif health_score >= 60 %}
+                                Good - Minor improvements possible
+                            {% elif health_score >= 40 %}
+                                Fair - Attention needed in some areas
+                            {% else %}
+                                Poor - Immediate action required
+                            {% endif %}
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Component Breakdown -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-6">
+            <div class="component-card">
+                <div class="component-header">
+                    <span class="component-title">Stockout Risk</span>
+                    <span class="component-score">{{ stockout_score }}%</span>
+                </div>
+                <div class="progress">
+                    <div class="progress-bar {% if stockout_score >= 70 %}bg-success{% elif stockout_score >= 40 %}bg-warning{% else %}bg-danger{% endif %}"
+                         role="progressbar"
+                         style="width: {{ stockout_score }}%"
+                         aria-valuenow="{{ stockout_score }}"
+                         aria-valuemin="0"
+                         aria-valuemax="100">
+                        {{ stockout_score }}%
+                    </div>
+                </div>
+                <div class="metric-detail">
+                    <span>SKUs at risk: {{ stockout_risk_skus }} / {{ total_skus }}</span>
+                    <span>Risk: {{ stockout_risk_pct }}%</span>
+                </div>
+                <small class="text-muted">Weight: 30% | SKUs with < 30 days coverage</small>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="component-card">
+                <div class="component-header">
+                    <span class="component-title">Excess Stock</span>
+                    <span class="component-score">{{ excess_score }}%</span>
+                </div>
+                <div class="progress">
+                    <div class="progress-bar {% if excess_score >= 70 %}bg-success{% elif excess_score >= 40 %}bg-warning{% else %}bg-danger{% endif %}"
+                         role="progressbar"
+                         style="width: {{ excess_score }}%"
+                         aria-valuenow="{{ excess_score }}"
+                         aria-valuemin="0"
+                         aria-valuemax="100">
+                        {{ excess_score }}%
+                    </div>
+                </div>
+                <div class="metric-detail">
+                    <span>Excess SKUs: {{ excess_stock_skus }} / {{ total_skus }}</span>
+                    <span>Excess: {{ excess_stock_pct }}%</span>
+                </div>
+                <small class="text-muted">Weight: 25% | SKUs with > 180 days coverage</small>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="component-card">
+                <div class="component-header">
+                    <span class="component-title">Dead Stock Value</span>
+                    <span class="component-score">{{ dead_stock_score }}%</span>
+                </div>
+                <div class="progress">
+                    <div class="progress-bar {% if dead_stock_score >= 70 %}bg-success{% elif dead_stock_score >= 40 %}bg-warning{% else %}bg-danger{% endif %}"
+                         role="progressbar"
+                         style="width: {{ dead_stock_score }}%"
+                         aria-valuenow="{{ dead_stock_score }}"
+                         aria-valuemin="0"
+                         aria-valuemax="100">
+                        {{ dead_stock_score }}%
+                    </div>
+                </div>
+                <div class="metric-detail">
+                    <span>Dead stock: ${{ dead_stock_value|floatformat:0|intcomma }}</span>
+                    <span>{{ dead_stock_pct }}% of total</span>
+                </div>
+                <small class="text-muted">Weight: 25% | 0 sales in 180 days</small>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="component-card">
+                <div class="component-header">
+                    <span class="component-title">Inventory Turn Rate</span>
+                    <span class="component-score">{{ inventory_turn_score }}%</span>
+                </div>
+                <div class="progress">
+                    <div class="progress-bar {% if inventory_turn_score >= 70 %}bg-success{% elif inventory_turn_score >= 40 %}bg-warning{% else %}bg-danger{% endif %}"
+                         role="progressbar"
+                         style="width: {{ inventory_turn_score }}%"
+                         aria-valuenow="{{ inventory_turn_score }}"
+                         aria-valuemin="0"
+                         aria-valuemax="100">
+                        {{ inventory_turn_score }}%
+                    </div>
+                </div>
+                <div class="metric-detail">
+                    <span>Turn rate: {{ inventory_turn_rate }}x</span>
+                    <span>Last 180 days</span>
+                </div>
+                <small class="text-muted">Weight: 20% | COGS / Avg Inventory</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Best and Worst Performers -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h4 class="mb-3">Top 10 Best Performing SKUs</h4>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover">
+                            <thead>
+                                <tr>
+                                    <th>SKU</th>
+                                    <th>Product</th>
+                                    <th class="text-end">Stock</th>
+                                    <th class="text-end">Sales (180d)</th>
+                                    <th class="text-end">Turn Rate</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in best_performers %}
+                                <tr>
+                                    <td>{{ item.sku }}</td>
+                                    <td>{{ item.product_name|truncatechars:30 }}</td>
+                                    <td class="text-end">{{ item.stock_on_hand|floatformat:0|intcomma }}</td>
+                                    <td class="text-end">{{ item.sales_qty_180d|floatformat:0|intcomma }}</td>
+                                    <td class="text-end"><strong>{{ item.turn_rate }}x</strong></td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h4 class="mb-3">Top 10 Worst Performing SKUs</h4>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover">
+                            <thead>
+                                <tr>
+                                    <th>SKU</th>
+                                    <th>Product</th>
+                                    <th class="text-end">Stock</th>
+                                    <th class="text-end">Value</th>
+                                    <th class="text-end">Sales (180d)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in worst_performers %}
+                                <tr class="table-danger">
+                                    <td>{{ item.sku }}</td>
+                                    <td>{{ item.product_name|truncatechars:30 }}</td>
+                                    <td class="text-end">{{ item.stock_on_hand|floatformat:0|intcomma }}</td>
+                                    <td class="text-end">${{ item.stock_value|floatformat:0|intcomma }}</td>
+                                    <td class="text-end"><strong>{{ item.sales_qty_180d }}</strong></td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Business Logic Explanation -->
+    <div class="row g-3 mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <h5>About This Dashboard</h5>
+                    <p><strong>Inventory Health Score</strong> is calculated using a weighted average:</p>
+                    <ul>
+                        <li><strong>Stockout Risk (30%):</strong> Percentage of SKUs with less than 30 days of coverage</li>
+                        <li><strong>Excess Stock (25%):</strong> Percentage of SKUs with more than 180 days of coverage</li>
+                        <li><strong>Dead Stock Value (25%):</strong> Value of stock with 0 sales in the last 180 days</li>
+                        <li><strong>Inventory Turn Rate (20%):</strong> Cost of Goods Sold / Average Inventory Value</li>
+                    </ul>
+                    <p class="mb-0">Higher scores indicate better inventory health. Aim for a score above 70.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+$(document).ready(function() {
+    // You can add Chart.js gauge chart here if needed
+    console.log('Inventory Health Dashboard loaded');
+});
+</script>
+{% endblock %}

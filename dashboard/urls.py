@@ -36,4 +36,9 @@ urlpatterns = [
     path('replenishment/dp/approval/', views.dp_replenishment_approval, name='dp_replenishment_approval'),
     path('replenishment/dp/approve/<int:batch_id>/', views.dp_approve_request, name='dp_approve_request'),
     path('replenishment/dp/reject/<int:batch_id>/', views.dp_reject_request, name='dp_reject_request'),
+
+    # Analytics Reports
+    path('reports/bts-sellthrough/', views.bts_sellthrough_report, name='bts_sellthrough_report'),
+    path('reports/inventory-health/', views.inventory_health_dashboard, name='inventory_health_dashboard'),
+    path('reports/inventory-alignment/', views.inventory_alignment_matrix, name='inventory_alignment_matrix'),
 ]

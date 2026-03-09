@@ -1,0 +1,247 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block title %}Inventory Alignment Matrix - SAS Pulse{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
+<link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.bootstrap5.min.css">
+<style>
+.risk-badge {
+    padding: 0.25rem 0.75rem;
+    border-radius: 0.25rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+.badge-danger { background-color: #dc3545; color: white; }
+.badge-warning { background-color: #ffc107; color: #000; }
+.badge-success { background-color: #28a745; color: white; }
+
+.summary-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+.summary-card {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 0.5rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    text-align: center;
+}
+.summary-card .value {
+    font-size: 2rem;
+    font-weight: bold;
+    margin: 0.5rem 0;
+}
+.summary-card .label {
+    color: #6c757d;
+    font-size: 0.875rem;
+}
+.summary-card.high-risk .value { color: #dc3545; }
+.summary-card.medium-risk .value { color: #ffc107; }
+.summary-card.low-risk .value { color: #28a745; }
+
+.growth-positive { color: #28a745; }
+.growth-negative { color: #dc3545; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4">
+    <!-- Page Header -->
+    <div class="row g-3 mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2 class="mb-0">Inventory Alignment Matrix</h2>
+                    <p class="text-muted mb-0">Comprehensive view of inventory position vs demand</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="row g-3 mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <form method="GET" action="{% url 'dashboard:inventory_alignment_matrix' %}" class="row g-3 align-items-end">
+                        <div class="col-md-3">
+                            <label class="form-label" for="customer">Customer (School)</label>
+                            <select class="form-select" id="customer" name="customer">
+                                <option value="">All Customers</option>
+                                {% for cust in customers %}
+                                <option value="{{ cust }}" {% if customer_filter == cust %}selected{% endif %}>{{ cust }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label" for="category">Category</label>
+                            <select class="form-select" id="category" name="category">
+                                <option value="">All Categories</option>
+                                {% for cat in categories %}
+                                <option value="{{ cat }}" {% if category_filter == cat %}selected{% endif %}>{{ cat }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label" for="style">Style Code</label>
+                            <input class="form-control" type="text" id="style" name="style" value="{{ style_filter }}" placeholder="Search by style...">
+                        </div>
+                        <div class="col-md-3">
+                            <button class="btn btn-primary w-100" type="submit">
+                                <span class="fas fa-filter me-2"></span>Apply Filters
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="summary-cards">
+        <div class="summary-card high-risk">
+            <div class="label">High Risk</div>
+            <div class="value">{{ high_risk_count }}</div>
+            <div class="label">< 30 Days Coverage</div>
+        </div>
+        <div class="summary-card medium-risk">
+            <div class="label">Medium Risk</div>
+            <div class="value">{{ medium_risk_count }}</div>
+            <div class="label">30-90 Days Coverage</div>
+        </div>
+        <div class="summary-card low-risk">
+            <div class="label">Low Risk</div>
+            <div class="value">{{ low_risk_count }}</div>
+            <div class="label">> 90 Days Coverage</div>
+        </div>
+        <div class="summary-card">
+            <div class="label">Total SKUs</div>
+            <div class="value">{{ matrix_data|length }}</div>
+            <div class="label">Analyzed</div>
+        </div>
+    </div>
+
+    <!-- Data Table -->
+    <div class="row g-3 mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <h4 class="mb-3">Sales vs Inventory Alignment</h4>
+                    <div class="table-responsive">
+                        <table id="alignmentMatrixTable" class="table table-hover table-striped" style="width:100%">
+                            <thead>
+                                <tr>
+                                    <th>Customer</th>
+                                    <th>Style Code</th>
+                                    <th>Product Name</th>
+                                    <th>SKU</th>
+                                    <th>Annual Sales</th>
+                                    <th>BTS Sales</th>
+                                    <th>Growth %</th>
+                                    <th>Current Stock</th>
+                                    <th>Incoming Stock</th>
+                                    <th>Days Coverage</th>
+                                    <th>BTS Ratio</th>
+                                    <th>Risk</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in matrix_data %}
+                                <tr>
+                                    <td>{{ item.customer }}</td>
+                                    <td>{{ item.style_code }}</td>
+                                    <td>{{ item.product_name }}</td>
+                                    <td>{{ item.sku }}</td>
+                                    <td class="text-end">{{ item.units_sold_annual|floatformat:0|intcomma }}</td>
+                                    <td class="text-end">{{ item.units_sold_bts|floatformat:0|intcomma }}</td>
+                                    <td class="text-end {% if item.growth_pct > 0 %}growth-positive{% elif item.growth_pct < 0 %}growth-negative{% endif %}">
+                                        {{ item.growth_pct }}%
+                                    </td>
+                                    <td class="text-end">{{ item.current_stock|floatformat:0|intcomma }}</td>
+                                    <td class="text-end">{{ item.incoming_stock|floatformat:0|intcomma }}</td>
+                                    <td class="text-end">{{ item.days_coverage_display }}</td>
+                                    <td class="text-end">{{ item.bts_ratio_display }}</td>
+                                    <td class="text-center">
+                                        <span class="risk-badge badge-{{ item.risk_badge }}">{{ item.risk_indicator }}</span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Business Logic Explanation -->
+    <div class="row g-3 mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <h5>About This Report</h5>
+                    <p><strong>Key Metrics:</strong></p>
+                    <ul>
+                        <li><strong>Days of Coverage:</strong> Available Stock / (Annual Sales / 365)</li>
+                        <li><strong>Historical Growth %:</strong> (Current Year Sales - Previous Year Sales) / Previous Year Sales × 100</li>
+                        <li><strong>BTS Sell-Through Ratio:</strong> Current Stock / BTS Sales (Jan-Feb)</li>
+                    </ul>
+                    <p><strong>Risk Classification (based on Days of Coverage):</strong></p>
+                    <ul>
+                        <li><span class="risk-badge badge-danger">High Risk</span> < 30 days (Stockout imminent)</li>
+                        <li><span class="risk-badge badge-warning">Medium Risk</span> 30-90 days (Monitor closely)</li>
+                        <li><span class="risk-badge badge-success">Low Risk</span> > 90 days (Adequate stock)</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/dataTables.buttons.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.bootstrap5.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.print.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
+
+<script>
+$(document).ready(function() {
+    $('#alignmentMatrixTable').DataTable({
+        pageLength: 25,
+        order: [[9, 'asc']],  // Sort by Days Coverage ascending (most urgent first)
+        dom: 'Bfrtip',
+        buttons: [
+            {
+                extend: 'excelHtml5',
+                text: '<i class="fas fa-file-excel"></i> Export to Excel',
+                className: 'btn btn-success btn-sm',
+                title: 'Inventory Alignment Matrix'
+            },
+            {
+                extend: 'csvHtml5',
+                text: '<i class="fas fa-file-csv"></i> Export to CSV',
+                className: 'btn btn-info btn-sm',
+                title: 'Inventory Alignment Matrix'
+            },
+            {
+                extend: 'print',
+                text: '<i class="fas fa-print"></i> Print',
+                className: 'btn btn-secondary btn-sm'
+            }
+        ]
+    });
+});
+</script>
+{% endblock %}

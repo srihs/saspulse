@@ -4214,3 +4214,626 @@ def past_sales_data(request):
 
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
+
+# ==================== ANALYTICAL REPORTS ====================
+
+@login_required
+def bts_sellthrough_report(request):
+    """
+    BTS Sell-Through Ratio Report
+    Track stock performance after BTS season
+
+    Business Logic:
+    - BTS Sales = Previous Year December + Current Year January + Current Year February
+    - Stock Left After BTS Season = Available stock balance at end of February
+    - BTS Sell-Through Ratio = Stock Left After BTS Season / BTS Sales
+
+    Risk Classification:
+    - > 1.0: Overstock risk (Red badge)
+    - 0.3 - 1.0: Balanced (Yellow badge)
+    - < 0.3: High demand (Green badge)
+    """
+    from django.db import connection
+    from datetime import datetime
+
+    # Get date range from request (default: last BTS season)
+    # Current year BTS: Jan-Feb, Previous year: Dec
+    current_year = datetime.now().year
+
+    # Default BTS period: Previous Dec + Current Jan + Current Feb
+    bts_start_default = f"{current_year - 1}-12-01"
+    bts_end_default = f"{current_year}-02-28"
+
+    bts_start = request.GET.get('bts_start', bts_start_default)
+    bts_end = request.GET.get('bts_end', bts_end_default)
+
+    # Query: Calculate BTS sales and stock left per customer per SKU
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            WITH bts_sales AS (
+                SELECT
+                    p.sub_category as customer,
+                    p.style_code,
+                    p.name as product_name,
+                    soli.code as sku,
+                    COALESCE(SUM(soli.qty), 0) as bts_sales_qty,
+                    COALESCE(SUM(soli.qty * soli.unit_price), 0) as bts_sales_value
+                FROM cin7_sync_salesorderlineitem soli
+                INNER JOIN cin7_sync_salesorder so ON CAST(so.cin7_id AS CHAR) = soli.cin7_sales_order_id
+                INNER JOIN cin7_sync_product p ON soli.cin7_product_id = p.cin7_id
+                WHERE so.invoice_date >= %s
+                  AND so.invoice_date <= %s
+                  AND so.status != 'Cancelled'
+                  AND p.category_name LIKE %s
+                  AND p.sub_category IS NOT NULL
+                  AND p.sub_category <> ''
+                  AND p.sub_category NOT LIKE %s
+                GROUP BY p.sub_category, p.style_code, p.name, soli.code
+            ),
+            stock_after_bts AS (
+                SELECT
+                    p.sub_category as customer,
+                    p.style_code,
+                    s.code as sku,
+                    COALESCE(SUM(s.stock_on_hand), 0) as stock_left
+                FROM cin7_sync_product p
+                LEFT JOIN cin7_sync_stock s ON p.cin7_id = s.cin7_product_id
+                WHERE p.category_name LIKE %s
+                  AND p.sub_category IS NOT NULL
+                  AND p.sub_category <> ''
+                  AND p.sub_category NOT LIKE %s
+                GROUP BY p.sub_category, p.style_code, s.code
+            )
+            SELECT
+                bs.customer,
+                bs.style_code,
+                bs.product_name,
+                bs.sku,
+                bs.bts_sales_qty,
+                bs.bts_sales_value,
+                COALESCE(sa.stock_left, 0) as stock_left,
+                CASE
+                    WHEN bs.bts_sales_qty > 0 THEN COALESCE(sa.stock_left, 0) / bs.bts_sales_qty
+                    ELSE 999999
+                END as sellthrough_ratio
+            FROM bts_sales bs
+            LEFT JOIN stock_after_bts sa ON bs.customer = sa.customer
+                AND bs.style_code = sa.style_code
+                AND bs.sku = sa.sku
+            ORDER BY sellthrough_ratio DESC, bs.customer, bs.product_name
+        """, [bts_start, bts_end, '% Shop', '%Shop%', '% Shop', '%Shop%'])
+
+        rows = cursor.fetchall()
+
+    # Process results and classify risk
+    report_data = []
+    for row in rows:
+        customer = row[0]
+        style_code = row[1]
+        product_name = row[2]
+        sku = row[3]
+        bts_sales_qty = float(row[4] or 0)
+        bts_sales_value = float(row[5] or 0)
+        stock_left = float(row[6] or 0)
+        sellthrough_ratio = float(row[7] or 0)
+
+        # Classify risk
+        if sellthrough_ratio > 1.0:
+            risk_class = 'overstock'
+            risk_label = 'Overstock Risk'
+            risk_badge = 'danger'
+        elif sellthrough_ratio >= 0.3:
+            risk_class = 'balanced'
+            risk_label = 'Balanced'
+            risk_badge = 'warning'
+        else:
+            risk_class = 'high-demand'
+            risk_label = 'High Demand'
+            risk_badge = 'success'
+
+        # Handle infinite ratios
+        ratio_display = '∞' if sellthrough_ratio >= 999999 else round(sellthrough_ratio, 2)
+
+        report_data.append({
+            'customer': customer or 'Unknown',
+            'style_code': style_code or '',
+            'product_name': product_name or 'Unknown Product',
+            'sku': sku or '',
+            'bts_sales_qty': bts_sales_qty,
+            'bts_sales_value': bts_sales_value,
+            'stock_left': stock_left,
+            'sellthrough_ratio': sellthrough_ratio,
+            'ratio_display': ratio_display,
+            'risk_class': risk_class,
+            'risk_label': risk_label,
+            'risk_badge': risk_badge
+        })
+
+    # Calculate summary stats
+    total_bts_sales = sum(item['bts_sales_value'] for item in report_data)
+    total_stock_left_value = sum(item['stock_left'] for item in report_data)
+    overstock_count = sum(1 for item in report_data if item['risk_class'] == 'overstock')
+    balanced_count = sum(1 for item in report_data if item['risk_class'] == 'balanced')
+    high_demand_count = sum(1 for item in report_data if item['risk_class'] == 'high-demand')
+
+    context = {
+        'report_data': report_data,
+        'bts_start': bts_start,
+        'bts_end': bts_end,
+        'total_bts_sales': total_bts_sales,
+        'total_stock_left_value': total_stock_left_value,
+        'overstock_count': overstock_count,
+        'balanced_count': balanced_count,
+        'high_demand_count': high_demand_count,
+    }
+
+    return render(request, 'dashboard/bts_sellthrough_report.html', context)
+
+
+@login_required
+def inventory_health_dashboard(request):
+    """
+    Inventory Health Score Dashboard
+    Overall inventory performance score (0-100)
+
+    Business Logic:
+    - Inventory Health Score = Weighted Average:
+      - Stockout Risk %: 30%
+      - Excess Stock %: 25%
+      - Dead Stock Value %: 25%
+      - Inventory Turn Rate: 20%
+
+    Calculations:
+    - Stockout Risk %: (SKUs with stock < 30 days coverage) / Total SKUs × 100
+    - Excess Stock %: (SKUs with stock > 180 days coverage) / Total SKUs × 100
+    - Dead Stock Value %: (Value of stock with 0 sales in 180 days) / Total Stock Value × 100
+    - Inventory Turn Rate: Cost of Goods Sold / Average Inventory Value
+    """
+    from django.db import connection
+    from datetime import datetime, timedelta
+
+    # Calculate date ranges
+    today = datetime.now().date()
+    days_180_ago = today - timedelta(days=180)
+    days_30_ago = today - timedelta(days=30)
+
+    # 1. Calculate Stockout Risk % (stock < 30 days coverage)
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            WITH daily_sales AS (
+                SELECT
+                    soli.code as sku,
+                    COALESCE(SUM(soli.qty), 0) / 30 as daily_avg_sales
+                FROM cin7_sync_salesorderlineitem soli
+                INNER JOIN cin7_sync_salesorder so ON CAST(so.cin7_id AS CHAR) = soli.cin7_sales_order_id
+                WHERE so.invoice_date >= %s
+                  AND so.status != 'Cancelled'
+                GROUP BY soli.code
+            ),
+            stock_coverage AS (
+                SELECT
+                    s.code as sku,
+                    s.stock_on_hand,
+                    COALESCE(ds.daily_avg_sales, 0) as daily_avg_sales,
+                    CASE
+                        WHEN COALESCE(ds.daily_avg_sales, 0) > 0
+                        THEN s.stock_on_hand / ds.daily_avg_sales
+                        ELSE 999
+                    END as days_coverage
+                FROM cin7_sync_stock s
+                LEFT JOIN daily_sales ds ON s.code = ds.sku
+                WHERE s.stock_on_hand > 0
+            )
+            SELECT
+                COUNT(*) as total_skus,
+                SUM(CASE WHEN days_coverage < 30 THEN 1 ELSE 0 END) as stockout_risk_skus,
+                SUM(CASE WHEN days_coverage > 180 THEN 1 ELSE 0 END) as excess_stock_skus
+            FROM stock_coverage
+        """, [days_30_ago])
+
+        row = cursor.fetchone()
+        total_skus = row[0] or 1  # Avoid division by zero
+        stockout_risk_skus = row[1] or 0
+        excess_stock_skus = row[2] or 0
+
+    stockout_risk_pct = (stockout_risk_skus / total_skus) * 100 if total_skus > 0 else 0
+    excess_stock_pct = (excess_stock_skus / total_skus) * 100 if total_skus > 0 else 0
+
+    # 2. Calculate Dead Stock Value % (0 sales in 180 days)
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            WITH recent_sales AS (
+                SELECT DISTINCT soli.code as sku
+                FROM cin7_sync_salesorderlineitem soli
+                INNER JOIN cin7_sync_salesorder so ON CAST(so.cin7_id AS CHAR) = soli.cin7_sales_order_id
+                WHERE so.invoice_date >= %s
+                  AND so.status != 'Cancelled'
+            ),
+            stock_with_sales AS (
+                SELECT
+                    s.code,
+                    s.stock_on_hand,
+                    po.cost_price,
+                    s.stock_on_hand * COALESCE(po.cost_price, 0) as stock_value,
+                    CASE WHEN rs.sku IS NULL THEN 1 ELSE 0 END as is_dead_stock
+                FROM cin7_sync_stock s
+                LEFT JOIN cin7_sync_productoption po ON s.cin7_product_option_id = po.cin7_id
+                LEFT JOIN recent_sales rs ON s.code = rs.sku
+                WHERE s.stock_on_hand > 0
+            )
+            SELECT
+                COALESCE(SUM(stock_value), 0) as total_stock_value,
+                COALESCE(SUM(CASE WHEN is_dead_stock = 1 THEN stock_value ELSE 0 END), 0) as dead_stock_value
+            FROM stock_with_sales
+        """, [days_180_ago])
+
+        row = cursor.fetchone()
+        total_stock_value = float(row[0] or 1)  # Avoid division by zero
+        dead_stock_value = float(row[1] or 0)
+
+    dead_stock_pct = (dead_stock_value / total_stock_value) * 100 if total_stock_value > 0 else 0
+
+    # 3. Calculate Inventory Turn Rate (simplified: annual COGS / avg inventory)
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            SELECT
+                COALESCE(SUM(soli.qty * soli.unit_cost), 0) as cogs,
+                (SELECT COALESCE(SUM(s.stock_on_hand * po.cost_price), 1)
+                 FROM cin7_sync_stock s
+                 LEFT JOIN cin7_sync_productoption po ON s.cin7_product_option_id = po.cin7_id) as avg_inventory
+            FROM cin7_sync_salesorderlineitem soli
+            INNER JOIN cin7_sync_salesorder so ON CAST(so.cin7_id AS CHAR) = soli.cin7_sales_order_id
+            WHERE so.invoice_date >= %s
+              AND so.status != 'Cancelled'
+        """, [days_180_ago])
+
+        row = cursor.fetchone()
+        cogs = float(row[0] or 0)
+        avg_inventory = float(row[1] or 1)
+
+    inventory_turn_rate = (cogs / avg_inventory) if avg_inventory > 0 else 0
+
+    # Normalize inventory turn rate to 0-100 scale (assume good rate is 4-6 turns per 180 days)
+    # Higher is better, so we'll score it: min(turn_rate / 6 * 100, 100)
+    inventory_turn_score = min((inventory_turn_rate / 6) * 100, 100)
+
+    # 4. Calculate overall health score (weighted average)
+    # Lower is better for stockout, excess, and dead stock (so invert them)
+    stockout_score = max(0, 100 - stockout_risk_pct)
+    excess_score = max(0, 100 - excess_stock_pct)
+    dead_stock_score = max(0, 100 - dead_stock_pct)
+
+    health_score = (
+        stockout_score * 0.30 +
+        excess_score * 0.25 +
+        dead_stock_score * 0.25 +
+        inventory_turn_score * 0.20
+    )
+
+    # Get top 10 best/worst performing SKUs
+    with connection.cursor() as cursor:
+        # Best performers (high turn rate)
+        cursor.execute("""
+            WITH sku_performance AS (
+                SELECT
+                    s.code,
+                    p.name as product_name,
+                    s.stock_on_hand,
+                    COALESCE(SUM(soli.qty), 0) as sales_qty_180d,
+                    CASE
+                        WHEN s.stock_on_hand > 0
+                        THEN COALESCE(SUM(soli.qty), 0) / s.stock_on_hand
+                        ELSE 0
+                    END as turn_rate
+                FROM cin7_sync_stock s
+                LEFT JOIN cin7_sync_product p ON s.cin7_product_id = p.cin7_id
+                LEFT JOIN cin7_sync_salesorderlineitem soli ON s.code = soli.code
+                LEFT JOIN cin7_sync_salesorder so ON CAST(so.cin7_id AS CHAR) = soli.cin7_sales_order_id
+                    AND so.invoice_date >= %s AND so.status != 'Cancelled'
+                WHERE s.stock_on_hand > 0
+                GROUP BY s.code, p.name, s.stock_on_hand
+            )
+            SELECT code, product_name, stock_on_hand, sales_qty_180d, turn_rate
+            FROM sku_performance
+            ORDER BY turn_rate DESC
+            LIMIT 10
+        """, [days_180_ago])
+
+        best_performers = [
+            {
+                'sku': row[0],
+                'product_name': row[1] or 'Unknown',
+                'stock_on_hand': row[2],
+                'sales_qty_180d': row[3],
+                'turn_rate': round(float(row[4]), 2)
+            }
+            for row in cursor.fetchall()
+        ]
+
+        # Worst performers (low/no turn rate)
+        cursor.execute("""
+            WITH sku_performance AS (
+                SELECT
+                    s.code,
+                    p.name as product_name,
+                    s.stock_on_hand,
+                    s.stock_on_hand * COALESCE(po.cost_price, 0) as stock_value,
+                    COALESCE(SUM(soli.qty), 0) as sales_qty_180d
+                FROM cin7_sync_stock s
+                LEFT JOIN cin7_sync_product p ON s.cin7_product_id = p.cin7_id
+                LEFT JOIN cin7_sync_productoption po ON s.cin7_product_option_id = po.cin7_id
+                LEFT JOIN cin7_sync_salesorderlineitem soli ON s.code = soli.code
+                LEFT JOIN cin7_sync_salesorder so ON CAST(so.cin7_id AS CHAR) = soli.cin7_sales_order_id
+                    AND so.invoice_date >= %s AND so.status != 'Cancelled'
+                WHERE s.stock_on_hand > 0
+                GROUP BY s.code, p.name, s.stock_on_hand, po.cost_price
+            )
+            SELECT code, product_name, stock_on_hand, stock_value, sales_qty_180d
+            FROM sku_performance
+            WHERE sales_qty_180d = 0
+            ORDER BY stock_value DESC
+            LIMIT 10
+        """, [days_180_ago])
+
+        worst_performers = [
+            {
+                'sku': row[0],
+                'product_name': row[1] or 'Unknown',
+                'stock_on_hand': row[2],
+                'stock_value': float(row[3]),
+                'sales_qty_180d': row[4]
+            }
+            for row in cursor.fetchall()
+        ]
+
+    context = {
+        'health_score': round(health_score, 1),
+        'stockout_risk_pct': round(stockout_risk_pct, 1),
+        'excess_stock_pct': round(excess_stock_pct, 1),
+        'dead_stock_pct': round(dead_stock_pct, 1),
+        'inventory_turn_rate': round(inventory_turn_rate, 2),
+        'stockout_score': round(stockout_score, 1),
+        'excess_score': round(excess_score, 1),
+        'dead_stock_score': round(dead_stock_score, 1),
+        'inventory_turn_score': round(inventory_turn_score, 1),
+        'total_skus': total_skus,
+        'stockout_risk_skus': stockout_risk_skus,
+        'excess_stock_skus': excess_stock_skus,
+        'dead_stock_value': dead_stock_value,
+        'total_stock_value': total_stock_value,
+        'best_performers': best_performers,
+        'worst_performers': worst_performers,
+    }
+
+    return render(request, 'dashboard/inventory_health_dashboard.html', context)
+
+
+@login_required
+def inventory_alignment_matrix(request):
+    """
+    Sales vs Inventory Alignment Matrix
+    Comprehensive view of inventory position vs demand
+
+    Columns:
+    - Product Name / SKU
+    - Customer (School)
+    - Units Sold (Annually)
+    - Units Sold (Last BTS)
+    - Historical Growth %
+    - Current Available Stock
+    - Incoming Stock
+    - Days of Coverage
+    - BTS Sell-Through Ratio
+    - Risk Indicator (badge)
+
+    Calculations:
+    - Days of Coverage: Available Stock / (Annual Sales / 365)
+    - Historical Growth %: (Current Year Sales - Previous Year Sales) / Previous Year Sales × 100
+    - Risk Indicator based on Days of Coverage:
+      - < 30 days: High Risk (Red)
+      - 30-90 days: Medium Risk (Yellow)
+      - > 90 days: Low Risk (Green)
+    """
+    from django.db import connection
+    from datetime import datetime, timedelta
+
+    # Get filters from request
+    customer_filter = request.GET.get('customer', '')
+    category_filter = request.GET.get('category', '')
+    style_filter = request.GET.get('style', '')
+
+    # Calculate date ranges
+    today = datetime.now().date()
+    one_year_ago = today - timedelta(days=365)
+    two_years_ago = today - timedelta(days=730)
+
+    # BTS period (current year Jan-Feb)
+    current_year = today.year
+    bts_start = f"{current_year}-01-01"
+    bts_end = f"{current_year}-02-28"
+
+    # Query: Get comprehensive inventory alignment data
+    with connection.cursor() as cursor:
+        query = """
+            WITH annual_sales AS (
+                SELECT
+                    soli.code as sku,
+                    COALESCE(SUM(CASE
+                        WHEN so.invoice_date >= %s THEN soli.qty
+                        ELSE 0
+                    END), 0) as units_sold_annual,
+                    COALESCE(SUM(CASE
+                        WHEN so.invoice_date >= %s AND so.invoice_date <= %s
+                        THEN soli.qty
+                        ELSE 0
+                    END), 0) as units_sold_bts,
+                    COALESCE(SUM(CASE
+                        WHEN so.invoice_date >= %s AND so.invoice_date < %s
+                        THEN soli.qty
+                        ELSE 0
+                    END), 0) as units_sold_prev_year,
+                    COALESCE(SUM(CASE
+                        WHEN so.invoice_date >= %s THEN soli.qty
+                        ELSE 0
+                    END), 0) as units_sold_current_year
+                FROM cin7_sync_salesorderlineitem soli
+                INNER JOIN cin7_sync_salesorder so ON CAST(so.cin7_id AS CHAR) = soli.cin7_sales_order_id
+                WHERE so.status != 'Cancelled'
+                GROUP BY soli.code
+            )
+            SELECT
+                p.sub_category as customer,
+                p.style_code,
+                p.name as product_name,
+                p.category_name,
+                s.code as sku,
+                COALESCE(asales.units_sold_annual, 0) as units_sold_annual,
+                COALESCE(asales.units_sold_bts, 0) as units_sold_bts,
+                COALESCE(asales.units_sold_prev_year, 0) as units_sold_prev_year,
+                COALESCE(asales.units_sold_current_year, 0) as units_sold_current_year,
+                COALESCE(s.available, 0) as current_stock,
+                COALESCE(s.incoming, 0) as incoming_stock,
+                CASE
+                    WHEN COALESCE(asales.units_sold_annual, 0) > 0
+                    THEN (COALESCE(s.available, 0) / (asales.units_sold_annual / 365.0))
+                    ELSE 999
+                END as days_coverage,
+                CASE
+                    WHEN COALESCE(asales.units_sold_bts, 0) > 0
+                    THEN COALESCE(s.available, 0) / asales.units_sold_bts
+                    ELSE 999
+                END as bts_sellthrough_ratio
+            FROM cin7_sync_stock s
+            LEFT JOIN cin7_sync_product p ON s.cin7_product_id = p.cin7_id
+            LEFT JOIN annual_sales asales ON s.code = asales.sku
+            WHERE p.category_name LIKE %s
+              AND p.sub_category IS NOT NULL
+              AND p.sub_category <> ''
+              AND p.sub_category NOT LIKE %s
+        """
+
+        params = [
+            one_year_ago,  # annual sales start
+            bts_start, bts_end,  # BTS period
+            two_years_ago, one_year_ago,  # previous year
+            one_year_ago,  # current year start
+            '% Shop', '%Shop%'
+        ]
+
+        # Add filters if provided
+        if customer_filter:
+            query += " AND p.sub_category = %s"
+            params.append(customer_filter)
+        if category_filter:
+            query += " AND p.category_name = %s"
+            params.append(category_filter)
+        if style_filter:
+            query += " AND p.style_code LIKE %s"
+            params.append(f"%{style_filter}%")
+
+        query += " ORDER BY days_coverage ASC"
+
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+
+    # Process results
+    matrix_data = []
+    for row in rows:
+        customer = row[0]
+        style_code = row[1]
+        product_name = row[2]
+        category_name = row[3]
+        sku = row[4]
+        units_sold_annual = float(row[5] or 0)
+        units_sold_bts = float(row[6] or 0)
+        units_sold_prev_year = float(row[7] or 0)
+        units_sold_current_year = float(row[8] or 0)
+        current_stock = float(row[9] or 0)
+        incoming_stock = float(row[10] or 0)
+        days_coverage = float(row[11] or 999)
+        bts_sellthrough_ratio = float(row[12] or 999)
+
+        # Calculate historical growth %
+        if units_sold_prev_year > 0:
+            growth_pct = ((units_sold_current_year - units_sold_prev_year) / units_sold_prev_year) * 100
+        else:
+            growth_pct = 0 if units_sold_current_year == 0 else 100
+
+        # Determine risk indicator based on days of coverage
+        if days_coverage < 30:
+            risk_indicator = 'High Risk'
+            risk_badge = 'danger'
+            risk_class = 'high-risk'
+        elif days_coverage <= 90:
+            risk_indicator = 'Medium Risk'
+            risk_badge = 'warning'
+            risk_class = 'medium-risk'
+        else:
+            risk_indicator = 'Low Risk'
+            risk_badge = 'success'
+            risk_class = 'low-risk'
+
+        # Handle infinite values
+        days_coverage_display = '∞' if days_coverage >= 999 else round(days_coverage, 1)
+        bts_ratio_display = '∞' if bts_sellthrough_ratio >= 999 else round(bts_sellthrough_ratio, 2)
+
+        matrix_data.append({
+            'customer': customer or 'Unknown',
+            'style_code': style_code or '',
+            'product_name': product_name or 'Unknown Product',
+            'category_name': category_name or '',
+            'sku': sku or '',
+            'units_sold_annual': units_sold_annual,
+            'units_sold_bts': units_sold_bts,
+            'growth_pct': round(growth_pct, 1),
+            'current_stock': current_stock,
+            'incoming_stock': incoming_stock,
+            'days_coverage': days_coverage,
+            'days_coverage_display': days_coverage_display,
+            'bts_sellthrough_ratio': bts_sellthrough_ratio,
+            'bts_ratio_display': bts_ratio_display,
+            'risk_indicator': risk_indicator,
+            'risk_badge': risk_badge,
+            'risk_class': risk_class,
+        })
+
+    # Get unique customers and categories for filters
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            SELECT DISTINCT p.sub_category
+            FROM cin7_sync_product p
+            WHERE p.category_name LIKE %s
+              AND p.sub_category IS NOT NULL
+              AND p.sub_category <> ''
+              AND p.sub_category NOT LIKE %s
+            ORDER BY p.sub_category
+        """, ['% Shop', '%Shop%'])
+        customers = [row[0] for row in cursor.fetchall()]
+
+        cursor.execute("""
+            SELECT DISTINCT p.category_name
+            FROM cin7_sync_product p
+            WHERE p.category_name LIKE %s
+            ORDER BY p.category_name
+        """, ['% Shop'])
+        categories = [row[0] for row in cursor.fetchall()]
+
+    # Calculate summary stats
+    high_risk_count = sum(1 for item in matrix_data if item['risk_class'] == 'high-risk')
+    medium_risk_count = sum(1 for item in matrix_data if item['risk_class'] == 'medium-risk')
+    low_risk_count = sum(1 for item in matrix_data if item['risk_class'] == 'low-risk')
+
+    context = {
+        'matrix_data': matrix_data,
+        'customers': customers,
+        'categories': categories,
+        'customer_filter': customer_filter,
+        'category_filter': category_filter,
+        'style_filter': style_filter,
+        'high_risk_count': high_risk_count,
+        'medium_risk_count': medium_risk_count,
+        'low_risk_count': low_risk_count,
+    }
+
+    return render(request, 'dashboard/inventory_alignment_matrix.html', context)

@@ -1,0 +1,223 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block title %}BTS Sell-Through Ratio Report - SAS Pulse{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
+<link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.bootstrap5.min.css">
+<style>
+.risk-badge {
+    padding: 0.25rem 0.75rem;
+    border-radius: 0.25rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+.badge-danger { background-color: #dc3545; color: white; }
+.badge-warning { background-color: #ffc107; color: #000; }
+.badge-success { background-color: #28a745; color: white; }
+
+.summary-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+.summary-card {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 0.5rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    text-align: center;
+}
+.summary-card .value {
+    font-size: 2rem;
+    font-weight: bold;
+    margin: 0.5rem 0;
+}
+.summary-card .label {
+    color: #6c757d;
+    font-size: 0.875rem;
+}
+.summary-card.overstock .value { color: #dc3545; }
+.summary-card.balanced .value { color: #ffc107; }
+.summary-card.high-demand .value { color: #28a745; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4">
+    <!-- Page Header -->
+    <div class="row g-3 mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2 class="mb-0">BTS Sell-Through Ratio Report</h2>
+                    <p class="text-muted mb-0">Track stock performance after BTS season</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Date Range Filter -->
+    <div class="row g-3 mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <form method="GET" action="{% url 'dashboard:bts_sellthrough_report' %}" class="row g-3 align-items-end">
+                        <div class="col-md-4">
+                            <label class="form-label" for="bts_start">BTS Start Date</label>
+                            <input class="form-control" type="date" id="bts_start" name="bts_start" value="{{ bts_start }}" required>
+                            <small class="form-text text-muted">Previous Year December</small>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="bts_end">BTS End Date</label>
+                            <input class="form-control" type="date" id="bts_end" name="bts_end" value="{{ bts_end }}" required>
+                            <small class="form-text text-muted">Current Year February</small>
+                        </div>
+                        <div class="col-md-4">
+                            <button class="btn btn-primary w-100" type="submit">
+                                <span class="fas fa-sync-alt me-2"></span>Update Report
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="summary-cards">
+        <div class="summary-card overstock">
+            <div class="label">Overstock Risk</div>
+            <div class="value">{{ overstock_count }}</div>
+            <div class="label">SKUs with Ratio > 1.0</div>
+        </div>
+        <div class="summary-card balanced">
+            <div class="label">Balanced</div>
+            <div class="value">{{ balanced_count }}</div>
+            <div class="label">Ratio 0.3 - 1.0</div>
+        </div>
+        <div class="summary-card high-demand">
+            <div class="label">High Demand</div>
+            <div class="value">{{ high_demand_count }}</div>
+            <div class="label">Ratio < 0.3</div>
+        </div>
+        <div class="summary-card">
+            <div class="label">Total BTS Sales</div>
+            <div class="value">${{ total_bts_sales|floatformat:0|intcomma }}</div>
+            <div class="label">{{ bts_start }} to {{ bts_end }}</div>
+        </div>
+    </div>
+
+    <!-- Data Table -->
+    <div class="row g-3 mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <h4 class="mb-3">Customer-wise BTS Sell-Through Analysis</h4>
+                    <div class="table-responsive">
+                        <table id="btsSellThroughTable" class="table table-hover table-striped" style="width:100%">
+                            <thead>
+                                <tr>
+                                    <th>Customer</th>
+                                    <th>Style Code</th>
+                                    <th>Product Name</th>
+                                    <th>SKU</th>
+                                    <th>BTS Sales (Qty)</th>
+                                    <th>BTS Sales ($)</th>
+                                    <th>Stock Left</th>
+                                    <th>Ratio</th>
+                                    <th>Risk</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in report_data %}
+                                <tr>
+                                    <td>{{ item.customer }}</td>
+                                    <td>{{ item.style_code }}</td>
+                                    <td>{{ item.product_name }}</td>
+                                    <td>{{ item.sku }}</td>
+                                    <td class="text-end">{{ item.bts_sales_qty|floatformat:0|intcomma }}</td>
+                                    <td class="text-end">${{ item.bts_sales_value|floatformat:2|intcomma }}</td>
+                                    <td class="text-end">{{ item.stock_left|floatformat:0|intcomma }}</td>
+                                    <td class="text-end">{{ item.ratio_display }}</td>
+                                    <td class="text-center">
+                                        <span class="risk-badge badge-{{ item.risk_badge }}">{{ item.risk_label }}</span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Business Logic Explanation -->
+    <div class="row g-3 mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <h5>About This Report</h5>
+                    <p><strong>BTS Sell-Through Ratio</strong> = Stock Left After BTS Season / BTS Sales</p>
+                    <ul>
+                        <li><strong>BTS Sales:</strong> Previous Year December + Current Year January + Current Year February</li>
+                        <li><strong>Stock Left After BTS Season:</strong> Available stock balance at end of February</li>
+                    </ul>
+                    <p><strong>Risk Classification:</strong></p>
+                    <ul>
+                        <li><span class="risk-badge badge-danger">Overstock Risk</span> Ratio > 1.0 (More stock left than sold)</li>
+                        <li><span class="risk-badge badge-warning">Balanced</span> Ratio 0.3 - 1.0 (Healthy stock levels)</li>
+                        <li><span class="risk-badge badge-success">High Demand</span> Ratio < 0.3 (Stock depleted, high demand)</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/dataTables.buttons.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.bootstrap5.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.print.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
+
+<script>
+$(document).ready(function() {
+    $('#btsSellThroughTable').DataTable({
+        pageLength: 25,
+        order: [[7, 'desc']],  // Sort by Ratio descending
+        dom: 'Bfrtip',
+        buttons: [
+            {
+                extend: 'excelHtml5',
+                text: '<i class="fas fa-file-excel"></i> Export to Excel',
+                className: 'btn btn-success btn-sm',
+                title: 'BTS Sell-Through Report'
+            },
+            {
+                extend: 'csvHtml5',
+                text: '<i class="fas fa-file-csv"></i> Export to CSV',
+                className: 'btn btn-info btn-sm',
+                title: 'BTS Sell-Through Report'
+            },
+            {
+                extend: 'print',
+                text: '<i class="fas fa-print"></i> Print',
+                className: 'btn btn-secondary btn-sm'
+            }
+        ]
+    });
+});
+</script>
+{% endblock %}
