@@ -1982,6 +1982,9 @@ def sales_forecasting(request):
             # Show all shop products
             sql += " AND p.category_name LIKE '%%Shop'"
 
+        # Exclude Wholesale categories
+        sql += " AND p.category_name NOT LIKE 'Wholesale%%'"
+
         # Filter out products without school assignment
         sql += " AND p.sub_category IS NOT NULL AND p.sub_category != ''"
 
