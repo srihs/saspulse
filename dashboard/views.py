@@ -4433,9 +4433,9 @@ def inventory_health_dashboard(request):
         """, [days_30_ago])
 
         row = cursor.fetchone()
-        total_skus = row[0] or 1  # Avoid division by zero
-        stockout_risk_skus = row[1] or 0
-        excess_stock_skus = row[2] or 0
+        total_skus = float(row[0] or 1)  # Avoid division by zero
+        stockout_risk_skus = float(row[1] or 0)
+        excess_stock_skus = float(row[2] or 0)
 
     stockout_risk_pct = (stockout_risk_skus / total_skus) * 100 if total_skus > 0 else 0
     excess_stock_pct = (excess_stock_skus / total_skus) * 100 if total_skus > 0 else 0
@@ -4500,9 +4500,9 @@ def inventory_health_dashboard(request):
 
     # 4. Calculate overall health score (weighted average)
     # Lower is better for stockout, excess, and dead stock (so invert them)
-    stockout_score = max(0, 100 - stockout_risk_pct)
-    excess_score = max(0, 100 - excess_stock_pct)
-    dead_stock_score = max(0, 100 - dead_stock_pct)
+    stockout_score = float(max(0, 100 - stockout_risk_pct))
+    excess_score = float(max(0, 100 - excess_stock_pct))
+    dead_stock_score = float(max(0, 100 - dead_stock_pct))
 
     health_score = (
         stockout_score * 0.30 +
