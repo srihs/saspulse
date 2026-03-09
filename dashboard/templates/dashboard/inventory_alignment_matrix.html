@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
 <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
 <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.bootstrap5.min.css">
+<link rel="stylesheet" href="https://cdn.datatables.net/rowgroup/1.4.0/css/rowGroup.bootstrap5.min.css">
 <style>
 /* Risk badge styling */
 .risk-badge {
@@ -52,6 +53,52 @@
 
 #alignmentMatrixTable tbody tr:hover {
     background-color: #f8f9fa;
+}
+
+/* Hierarchical Grouping Styles */
+.group-header {
+    font-weight: bold;
+    cursor: pointer;
+    user-select: none;
+    transition: opacity 0.2s ease;
+}
+
+.customer-group {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    color: white !important;
+    font-size: 1.1em;
+    padding: 12px 15px !important;
+    border-left: 5px solid #5568d3;
+}
+
+.product-group {
+    background: linear-gradient(135deg, #89d8d3 0%, #56ab2f 100%) !important;
+    color: white !important;
+    font-size: 1em;
+    padding: 10px 20px 10px 35px !important;
+    border-left: 4px solid #4a9628;
+}
+
+.group-header:hover {
+    opacity: 0.9;
+}
+
+.group-header .badge {
+    font-size: 0.8em;
+    padding: 0.3rem 0.6rem;
+    margin-left: 0.5rem;
+    background-color: rgba(255, 255, 255, 0.3) !important;
+    color: white !important;
+    border: 1px solid rgba(255, 255, 255, 0.5);
+}
+
+/* Data row styling with indentation for hierarchy */
+#alignmentMatrixTable tbody tr:not(.dtrg-group) {
+    border-left: 3px solid #e9ecef;
+}
+
+#alignmentMatrixTable tbody tr:not(.dtrg-group) td:first-child {
+    padding-left: 50px !important;
 }
 </style>
 {% endblock %}
@@ -263,6 +310,7 @@
 <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.bootstrap5.min.js"></script>
 <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
 <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.print.min.js"></script>
+<script src="https://cdn.datatables.net/rowgroup/1.4.0/js/dataTables.rowGroup.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
@@ -271,7 +319,7 @@
 $(document).ready(function() {
     $('#alignmentMatrixTable').DataTable({
         pageLength: 25,
-        order: [[9, 'asc']],  // Sort by Days Coverage ascending (most urgent first)
+        order: [[0, 'asc'], [2, 'asc'], [9, 'asc']],  // Sort by Customer, Product Name, then Days Coverage
         dom: '<"row"<"col-sm-12 col-md-6"B><"col-sm-12 col-md-6"f>>rtip',
         buttons: [
             {
@@ -280,7 +328,13 @@ $(document).ready(function() {
                 className: 'btn btn-success btn-sm',
                 title: 'Inventory Alignment Matrix',
                 exportOptions: {
-                    columns: ':visible'
+                    columns: ':visible',
+                    format: {
+                        body: function (data, row, column, node) {
+                            // Include group headers in export
+                            return data;
+                        }
+                    }
                 }
             },
             {
@@ -312,14 +366,45 @@ $(document).ready(function() {
                 }
             }
         ],
+        rowGroup: {
+            dataSrc: [0, 2],  // Group by Customer (column 0), then Product Name (column 2)
+            startRender: function (rows, group, level) {
+                var count = rows.count();
+
+                // Only show group headers when there are multiple items (count > 1)
+                if (count > 1) {
+                    if (level === 0) {
+                        // Customer group header (Level 0)
+                        return $('<tr/>')
+                            .addClass('group-header customer-group')
+                            .append('<td colspan="12"><i class="fas fa-school me-2"></i><strong>' + group + '</strong> <span class="badge">' + count + ' items</span></td>');
+                    } else {
+                        // Product group header (Level 1)
+                        return $('<tr/>')
+                            .addClass('group-header product-group')
+                            .append('<td colspan="12"><i class="fas fa-box me-2"></i>' + group + ' <span class="badge">' + count + ' variations</span></td>');
+                    }
+                }
+                // Return null to skip group header for single items
+                return null;
+            }
+        },
+        columnDefs: [
+            {
+                targets: [0, 2],  // Customer and Product Name columns
+                visible: false,   // Hide but still use for grouping and searching
+                searchable: true
+            },
+            {
+                targets: [4, 5, 6, 7, 8, 9, 10],  // Numeric columns to right-align
+                className: "text-end"
+            }
+        ],
         responsive: true,
         language: {
             search: "_INPUT_",
             searchPlaceholder: "Search records..."
-        },
-        columnDefs: [
-            { className: "text-end", targets: [4, 5, 6, 7, 8, 9, 10] }  // Right-align numeric columns
-        ]
+        }
     });
 });
 </script>
