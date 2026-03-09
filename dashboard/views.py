@@ -2288,6 +2288,10 @@ def sales_forecasting(request):
             # Check if this variation has already been requested
             already_requested = (f.entity_name, size or '') in requested_items_set
 
+            # Skip this variation entirely if already requested
+            if already_requested:
+                continue
+
             variation_data = {
                 'sku_code': f.entity_name,
                 'product_name': product_name,
@@ -2302,8 +2306,7 @@ def sales_forecasting(request):
                 'forecast_data': date_range_data,
                 'training_days': f.model_params.get('training_days', 0),
                 'mae': round(f.mae, 2) if f.mae else None,
-                'mape': round(f.mape, 2) if f.mape else None,
-                'already_requested': already_requested
+                'mape': round(f.mape, 2) if f.mape else None
             }
 
             grouped_products[product_name].append(variation_data)
@@ -2427,6 +2430,10 @@ def sales_forecasting(request):
                     # Check if this variation has already been requested
                     already_requested = (f.entity_name, size or '') in requested_items_set
 
+                    # Skip this variation entirely if already requested
+                    if already_requested:
+                        continue
+
                     variation_data = {
                         'sku_code': f.entity_name,
                         'product_name': product_name,
@@ -2441,8 +2448,7 @@ def sales_forecasting(request):
                         'forecast_data': date_range_data,
                         'training_days': f.model_params.get('training_days', 0),
                         'mae': round(f.mae, 2) if f.mae else None,
-                        'mape': round(f.mape, 2) if f.mape else None,
-                        'already_requested': already_requested
+                        'mape': round(f.mape, 2) if f.mape else None
                     }
 
                     school_variations.append(variation_data)
@@ -2562,6 +2568,10 @@ def sales_forecasting(request):
                         # Check if this variation has already been requested
                         already_requested = (f.entity_name, size or '') in requested_items_set
 
+                        # Skip this variation entirely if already requested
+                        if already_requested:
+                            continue
+
                         variation_data = {
                             'sku_code': f.entity_name,
                             'product_name': product_name,
@@ -2576,8 +2586,7 @@ def sales_forecasting(request):
                             'forecast_data': date_range_data,
                             'training_days': f.model_params.get('training_days', 0),
                             'mae': round(f.mae, 2) if f.mae else None,
-                            'mape': round(f.mape, 2) if f.mape else None,
-                            'already_requested': already_requested
+                            'mape': round(f.mape, 2) if f.mape else None
                         }
 
                         school_variations.append(variation_data)
@@ -2706,6 +2715,10 @@ def sales_forecasting(request):
                 # Check if this variation has already been requested
                 already_requested = (f.entity_name, size or '') in requested_items_set
 
+                # Skip this variation entirely if already requested
+                if already_requested:
+                    continue
+
                 variation_data = {
                     'sku_code': f.entity_name,
                     'product_name': product_name,
@@ -2720,8 +2733,7 @@ def sales_forecasting(request):
                     'forecast_data': date_range_data,
                     'training_days': f.model_params.get('training_days', 0),
                     'mae': round(f.mae, 2) if f.mae else None,
-                    'mape': round(f.mape, 2) if f.mape else None,
-                    'already_requested': already_requested
+                    'mape': round(f.mape, 2) if f.mape else None
                 }
 
                 school_variations.append(variation_data)

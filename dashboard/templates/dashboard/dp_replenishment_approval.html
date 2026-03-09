@@ -155,13 +155,20 @@ $(document).ready(function() {
         const batchId = button.data('batch-id');
         const requestNumber = button.data('request-number');
 
-        if (!confirm(`Are you sure you want to approve request ${requestNumber}?`)) {
-            return;
-        }
+        showConfirmation(
+            `Are you sure you want to approve request ${requestNumber}? This will convert it to an order.`,
+            function() {
+                // Disable button
+                button.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Approving...');
+                approveRequest(button, batchId, requestNumber);
+            },
+            'Approve Request',
+            'Approve',
+            'btn-success'
+        );
+    });
 
-        // Disable button
-        button.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Approving...');
-
+    function approveRequest(button, batchId, requestNumber) {
         // Make AJAX request
         $.ajax({
             url: `/dashboard/replenishment/dp/approve/${batchId}/`,
@@ -172,7 +179,7 @@ $(document).ready(function() {
             success: function(response) {
                 if (response.success) {
                     // Show success message
-                    alert(`Request ${requestNumber} approved successfully!`);
+                    showAlert(`Request ${requestNumber} has been approved successfully and converted to an order.`, 'Success', 'check-circle');
 
                     // Remove row from table
                     $(`#request-row-${batchId}`).fadeOut(500, function() {
@@ -183,16 +190,16 @@ $(document).ready(function() {
                         $('.text-warning').first().text(currentCount - 1);
                     });
                 } else {
-                    alert('Error: ' + response.error);
+                    showAlert('Error: ' + response.error, 'Approval Failed', 'times-circle');
                     button.prop('disabled', false).html('<i class="fas fa-check"></i> Approve');
                 }
             },
             error: function(xhr) {
-                alert('Error approving request. Please try again.');
+                showAlert('An error occurred while approving the request. Please try again.', 'Error', 'times-circle');
                 button.prop('disabled', false).html('<i class="fas fa-check"></i> Approve');
             }
         });
-    });
+    }
 
     // Reject button handler
     $(document).on('click', '.reject-btn', function() {
@@ -214,7 +221,7 @@ $(document).ready(function() {
         const reason = $('#rejection-reason').val().trim();
 
         if (!reason) {
-            alert('Please provide a rejection reason.');
+            showAlert('Please provide a reason for rejecting this request.', 'Rejection Reason Required', 'exclamation-triangle');
             return;
         }
 
@@ -238,7 +245,7 @@ $(document).ready(function() {
                     bootstrap.Modal.getInstance(document.getElementById('rejectModal')).hide();
 
                     // Show success message
-                    alert(`Request ${currentRequestNumber} rejected.`);
+                    showAlert(`Request ${currentRequestNumber} has been rejected.`, 'Request Rejected', 'check-circle');
 
                     // Remove row from table
                     $(`#request-row-${currentBatchId}`).fadeOut(500, function() {
@@ -249,14 +256,14 @@ $(document).ready(function() {
                         $('.text-warning').first().text(currentCount - 1);
                     });
                 } else {
-                    alert('Error: ' + response.error);
+                    showAlert('Error: ' + response.error, 'Rejection Failed', 'times-circle');
                 }
 
                 // Re-enable button
                 $('#confirm-reject-btn').prop('disabled', false).html('Confirm Rejection');
             },
             error: function(xhr) {
-                alert('Error rejecting request. Please try again.');
+                showAlert('An error occurred while rejecting the request. Please try again.', 'Error', 'times-circle');
                 $('#confirm-reject-btn').prop('disabled', false).html('Confirm Rejection');
             }
         });

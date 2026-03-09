@@ -219,9 +219,15 @@ $(document).ready(function() {
 let currentRequestId = null;
 
 function dpApprove(requestId) {
-    if (confirm('Approve this request as submitted by store manager?')) {
-        submitAction(requestId, 'approve', null, '');
-    }
+    showConfirmation(
+        'Approve this request as submitted by the store manager?',
+        function() {
+            submitAction(requestId, 'approve', null, '');
+        },
+        'Approve Request',
+        'Approve',
+        'btn-success'
+    );
 }
 
 function dpModify(requestId, currentQty, productName) {
@@ -242,21 +248,29 @@ function submitModify() {
 function bulkApprove() {
     const selected = $('.request-checkbox:checked').map(function() { return this.value; }).get();
     if (selected.length === 0) {
-        alert('Please select at least one request');
+        showAlert('Please select at least one request to approve.', 'No Requests Selected', 'exclamation-triangle');
         return;
     }
-    if (confirm(`Approve ${selected.length} selected requests?`)) {
-        let completed = 0;
-        selected.forEach(id => {
-            submitAction(id, 'approve', null, '', function() {
-                completed++;
-                if (completed === selected.length) {
-                    alert('All requests approved!');
-                    location.reload();
-                }
+    showConfirmation(
+        `Are you sure you want to approve ${selected.length} selected request${selected.length > 1 ? 's' : ''}?`,
+        function() {
+            let completed = 0;
+            selected.forEach(id => {
+                submitAction(id, 'approve', null, '', function() {
+                    completed++;
+                    if (completed === selected.length) {
+                        showAlert(`All ${selected.length} requests have been approved successfully!`, 'Bulk Approval Complete', 'check-circle');
+                        setTimeout(function() {
+                            location.reload();
+                        }, 2000);
+                    }
+                });
             });
-        });
-    }
+        },
+        'Bulk Approve',
+        'Approve All',
+        'btn-success'
+    );
 }
 
 function submitAction(requestId, action, quantity, comment, callback) {
@@ -276,18 +290,20 @@ function submitAction(requestId, action, quantity, comment, callback) {
     .then(data => {
         if (data.success) {
             if (!callback) {
-                alert(data.message);
-                location.reload();
+                showAlert(data.message, 'Success', 'check-circle');
+                setTimeout(function() {
+                    location.reload();
+                }, 2000);
             } else {
                 callback();
             }
         } else {
-            alert('Error: ' + data.error);
+            showAlert('Error: ' + data.error, 'Action Failed', 'times-circle');
         }
     })
     .catch(error => {
         console.error('Error:', error);
-        alert('An error occurred');
+        showAlert('An error occurred while processing your request. Please try again.', 'Error', 'times-circle');
     });
 }
 </script>

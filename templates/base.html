@@ -148,10 +148,10 @@
                   </a>
                 </div>
                 <div class="nav-item-wrapper">
-                  <a class="nav-link label-1" href="/dashboard/replenishment/dp/">
+                  <a class="nav-link label-1" href="/dashboard/replenishment/dp/approval/">
                     <div class="d-flex align-items-center">
                       <span class="nav-link-icon"><span data-feather="check-square"></span></span>
-                      <span class="nav-link-text">DP Team Review</span>
+                      <span class="nav-link-text">DP Team Approval</span>
                     </div>
                   </a>
                 </div>
@@ -6491,6 +6491,47 @@
     <!-- ===============================================-->
 
     <!-- ===============================================-->
+    <!--    Global Modals-->
+    <!-- ===============================================-->
+
+    <!-- Global Confirmation Modal -->
+    <div class="modal fade" id="globalConfirmationModal" tabindex="-1" aria-labelledby="globalConfirmationModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="globalConfirmationModalLabel">Confirm Action</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="globalConfirmationModalBody">
+                    Are you sure you want to proceed?
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="globalConfirmationModalConfirm">Confirm</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Global Alert Modal -->
+    <div class="modal fade" id="globalAlertModal" tabindex="-1" aria-labelledby="globalAlertModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="globalAlertModalLabel">Information</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="globalAlertModalBody">
+                    Message here
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===============================================-->
     <!--    JavaScripts-->
     <!-- ===============================================-->
     <script src="{% static 'js/popper/popper.min.js' %}"></script>
@@ -6511,6 +6552,86 @@
 
     <!-- jQuery (required for DataTables) -->
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+
+    <!-- Global Modal Helper Functions -->
+    <script>
+    // Global confirmation handler
+    let globalConfirmationCallback = null;
+
+    /**
+     * Show a confirmation modal with custom message and callback
+     * @param {string} message - The confirmation message to display
+     * @param {function} callback - Function to execute when user confirms
+     * @param {string} title - Modal title (default: 'Confirm Action')
+     * @param {string} confirmText - Confirm button text (default: 'Confirm')
+     * @param {string} confirmClass - Confirm button class (default: 'btn-primary')
+     */
+    function showConfirmation(message, callback, title = 'Confirm Action', confirmText = 'Confirm', confirmClass = 'btn-primary') {
+        $('#globalConfirmationModalLabel').text(title);
+        $('#globalConfirmationModalBody').text(message);
+        $('#globalConfirmationModalConfirm')
+            .text(confirmText)
+            .removeClass()
+            .addClass('btn ' + confirmClass);
+
+        globalConfirmationCallback = callback;
+
+        const modal = new bootstrap.Modal(document.getElementById('globalConfirmationModal'));
+        modal.show();
+    }
+
+    /**
+     * Show an alert/information modal
+     * @param {string} message - The message to display
+     * @param {string} title - Modal title (default: 'Information')
+     * @param {string} icon - FontAwesome icon name without 'fa-' prefix (default: 'info-circle')
+     */
+    function showAlert(message, title = 'Information', icon = 'info-circle') {
+        $('#globalAlertModalLabel').text(title);
+
+        // Add icon if provided
+        let iconClass = 'info-circle';
+        let iconColor = 'text-primary';
+
+        if (icon === 'warning' || icon === 'exclamation-triangle') {
+            iconClass = 'exclamation-triangle';
+            iconColor = 'text-warning';
+        } else if (icon === 'error' || icon === 'times-circle') {
+            iconClass = 'times-circle';
+            iconColor = 'text-danger';
+        } else if (icon === 'success' || icon === 'check-circle') {
+            iconClass = 'check-circle';
+            iconColor = 'text-success';
+        } else {
+            iconClass = icon;
+        }
+
+        const iconHtml = `<i class="fas fa-${iconClass} ${iconColor} me-2"></i>`;
+        $('#globalAlertModalBody').html(iconHtml + message);
+
+        const modal = new bootstrap.Modal(document.getElementById('globalAlertModal'));
+        modal.show();
+    }
+
+    // Handle confirm button click
+    $(document).ready(function() {
+        $('#globalConfirmationModalConfirm').on('click', function() {
+            if (globalConfirmationCallback) {
+                globalConfirmationCallback();
+                globalConfirmationCallback = null;
+            }
+            const modal = bootstrap.Modal.getInstance(document.getElementById('globalConfirmationModal'));
+            if (modal) {
+                modal.hide();
+            }
+        });
+
+        // Reset callback when modal is closed without confirming
+        $('#globalConfirmationModal').on('hidden.bs.modal', function() {
+            globalConfirmationCallback = null;
+        });
+    });
+    </script>
 
     <!-- DataTables Core -->
     <script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
