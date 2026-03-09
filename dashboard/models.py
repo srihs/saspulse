@@ -68,7 +68,6 @@ class SalesForecastBase(models.Model):
         ('school', 'By School'),
         ('product', 'By Product'),
         ('shop', 'By Shop Location'),
-        ('category', 'By Category'),
     ]
 
     MODEL_TYPES = [
@@ -581,7 +580,6 @@ class SalesForecast(models.Model):
         ('school', 'By School'),
         ('product', 'By Product'),
         ('shop', 'By Shop Location'),
-        ('category', 'By Category'),
     ]
 
     MODEL_TYPES = [

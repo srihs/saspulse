@@ -2076,7 +2076,7 @@ def sales_forecasting(request):
                     LEFT JOIN cin7_sync_productoption po ON po.code = sf.entity_name
                     LEFT JOIN cin7_sync_product p ON p.cin7_id = po.cin7_product_id
                     WHERE sf.aggregation_level = 'product'
-                      AND p.category = %s
+                      AND p.sub_category = %s
                 """
                 params = [category_filter]
 
