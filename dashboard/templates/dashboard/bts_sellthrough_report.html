@@ -9,117 +9,163 @@
 <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
 <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.bootstrap5.min.css">
 <style>
+/* Risk badge styling */
 .risk-badge {
-    padding: 0.25rem 0.75rem;
-    border-radius: 0.25rem;
+    padding: 0.35rem 0.85rem;
+    border-radius: 0.375rem;
     font-size: 0.875rem;
     font-weight: 600;
+    display: inline-block;
 }
 .badge-danger { background-color: #dc3545; color: white; }
 .badge-warning { background-color: #ffc107; color: #000; }
 .badge-success { background-color: #28a745; color: white; }
 
-.summary-cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 1rem;
-    margin-bottom: 2rem;
+/* DataTable buttons styling */
+.dt-buttons {
+    margin-bottom: 1rem;
 }
-.summary-card {
-    background: white;
-    padding: 1.5rem;
-    border-radius: 0.5rem;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    text-align: center;
+
+.dt-button {
+    margin-right: 0.5rem !important;
+    border-radius: 0.375rem !important;
+    padding: 0.5rem 1rem !important;
+    font-size: 0.875rem !important;
 }
-.summary-card .value {
-    font-size: 2rem;
-    font-weight: bold;
-    margin: 0.5rem 0;
+
+/* Table styling */
+#btsSellThroughTable thead th {
+    background-color: #f8f9fa;
+    font-weight: 600;
+    border-bottom: 2px solid #dee2e6;
 }
-.summary-card .label {
-    color: #6c757d;
-    font-size: 0.875rem;
+
+#btsSellThroughTable tbody tr:hover {
+    background-color: #f8f9fa;
 }
-.summary-card.overstock .value { color: #dc3545; }
-.summary-card.balanced .value { color: #ffc107; }
-.summary-card.high-demand .value { color: #28a745; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid px-4">
-    <!-- Page Header -->
-    <div class="row g-3 mb-4">
+<div class="pb-5">
+    <div class="row g-4">
         <div class="col-12">
-            <div class="d-flex justify-content-between align-items-center">
-                <div>
-                    <h2 class="mb-0">BTS Sell-Through Ratio Report</h2>
-                    <p class="text-muted mb-0">Track stock performance after BTS season</p>
-                </div>
+            <!-- Page Header with Breadcrumbs -->
+            <div class="mb-8">
+                <h2 class="mb-2"><i class="fas fa-chart-bar me-2 text-primary"></i>BTS Sell-Through Ratio Report</h2>
+                <h5 class="text-body-tertiary fw-semibold">
+                    Track stock performance after Back-to-School season
+                </h5>
             </div>
-        </div>
-    </div>
 
-    <!-- Date Range Filter -->
-    <div class="row g-3 mb-4">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-body">
-                    <form method="GET" action="{% url 'dashboard:bts_sellthrough_report' %}" class="row g-3 align-items-end">
-                        <div class="col-md-4">
-                            <label class="form-label" for="bts_start">BTS Start Date</label>
-                            <input class="form-control" type="date" id="bts_start" name="bts_start" value="{{ bts_start }}" required>
-                            <small class="form-text text-muted">Previous Year December</small>
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label" for="bts_end">BTS End Date</label>
-                            <input class="form-control" type="date" id="bts_end" name="bts_end" value="{{ bts_end }}" required>
-                            <small class="form-text text-muted">Current Year February</small>
-                        </div>
-                        <div class="col-md-4">
-                            <button class="btn btn-primary w-100" type="submit">
-                                <span class="fas fa-sync-alt me-2"></span>Update Report
-                            </button>
+            <!-- Date Range Filter -->
+            <div class="card mb-4 filter-card">
+                <div class="card-body p-4">
+                    <h6 class="mb-3 fw-semibold"><i class="fas fa-filter me-2"></i>Filter Options</h6>
+                    <form method="GET" action="{% url 'dashboard:bts_sellthrough_report' %}" id="btsFilterForm">
+                        <div class="row g-4">
+                            <div class="col-md-4">
+                                <label class="form-label fw-semibold" for="bts_start">
+                                    <i class="fas fa-calendar-alt me-1"></i>BTS Start Date
+                                </label>
+                                <input class="form-control" type="date" id="bts_start" name="bts_start" value="{{ bts_start }}" required>
+                                <small class="form-text text-muted">Previous Year December</small>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-semibold" for="bts_end">
+                                    <i class="fas fa-calendar-check me-1"></i>BTS End Date
+                                </label>
+                                <input class="form-control" type="date" id="bts_end" name="bts_end" value="{{ bts_end }}" required>
+                                <small class="form-text text-muted">Current Year February</small>
+                            </div>
+                            <div class="col-md-4 d-flex align-items-end">
+                                <button class="btn btn-primary w-100" type="submit">
+                                    <i class="fas fa-sync-alt me-2"></i>Update Report
+                                </button>
+                            </div>
                         </div>
                     </form>
                 </div>
             </div>
-        </div>
-    </div>
 
-    <!-- Summary Cards -->
-    <div class="summary-cards">
-        <div class="summary-card overstock">
-            <div class="label">Overstock Risk</div>
-            <div class="value">{{ overstock_count }}</div>
-            <div class="label">SKUs with Ratio > 1.0</div>
-        </div>
-        <div class="summary-card balanced">
-            <div class="label">Balanced</div>
-            <div class="value">{{ balanced_count }}</div>
-            <div class="label">Ratio 0.3 - 1.0</div>
-        </div>
-        <div class="summary-card high-demand">
-            <div class="label">High Demand</div>
-            <div class="value">{{ high_demand_count }}</div>
-            <div class="label">Ratio < 0.3</div>
-        </div>
-        <div class="summary-card">
-            <div class="label">Total BTS Sales</div>
-            <div class="value">${{ total_bts_sales|floatformat:0|intcomma }}</div>
-            <div class="label">{{ bts_start }} to {{ bts_end }}</div>
-        </div>
-    </div>
+            <!-- Summary Cards -->
+            <div class="row g-4 mb-4">
+                <div class="col-12 col-md-6 col-xl-3">
+                    <div class="card border-start border-danger border-4 h-100">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <h6 class="text-muted mb-2">Overstock Risk</h6>
+                                    <h2 class="mb-0 text-danger fw-bold">{{ overstock_count }}</h2>
+                                    <small class="text-muted">SKUs with Ratio > 1.0</small>
+                                </div>
+                                <div class="fs-3 text-danger">
+                                    <i class="fas fa-exclamation-triangle"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-md-6 col-xl-3">
+                    <div class="card border-start border-warning border-4 h-100">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <h6 class="text-muted mb-2">Balanced</h6>
+                                    <h2 class="mb-0 text-warning fw-bold">{{ balanced_count }}</h2>
+                                    <small class="text-muted">Ratio 0.3 - 1.0</small>
+                                </div>
+                                <div class="fs-3 text-warning">
+                                    <i class="fas fa-balance-scale"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-md-6 col-xl-3">
+                    <div class="card border-start border-success border-4 h-100">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <h6 class="text-muted mb-2">High Demand</h6>
+                                    <h2 class="mb-0 text-success fw-bold">{{ high_demand_count }}</h2>
+                                    <small class="text-muted">Ratio < 0.3</small>
+                                </div>
+                                <div class="fs-3 text-success">
+                                    <i class="fas fa-chart-line"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-md-6 col-xl-3">
+                    <div class="card border-start border-primary border-4 h-100">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <h6 class="text-muted mb-2">Total BTS Sales</h6>
+                                    <h2 class="mb-0 text-primary fw-bold">${{ total_bts_sales|floatformat:0|intcomma }}</h2>
+                                    <small class="text-muted">{{ bts_start }} to {{ bts_end }}</small>
+                                </div>
+                                <div class="fs-3 text-primary">
+                                    <i class="fas fa-dollar-sign"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
-    <!-- Data Table -->
-    <div class="row g-3 mb-4">
-        <div class="col-12">
-            <div class="card">
+            <!-- Data Table -->
+            <div class="card mb-4">
                 <div class="card-body">
-                    <h4 class="mb-3">Customer-wise BTS Sell-Through Analysis</h4>
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <h4 class="mb-0">
+                            <i class="fas fa-table me-2 text-primary"></i>Customer-wise BTS Sell-Through Analysis
+                        </h4>
+                    </div>
                     <div class="table-responsive">
-                        <table id="btsSellThroughTable" class="table table-hover table-striped" style="width:100%">
+                        <table id="btsSellThroughTable" class="table table-hover table-sm" style="width:100%">
                             <thead>
                                 <tr>
                                     <th>Customer</th>
@@ -154,15 +200,11 @@
                     </div>
                 </div>
             </div>
-        </div>
-    </div>
 
-    <!-- Business Logic Explanation -->
-    <div class="row g-3 mb-4">
-        <div class="col-12">
-            <div class="card">
+            <!-- Business Logic Explanation -->
+            <div class="card mb-4">
                 <div class="card-body">
-                    <h5>About This Report</h5>
+                    <h5 class="mb-3"><i class="fas fa-info-circle me-2 text-primary"></i>About This Report</h5>
                     <p><strong>BTS Sell-Through Ratio</strong> = Stock Left After BTS Season / BTS Sales</p>
                     <ul>
                         <li><strong>BTS Sales:</strong> Previous Year December + Current Year January + Current Year February</li>
@@ -197,26 +239,50 @@ $(document).ready(function() {
     $('#btsSellThroughTable').DataTable({
         pageLength: 25,
         order: [[7, 'desc']],  // Sort by Ratio descending
-        dom: 'Bfrtip',
+        dom: '<"row"<"col-sm-12 col-md-6"B><"col-sm-12 col-md-6"f>>rtip',
         buttons: [
             {
                 extend: 'excelHtml5',
-                text: '<i class="fas fa-file-excel"></i> Export to Excel',
+                text: '<i class="fas fa-file-excel me-1"></i>Excel',
                 className: 'btn btn-success btn-sm',
-                title: 'BTS Sell-Through Report'
+                title: 'BTS Sell-Through Report',
+                exportOptions: {
+                    columns: ':visible'
+                }
             },
             {
                 extend: 'csvHtml5',
-                text: '<i class="fas fa-file-csv"></i> Export to CSV',
+                text: '<i class="fas fa-file-csv me-1"></i>CSV',
                 className: 'btn btn-info btn-sm',
-                title: 'BTS Sell-Through Report'
+                title: 'BTS Sell-Through Report',
+                exportOptions: {
+                    columns: ':visible'
+                }
+            },
+            {
+                extend: 'pdfHtml5',
+                text: '<i class="fas fa-file-pdf me-1"></i>PDF',
+                className: 'btn btn-danger btn-sm',
+                title: 'BTS Sell-Through Report',
+                orientation: 'landscape',
+                exportOptions: {
+                    columns: ':visible'
+                }
             },
             {
                 extend: 'print',
-                text: '<i class="fas fa-print"></i> Print',
-                className: 'btn btn-secondary btn-sm'
+                text: '<i class="fas fa-print me-1"></i>Print',
+                className: 'btn btn-secondary btn-sm',
+                exportOptions: {
+                    columns: ':visible'
+                }
             }
-        ]
+        ],
+        responsive: true,
+        language: {
+            search: "_INPUT_",
+            searchPlaceholder: "Search records..."
+        }
     });
 });
 </script>

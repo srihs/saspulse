@@ -8,27 +8,23 @@
 <link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
 <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
 <style>
+/* Health Score Gauge */
 .health-gauge-container {
     text-align: center;
-    padding: 2rem;
+    padding: 2.5rem;
 }
 .health-score {
-    font-size: 4rem;
+    font-size: 5rem;
     font-weight: bold;
-    margin: 1rem 0;
+    margin: 1.5rem 0;
+    line-height: 1;
 }
 .health-score.excellent { color: #28a745; }
 .health-score.good { color: #5cb85c; }
 .health-score.fair { color: #ffc107; }
 .health-score.poor { color: #dc3545; }
 
-.component-card {
-    background: white;
-    padding: 1.5rem;
-    border-radius: 0.5rem;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    margin-bottom: 1rem;
-}
+/* Component Cards */
 .component-header {
     display: flex;
     justify-content: space-between;
@@ -36,185 +32,236 @@
     margin-bottom: 1rem;
 }
 .component-title {
-    font-size: 1.1rem;
+    font-size: 1rem;
     font-weight: 600;
+    color: #495057;
 }
 .component-score {
-    font-size: 1.5rem;
+    font-size: 1.75rem;
     font-weight: bold;
 }
 .progress {
-    height: 30px;
-    font-size: 1rem;
+    height: 32px;
+    font-size: 0.95rem;
+    border-radius: 0.375rem;
 }
 .metric-detail {
     display: flex;
     justify-content: space-between;
-    margin-top: 0.5rem;
+    margin-top: 0.75rem;
     color: #6c757d;
     font-size: 0.875rem;
+}
+
+/* Table Styling */
+.table thead th {
+    background-color: #f8f9fa;
+    font-weight: 600;
+    border-bottom: 2px solid #dee2e6;
 }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid px-4">
-    <!-- Page Header -->
-    <div class="row g-3 mb-4">
+<div class="pb-5">
+    <div class="row g-4">
         <div class="col-12">
-            <div class="d-flex justify-content-between align-items-center">
-                <div>
-                    <h2 class="mb-0">Inventory Health Score Dashboard</h2>
-                    <p class="text-muted mb-0">Overall inventory performance score (0-100)</p>
-                </div>
+            <!-- Page Header -->
+            <div class="mb-8">
+                <h2 class="mb-2"><i class="fas fa-heartbeat me-2 text-primary"></i>Inventory Health Score Dashboard</h2>
+                <h5 class="text-body-tertiary fw-semibold">
+                    Overall inventory performance score (0-100)
+                </h5>
             </div>
-        </div>
-    </div>
 
-    <!-- Overall Health Score Gauge -->
-    <div class="row g-3 mb-4">
-        <div class="col-12">
-            <div class="card">
+            <!-- Overall Health Score Gauge -->
+            <div class="card mb-4 shadow-sm">
                 <div class="card-body">
                     <div class="health-gauge-container">
-                        <h4>Overall Inventory Health Score</h4>
+                        <h4 class="mb-3"><i class="fas fa-tachometer-alt me-2"></i>Overall Inventory Health Score</h4>
                         <div class="health-score {% if health_score >= 80 %}excellent{% elif health_score >= 60 %}good{% elif health_score >= 40 %}fair{% else %}poor{% endif %}">
                             {{ health_score }}
                         </div>
-                        <div class="progress" style="height: 40px; max-width: 600px; margin: 0 auto;">
+                        <div class="progress" style="height: 45px; max-width: 700px; margin: 0 auto;">
                             <div class="progress-bar {% if health_score >= 80 %}bg-success{% elif health_score >= 60 %}bg-info{% elif health_score >= 40 %}bg-warning{% else %}bg-danger{% endif %}"
                                  role="progressbar"
                                  style="width: {{ health_score }}%"
                                  aria-valuenow="{{ health_score }}"
                                  aria-valuemin="0"
                                  aria-valuemax="100">
-                                {{ health_score }}%
+                                <strong>{{ health_score }}%</strong>
                             </div>
                         </div>
-                        <p class="text-muted mt-3">
+                        <div class="mt-4">
                             {% if health_score >= 80 %}
-                                Excellent - Your inventory is well-optimized
+                                <span class="badge bg-success fs-6 px-3 py-2">
+                                    <i class="fas fa-check-circle me-1"></i>Excellent - Your inventory is well-optimized
+                                </span>
                             {% elif health_score >= 60 %}
-                                Good - Minor improvements possible
+                                <span class="badge bg-info fs-6 px-3 py-2">
+                                    <i class="fas fa-info-circle me-1"></i>Good - Minor improvements possible
+                                </span>
                             {% elif health_score >= 40 %}
-                                Fair - Attention needed in some areas
+                                <span class="badge bg-warning fs-6 px-3 py-2">
+                                    <i class="fas fa-exclamation-circle me-1"></i>Fair - Attention needed in some areas
+                                </span>
                             {% else %}
-                                Poor - Immediate action required
+                                <span class="badge bg-danger fs-6 px-3 py-2">
+                                    <i class="fas fa-times-circle me-1"></i>Poor - Immediate action required
+                                </span>
                             {% endif %}
-                        </p>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
-    </div>
 
-    <!-- Component Breakdown -->
-    <div class="row g-3 mb-4">
-        <div class="col-md-6">
-            <div class="component-card">
-                <div class="component-header">
-                    <span class="component-title">Stockout Risk</span>
-                    <span class="component-score">{{ stockout_score }}%</span>
-                </div>
-                <div class="progress">
-                    <div class="progress-bar {% if stockout_score >= 70 %}bg-success{% elif stockout_score >= 40 %}bg-warning{% else %}bg-danger{% endif %}"
-                         role="progressbar"
-                         style="width: {{ stockout_score }}%"
-                         aria-valuenow="{{ stockout_score }}"
-                         aria-valuemin="0"
-                         aria-valuemax="100">
-                        {{ stockout_score }}%
+            <!-- Component Breakdown -->
+            <h5 class="mb-3"><i class="fas fa-chart-pie me-2"></i>Health Score Components</h5>
+            <div class="row g-4 mb-4">
+                <div class="col-md-6">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <div class="component-header">
+                                <span class="component-title">
+                                    <i class="fas fa-exclamation-triangle me-1 text-danger"></i>Stockout Risk
+                                </span>
+                                <span class="component-score {% if stockout_score >= 70 %}text-success{% elif stockout_score >= 40 %}text-warning{% else %}text-danger{% endif %}">
+                                    {{ stockout_score }}%
+                                </span>
+                            </div>
+                            <div class="progress">
+                                <div class="progress-bar {% if stockout_score >= 70 %}bg-success{% elif stockout_score >= 40 %}bg-warning{% else %}bg-danger{% endif %}"
+                                     role="progressbar"
+                                     style="width: {{ stockout_score }}%"
+                                     aria-valuenow="{{ stockout_score }}"
+                                     aria-valuemin="0"
+                                     aria-valuemax="100">
+                                    {{ stockout_score }}%
+                                </div>
+                            </div>
+                            <div class="metric-detail">
+                                <span><strong>SKUs at risk:</strong> {{ stockout_risk_skus }} / {{ total_skus }}</span>
+                                <span class="badge bg-secondary">{{ stockout_risk_pct }}%</span>
+                            </div>
+                            <hr class="my-2">
+                            <small class="text-muted">
+                                <i class="fas fa-info-circle me-1"></i>Weight: 30% | SKUs with < 30 days coverage
+                            </small>
+                        </div>
                     </div>
                 </div>
-                <div class="metric-detail">
-                    <span>SKUs at risk: {{ stockout_risk_skus }} / {{ total_skus }}</span>
-                    <span>Risk: {{ stockout_risk_pct }}%</span>
-                </div>
-                <small class="text-muted">Weight: 30% | SKUs with < 30 days coverage</small>
-            </div>
-        </div>
 
-        <div class="col-md-6">
-            <div class="component-card">
-                <div class="component-header">
-                    <span class="component-title">Excess Stock</span>
-                    <span class="component-score">{{ excess_score }}%</span>
-                </div>
-                <div class="progress">
-                    <div class="progress-bar {% if excess_score >= 70 %}bg-success{% elif excess_score >= 40 %}bg-warning{% else %}bg-danger{% endif %}"
-                         role="progressbar"
-                         style="width: {{ excess_score }}%"
-                         aria-valuenow="{{ excess_score }}"
-                         aria-valuemin="0"
-                         aria-valuemax="100">
-                        {{ excess_score }}%
+                <div class="col-md-6">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <div class="component-header">
+                                <span class="component-title">
+                                    <i class="fas fa-boxes me-1 text-warning"></i>Excess Stock
+                                </span>
+                                <span class="component-score {% if excess_score >= 70 %}text-success{% elif excess_score >= 40 %}text-warning{% else %}text-danger{% endif %}">
+                                    {{ excess_score }}%
+                                </span>
+                            </div>
+                            <div class="progress">
+                                <div class="progress-bar {% if excess_score >= 70 %}bg-success{% elif excess_score >= 40 %}bg-warning{% else %}bg-danger{% endif %}"
+                                     role="progressbar"
+                                     style="width: {{ excess_score }}%"
+                                     aria-valuenow="{{ excess_score }}"
+                                     aria-valuemin="0"
+                                     aria-valuemax="100">
+                                    {{ excess_score }}%
+                                </div>
+                            </div>
+                            <div class="metric-detail">
+                                <span><strong>Excess SKUs:</strong> {{ excess_stock_skus }} / {{ total_skus }}</span>
+                                <span class="badge bg-secondary">{{ excess_stock_pct }}%</span>
+                            </div>
+                            <hr class="my-2">
+                            <small class="text-muted">
+                                <i class="fas fa-info-circle me-1"></i>Weight: 25% | SKUs with > 180 days coverage
+                            </small>
+                        </div>
                     </div>
                 </div>
-                <div class="metric-detail">
-                    <span>Excess SKUs: {{ excess_stock_skus }} / {{ total_skus }}</span>
-                    <span>Excess: {{ excess_stock_pct }}%</span>
-                </div>
-                <small class="text-muted">Weight: 25% | SKUs with > 180 days coverage</small>
-            </div>
-        </div>
 
-        <div class="col-md-6">
-            <div class="component-card">
-                <div class="component-header">
-                    <span class="component-title">Dead Stock Value</span>
-                    <span class="component-score">{{ dead_stock_score }}%</span>
-                </div>
-                <div class="progress">
-                    <div class="progress-bar {% if dead_stock_score >= 70 %}bg-success{% elif dead_stock_score >= 40 %}bg-warning{% else %}bg-danger{% endif %}"
-                         role="progressbar"
-                         style="width: {{ dead_stock_score }}%"
-                         aria-valuenow="{{ dead_stock_score }}"
-                         aria-valuemin="0"
-                         aria-valuemax="100">
-                        {{ dead_stock_score }}%
+                <div class="col-md-6">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <div class="component-header">
+                                <span class="component-title">
+                                    <i class="fas fa-skull-crossbones me-1 text-danger"></i>Dead Stock Value
+                                </span>
+                                <span class="component-score {% if dead_stock_score >= 70 %}text-success{% elif dead_stock_score >= 40 %}text-warning{% else %}text-danger{% endif %}">
+                                    {{ dead_stock_score }}%
+                                </span>
+                            </div>
+                            <div class="progress">
+                                <div class="progress-bar {% if dead_stock_score >= 70 %}bg-success{% elif dead_stock_score >= 40 %}bg-warning{% else %}bg-danger{% endif %}"
+                                     role="progressbar"
+                                     style="width: {{ dead_stock_score }}%"
+                                     aria-valuenow="{{ dead_stock_score }}"
+                                     aria-valuemin="0"
+                                     aria-valuemax="100">
+                                    {{ dead_stock_score }}%
+                                </div>
+                            </div>
+                            <div class="metric-detail">
+                                <span><strong>Dead stock:</strong> ${{ dead_stock_value|floatformat:0|intcomma }}</span>
+                                <span class="badge bg-secondary">{{ dead_stock_pct }}%</span>
+                            </div>
+                            <hr class="my-2">
+                            <small class="text-muted">
+                                <i class="fas fa-info-circle me-1"></i>Weight: 25% | 0 sales in 180 days
+                            </small>
+                        </div>
                     </div>
                 </div>
-                <div class="metric-detail">
-                    <span>Dead stock: ${{ dead_stock_value|floatformat:0|intcomma }}</span>
-                    <span>{{ dead_stock_pct }}% of total</span>
-                </div>
-                <small class="text-muted">Weight: 25% | 0 sales in 180 days</small>
-            </div>
-        </div>
 
-        <div class="col-md-6">
-            <div class="component-card">
-                <div class="component-header">
-                    <span class="component-title">Inventory Turn Rate</span>
-                    <span class="component-score">{{ inventory_turn_score }}%</span>
-                </div>
-                <div class="progress">
-                    <div class="progress-bar {% if inventory_turn_score >= 70 %}bg-success{% elif inventory_turn_score >= 40 %}bg-warning{% else %}bg-danger{% endif %}"
-                         role="progressbar"
-                         style="width: {{ inventory_turn_score }}%"
-                         aria-valuenow="{{ inventory_turn_score }}"
-                         aria-valuemin="0"
-                         aria-valuemax="100">
-                        {{ inventory_turn_score }}%
+                <div class="col-md-6">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <div class="component-header">
+                                <span class="component-title">
+                                    <i class="fas fa-sync-alt me-1 text-primary"></i>Inventory Turn Rate
+                                </span>
+                                <span class="component-score {% if inventory_turn_score >= 70 %}text-success{% elif inventory_turn_score >= 40 %}text-warning{% else %}text-danger{% endif %}">
+                                    {{ inventory_turn_score }}%
+                                </span>
+                            </div>
+                            <div class="progress">
+                                <div class="progress-bar {% if inventory_turn_score >= 70 %}bg-success{% elif inventory_turn_score >= 40 %}bg-warning{% else %}bg-danger{% endif %}"
+                                     role="progressbar"
+                                     style="width: {{ inventory_turn_score }}%"
+                                     aria-valuenow="{{ inventory_turn_score }}"
+                                     aria-valuemin="0"
+                                     aria-valuemax="100">
+                                    {{ inventory_turn_score }}%
+                                </div>
+                            </div>
+                            <div class="metric-detail">
+                                <span><strong>Turn rate:</strong> {{ inventory_turn_rate }}x</span>
+                                <span class="badge bg-secondary">Last 180 days</span>
+                            </div>
+                            <hr class="my-2">
+                            <small class="text-muted">
+                                <i class="fas fa-info-circle me-1"></i>Weight: 20% | COGS / Avg Inventory
+                            </small>
+                        </div>
                     </div>
                 </div>
-                <div class="metric-detail">
-                    <span>Turn rate: {{ inventory_turn_rate }}x</span>
-                    <span>Last 180 days</span>
-                </div>
-                <small class="text-muted">Weight: 20% | COGS / Avg Inventory</small>
             </div>
-        </div>
-    </div>
 
-    <!-- Best and Worst Performers -->
-    <div class="row g-3 mb-4">
-        <div class="col-md-6">
-            <div class="card">
-                <div class="card-body">
-                    <h4 class="mb-3">Top 10 Best Performing SKUs</h4>
-                    <div class="table-responsive">
-                        <table class="table table-sm table-hover">
+            <!-- Best and Worst Performers -->
+            <h5 class="mb-3"><i class="fas fa-trophy me-2"></i>Top Performers</h5>
+            <div class="row g-4 mb-4">
+                <div class="col-md-6">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h6 class="mb-3 text-success">
+                                <i class="fas fa-arrow-up me-2"></i>Top 10 Best Performing SKUs
+                            </h6>
+                            <div class="table-responsive">
+                                <table class="table table-sm table-hover">
                             <thead>
                                 <tr>
                                     <th>SKU</th>
@@ -233,20 +280,22 @@
                                     <td class="text-end">{{ item.sales_qty_180d|floatformat:0|intcomma }}</td>
                                     <td class="text-end"><strong>{{ item.turn_rate }}x</strong></td>
                                 </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
                 </div>
-            </div>
-        </div>
 
-        <div class="col-md-6">
-            <div class="card">
-                <div class="card-body">
-                    <h4 class="mb-3">Top 10 Worst Performing SKUs</h4>
-                    <div class="table-responsive">
-                        <table class="table table-sm table-hover">
+                <div class="col-md-6">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h6 class="mb-3 text-danger">
+                                <i class="fas fa-arrow-down me-2"></i>Top 10 Worst Performing SKUs
+                            </h6>
+                            <div class="table-responsive">
+                                <table class="table table-sm table-hover">
                             <thead>
                                 <tr>
                                     <th>SKU</th>
@@ -257,29 +306,27 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                {% for item in worst_performers %}
-                                <tr class="table-danger">
-                                    <td>{{ item.sku }}</td>
-                                    <td>{{ item.product_name|truncatechars:30 }}</td>
-                                    <td class="text-end">{{ item.stock_on_hand|floatformat:0|intcomma }}</td>
-                                    <td class="text-end">${{ item.stock_value|floatformat:0|intcomma }}</td>
-                                    <td class="text-end"><strong>{{ item.sales_qty_180d }}</strong></td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
+                                        {% for item in worst_performers %}
+                                        <tr class="table-danger">
+                                            <td>{{ item.sku }}</td>
+                                            <td>{{ item.product_name|truncatechars:30 }}</td>
+                                            <td class="text-end">{{ item.stock_on_hand|floatformat:0|intcomma }}</td>
+                                            <td class="text-end">${{ item.stock_value|floatformat:0|intcomma }}</td>
+                                            <td class="text-end"><strong>{{ item.sales_qty_180d }}</strong></td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
-    </div>
 
-    <!-- Business Logic Explanation -->
-    <div class="row g-3 mb-4">
-        <div class="col-12">
-            <div class="card">
+            <!-- Business Logic Explanation -->
+            <div class="card mb-4">
                 <div class="card-body">
-                    <h5>About This Dashboard</h5>
+                    <h5 class="mb-3"><i class="fas fa-info-circle me-2 text-primary"></i>About This Dashboard</h5>
                     <p><strong>Inventory Health Score</strong> is calculated using a weighted average:</p>
                     <ul>
                         <li><strong>Stockout Risk (30%):</strong> Percentage of SKUs with less than 30 days of coverage</li>
