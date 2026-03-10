@@ -366,6 +366,11 @@ $(document).ready(function() {
 
     // Initialize Performance Table
     if ($('#performanceTable').length) {
+        // Check if already initialized, destroy if needed
+        if ($.fn.DataTable.isDataTable('#performanceTable')) {
+            $('#performanceTable').DataTable().destroy();
+        }
+
         var performanceTable = $('#performanceTable').DataTable({
             order: [[1, 'desc']],
             pageLength: 20,
@@ -383,6 +388,11 @@ $(document).ready(function() {
 
     // Initialize Customer Rankings Table
     if ($('#customerRankingsTable').length) {
+        // Check if already initialized, destroy if needed
+        if ($.fn.DataTable.isDataTable('#customerRankingsTable')) {
+            $('#customerRankingsTable').DataTable().destroy();
+        }
+
         var customerTable = $('#customerRankingsTable').DataTable({
             order: [[5, 'desc']],  // Sort by hidden priority column
             pageLength: 25,
@@ -400,6 +410,11 @@ $(document).ready(function() {
 
     // Initialize Product Rankings Table
     if ($('#productRankingsTable').length) {
+        // Check if already initialized, destroy if needed
+        if ($.fn.DataTable.isDataTable('#productRankingsTable')) {
+            $('#productRankingsTable').DataTable().destroy();
+        }
+
         var productTable = $('#productRankingsTable').DataTable({
             order: [[7, 'desc']],  // Sort by hidden priority column
             pageLength: 25,
