@@ -41,4 +41,10 @@ urlpatterns = [
     path('reports/bts-sellthrough/', views.bts_sellthrough_report, name='bts_sellthrough_report'),
     path('reports/inventory-health/', views.inventory_health_dashboard, name='inventory_health_dashboard'),
     path('reports/inventory-alignment/', views.inventory_alignment_matrix, name='inventory_alignment_matrix'),
+
+    # Stock Management Reports
+    path('stocks/turn-rate/', views.stock_turn_rate_report, name='stock_turn_rate_report'),
+    path('stocks/days-inventory/', views.days_of_inventory_report, name='days_of_inventory_report'),
+    path('stocks/dead-stock/', views.dead_stock_report, name='dead_stock_report'),
+    path('stocks/best-sellers/', views.top_best_sellers_report, name='top_best_sellers_report'),
 ]

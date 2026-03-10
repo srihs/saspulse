@@ -4837,3 +4837,564 @@ def inventory_alignment_matrix(request):
     }
 
     return render(request, 'dashboard/inventory_alignment_matrix.html', context)
+
+
+# ==================== STOCK MANAGEMENT REPORTS ====================
+
+def stock_turn_rate_report(request):
+    """
+    Stock Turn Rate Report (DP-SM-001)
+    Calculate stock turn rate by each product using annual sales divided by average inventory
+
+    Formula: Annual Sales / Average Inventory
+    Benchmarks:
+    - Excellent: > 12 turns/year (Green)
+    - Good: 6-12 turns/year (Blue)
+    - Average: 3-6 turns/year (Yellow)
+    - Poor: < 3 turns/year (Red)
+    """
+    from django.db import connection
+    from datetime import datetime, timedelta
+
+    # Get date range from request (default: last 12 months)
+    end_date = datetime.now().date()
+    start_date = end_date - timedelta(days=365)
+
+    date_from = request.GET.get('date_from', start_date.strftime('%Y-%m-%d'))
+    date_to = request.GET.get('date_to', end_date.strftime('%Y-%m-%d'))
+
+    # Query: Calculate stock turn rate per product
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            WITH annual_sales AS (
+                SELECT
+                    p.cin7_id as product_id,
+                    p.name as product_name,
+                    p.style_code,
+                    soli.code as sku,
+                    COALESCE(SUM(soli.qty), 0) as total_sales_qty,
+                    COALESCE(SUM(soli.qty * soli.unit_price), 0) as total_sales_value
+                FROM cin7_sync_salesorderlineitem soli
+                INNER JOIN cin7_sync_salesorder so ON CAST(so.cin7_id AS CHAR) = soli.cin7_sales_order_id
+                INNER JOIN cin7_sync_product p ON soli.cin7_product_id = p.cin7_id
+                WHERE so.invoice_date >= %s
+                  AND so.invoice_date <= %s
+                  AND so.status != 'Cancelled'
+                  AND p.category_name LIKE %s
+                  AND p.sub_category IS NOT NULL
+                  AND p.sub_category <> ''
+                  AND p.sub_category NOT LIKE %s
+                GROUP BY p.cin7_id, p.name, p.style_code, soli.code
+            ),
+            avg_inventory AS (
+                SELECT
+                    p.cin7_id as product_id,
+                    s.code as sku,
+                    AVG(COALESCE(s.stock_on_hand, 0)) as avg_stock,
+                    AVG(COALESCE(s.stock_on_hand * po.cost_price, 0)) as avg_stock_value
+                FROM cin7_sync_product p
+                LEFT JOIN cin7_sync_stock s ON p.cin7_id = s.cin7_product_id
+                LEFT JOIN cin7_sync_productoption po ON s.cin7_product_option_id = po.cin7_id
+                WHERE p.category_name LIKE %s
+                  AND p.sub_category IS NOT NULL
+                  AND p.sub_category <> ''
+                  AND p.sub_category NOT LIKE %s
+                GROUP BY p.cin7_id, s.code
+            )
+            SELECT
+                ast.product_name,
+                ast.style_code,
+                ast.sku,
+                ast.total_sales_qty,
+                ast.total_sales_value,
+                COALESCE(ai.avg_stock, 0) as avg_stock,
+                COALESCE(ai.avg_stock_value, 0) as avg_stock_value,
+                CASE
+                    WHEN COALESCE(ai.avg_stock, 0) > 0 THEN ast.total_sales_qty / ai.avg_stock
+                    ELSE 0
+                END as turn_rate
+            FROM annual_sales ast
+            LEFT JOIN avg_inventory ai ON ast.product_id = ai.product_id AND ast.sku = ai.sku
+            WHERE ast.total_sales_qty > 0 OR COALESCE(ai.avg_stock, 0) > 0
+            ORDER BY turn_rate DESC
+        """, [date_from, date_to, '% Shop', '%Shop%', '% Shop', '%Shop%'])
+
+        rows = cursor.fetchall()
+
+    # Process results and classify benchmarks
+    report_data = []
+    for row in rows:
+        product_name = row[0]
+        style_code = row[1]
+        sku = row[2]
+        total_sales_qty = float(row[3] or 0)
+        total_sales_value = float(row[4] or 0)
+        avg_stock = float(row[5] or 0)
+        avg_stock_value = float(row[6] or 0)
+        turn_rate = float(row[7] or 0)
+
+        # Classify benchmark
+        if turn_rate > 12:
+            benchmark = 'Excellent'
+            benchmark_class = 'excellent'
+            benchmark_badge = 'success'
+        elif turn_rate >= 6:
+            benchmark = 'Good'
+            benchmark_class = 'good'
+            benchmark_badge = 'info'
+        elif turn_rate >= 3:
+            benchmark = 'Average'
+            benchmark_class = 'average'
+            benchmark_badge = 'warning'
+        else:
+            benchmark = 'Poor'
+            benchmark_class = 'poor'
+            benchmark_badge = 'danger'
+
+        report_data.append({
+            'product_name': product_name or 'Unknown Product',
+            'style_code': style_code or '',
+            'sku': sku or '',
+            'total_sales_qty': total_sales_qty,
+            'total_sales_value': total_sales_value,
+            'avg_stock': avg_stock,
+            'avg_stock_value': avg_stock_value,
+            'turn_rate': round(turn_rate, 2),
+            'benchmark': benchmark,
+            'benchmark_class': benchmark_class,
+            'benchmark_badge': benchmark_badge
+        })
+
+    # Calculate summary stats
+    total_products = len(report_data)
+    excellent_count = sum(1 for item in report_data if item['benchmark_class'] == 'excellent')
+    good_count = sum(1 for item in report_data if item['benchmark_class'] == 'good')
+    average_count = sum(1 for item in report_data if item['benchmark_class'] == 'average')
+    poor_count = sum(1 for item in report_data if item['benchmark_class'] == 'poor')
+    avg_turn_rate = sum(item['turn_rate'] for item in report_data) / total_products if total_products > 0 else 0
+
+    context = {
+        'report_data': report_data,
+        'date_from': date_from,
+        'date_to': date_to,
+        'total_products': total_products,
+        'excellent_count': excellent_count,
+        'good_count': good_count,
+        'average_count': average_count,
+        'poor_count': poor_count,
+        'avg_turn_rate': round(avg_turn_rate, 2),
+    }
+
+    return render(request, 'dashboard/stock_turn_rate_report.html', context)
+
+
+def days_of_inventory_report(request):
+    """
+    Days of Inventory Report (DP-SM-002)
+    Calculate days of inventory on hand based on color-coded status indicators
+
+    Formula: (Current Stock / Average Daily Sales) = Days of Inventory
+    Status:
+    - Critical: 0-10 days (Red)
+    - Low: 10-30 days (Orange)
+    - Healthy: 30-60 days (Green)
+    - Overstocked: > 90 days (Blue)
+    """
+    from django.db import connection
+    from datetime import datetime, timedelta
+
+    # Get date range for sales calculation (default: last 365 days)
+    end_date = datetime.now().date()
+    start_date = end_date - timedelta(days=365)
+
+    date_from = request.GET.get('date_from', start_date.strftime('%Y-%m-%d'))
+    date_to = request.GET.get('date_to', end_date.strftime('%Y-%m-%d'))
+
+    # Calculate number of days in the period
+    days_in_period = (datetime.strptime(date_to, '%Y-%m-%d') - datetime.strptime(date_from, '%Y-%m-%d')).days + 1
+
+    # Query: Calculate days of inventory per product
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            WITH sales_data AS (
+                SELECT
+                    p.cin7_id as product_id,
+                    p.name as product_name,
+                    p.style_code,
+                    soli.code as sku,
+                    COALESCE(SUM(soli.qty), 0) as total_sales_qty,
+                    COALESCE(SUM(soli.qty * soli.unit_price), 0) as total_sales_value,
+                    COALESCE(SUM(soli.qty), 0) / %s as avg_daily_sales
+                FROM cin7_sync_salesorderlineitem soli
+                INNER JOIN cin7_sync_salesorder so ON CAST(so.cin7_id AS CHAR) = soli.cin7_sales_order_id
+                INNER JOIN cin7_sync_product p ON soli.cin7_product_id = p.cin7_id
+                WHERE so.invoice_date >= %s
+                  AND so.invoice_date <= %s
+                  AND so.status != 'Cancelled'
+                  AND p.category_name LIKE %s
+                  AND p.sub_category IS NOT NULL
+                  AND p.sub_category <> ''
+                  AND p.sub_category NOT LIKE %s
+                GROUP BY p.cin7_id, p.name, p.style_code, soli.code
+            ),
+            current_stock AS (
+                SELECT
+                    p.cin7_id as product_id,
+                    s.code as sku,
+                    COALESCE(SUM(s.stock_on_hand), 0) as current_stock,
+                    COALESCE(SUM(s.stock_on_hand * po.cost_price), 0) as stock_value
+                FROM cin7_sync_product p
+                LEFT JOIN cin7_sync_stock s ON p.cin7_id = s.cin7_product_id
+                LEFT JOIN cin7_sync_productoption po ON s.cin7_product_option_id = po.cin7_id
+                WHERE p.category_name LIKE %s
+                  AND p.sub_category IS NOT NULL
+                  AND p.sub_category <> ''
+                  AND p.sub_category NOT LIKE %s
+                GROUP BY p.cin7_id, s.code
+            )
+            SELECT
+                sd.product_name,
+                sd.style_code,
+                sd.sku,
+                COALESCE(cs.current_stock, 0) as current_stock,
+                COALESCE(cs.stock_value, 0) as stock_value,
+                sd.avg_daily_sales,
+                CASE
+                    WHEN sd.avg_daily_sales > 0 THEN COALESCE(cs.current_stock, 0) / sd.avg_daily_sales
+                    ELSE 999999
+                END as days_of_inventory
+            FROM sales_data sd
+            LEFT JOIN current_stock cs ON sd.product_id = cs.product_id AND sd.sku = cs.sku
+            WHERE COALESCE(cs.current_stock, 0) > 0
+            ORDER BY days_of_inventory ASC
+        """, [days_in_period, date_from, date_to, '% Shop', '%Shop%', '% Shop', '%Shop%'])
+
+        rows = cursor.fetchall()
+
+    # Process results and classify status
+    report_data = []
+    for row in rows:
+        product_name = row[0]
+        style_code = row[1]
+        sku = row[2]
+        current_stock = float(row[3] or 0)
+        stock_value = float(row[4] or 0)
+        avg_daily_sales = float(row[5] or 0)
+        days_of_inventory = float(row[6] or 0)
+
+        # Classify status
+        if days_of_inventory < 10:
+            status = 'Critical'
+            status_class = 'critical'
+            status_badge = 'danger'
+        elif days_of_inventory < 30:
+            status = 'Low'
+            status_class = 'low'
+            status_badge = 'warning'
+        elif days_of_inventory <= 90:
+            status = 'Healthy'
+            status_class = 'healthy'
+            status_badge = 'success'
+        else:
+            status = 'Overstocked'
+            status_class = 'overstocked'
+            status_badge = 'info'
+
+        # Handle infinite days
+        days_display = '∞' if days_of_inventory >= 999999 else round(days_of_inventory, 1)
+
+        report_data.append({
+            'product_name': product_name or 'Unknown Product',
+            'style_code': style_code or '',
+            'sku': sku or '',
+            'current_stock': current_stock,
+            'stock_value': stock_value,
+            'avg_daily_sales': round(avg_daily_sales, 2),
+            'days_of_inventory': days_of_inventory,
+            'days_display': days_display,
+            'status': status,
+            'status_class': status_class,
+            'status_badge': status_badge
+        })
+
+    # Calculate summary stats
+    total_products = len(report_data)
+    critical_count = sum(1 for item in report_data if item['status_class'] == 'critical')
+    low_count = sum(1 for item in report_data if item['status_class'] == 'low')
+    healthy_count = sum(1 for item in report_data if item['status_class'] == 'healthy')
+    overstocked_count = sum(1 for item in report_data if item['status_class'] == 'overstocked')
+    total_stock_value = sum(item['stock_value'] for item in report_data)
+
+    context = {
+        'report_data': report_data,
+        'date_from': date_from,
+        'date_to': date_to,
+        'total_products': total_products,
+        'critical_count': critical_count,
+        'low_count': low_count,
+        'healthy_count': healthy_count,
+        'overstocked_count': overstocked_count,
+        'total_stock_value': total_stock_value,
+    }
+
+    return render(request, 'dashboard/days_of_inventory_report.html', context)
+
+
+def dead_stock_report(request):
+    """
+    Dead Stock Report (DP-SM-003)
+    Identify and list dead stock items (no sales in 1.6 years with remaining inventory)
+
+    Criteria: No sales in last 584 days (1.6 years) AND inventory > 0
+    Display: Product name, SKU, last sale date, units remaining, cost per unit, total carrying cost
+    """
+    from django.db import connection
+    from datetime import datetime, timedelta
+
+    # Calculate cutoff date (584 days ago = 1.6 years)
+    cutoff_date = datetime.now().date() - timedelta(days=584)
+
+    # Query: Find dead stock items
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            WITH last_sales AS (
+                SELECT
+                    p.cin7_id as product_id,
+                    soli.code as sku,
+                    MAX(so.invoice_date) as last_sale_date
+                FROM cin7_sync_salesorderlineitem soli
+                INNER JOIN cin7_sync_salesorder so ON CAST(so.cin7_id AS CHAR) = soli.cin7_sales_order_id
+                INNER JOIN cin7_sync_product p ON soli.cin7_product_id = p.cin7_id
+                WHERE so.status != 'Cancelled'
+                  AND p.category_name LIKE %s
+                  AND p.sub_category IS NOT NULL
+                  AND p.sub_category <> ''
+                  AND p.sub_category NOT LIKE %s
+                GROUP BY p.cin7_id, soli.code
+            ),
+            current_stock AS (
+                SELECT
+                    p.cin7_id as product_id,
+                    p.name as product_name,
+                    p.style_code,
+                    s.code as sku,
+                    COALESCE(SUM(s.stock_on_hand), 0) as units_remaining,
+                    COALESCE(AVG(po.cost_price), 0) as cost_per_unit,
+                    COALESCE(SUM(s.stock_on_hand * po.cost_price), 0) as carrying_cost
+                FROM cin7_sync_product p
+                LEFT JOIN cin7_sync_stock s ON p.cin7_id = s.cin7_product_id
+                LEFT JOIN cin7_sync_productoption po ON s.cin7_product_option_id = po.cin7_id
+                WHERE p.category_name LIKE %s
+                  AND p.sub_category IS NOT NULL
+                  AND p.sub_category <> ''
+                  AND p.sub_category NOT LIKE %s
+                GROUP BY p.cin7_id, p.name, p.style_code, s.code
+                HAVING COALESCE(SUM(s.stock_on_hand), 0) > 0
+            )
+            SELECT
+                cs.product_name,
+                cs.style_code,
+                cs.sku,
+                COALESCE(ls.last_sale_date, '1900-01-01') as last_sale_date,
+                cs.units_remaining,
+                cs.cost_per_unit,
+                cs.carrying_cost,
+                DATEDIFF(CURDATE(), COALESCE(ls.last_sale_date, '1900-01-01')) as days_since_sale
+            FROM current_stock cs
+            LEFT JOIN last_sales ls ON cs.product_id = ls.product_id AND cs.sku = ls.sku
+            WHERE COALESCE(ls.last_sale_date, '1900-01-01') < %s
+               OR ls.last_sale_date IS NULL
+            ORDER BY cs.carrying_cost DESC
+        """, ['% Shop', '%Shop%', '% Shop', '%Shop%', cutoff_date])
+
+        rows = cursor.fetchall()
+
+    # Process results
+    report_data = []
+    for row in rows:
+        product_name = row[0]
+        style_code = row[1]
+        sku = row[2]
+        last_sale_date = row[3]
+        units_remaining = float(row[4] or 0)
+        cost_per_unit = float(row[5] or 0)
+        carrying_cost = float(row[6] or 0)
+        days_since_sale = int(row[7] or 0)
+
+        # Format last sale date
+        if last_sale_date and last_sale_date != '1900-01-01':
+            last_sale_display = last_sale_date.strftime('%Y-%m-%d') if hasattr(last_sale_date, 'strftime') else str(last_sale_date)
+        else:
+            last_sale_display = 'Never'
+
+        report_data.append({
+            'product_name': product_name or 'Unknown Product',
+            'style_code': style_code or '',
+            'sku': sku or '',
+            'last_sale_date': last_sale_display,
+            'days_since_sale': days_since_sale,
+            'units_remaining': units_remaining,
+            'cost_per_unit': cost_per_unit,
+            'carrying_cost': carrying_cost
+        })
+
+    # Calculate summary stats
+    total_dead_items = len(report_data)
+    total_units = sum(item['units_remaining'] for item in report_data)
+    total_carrying_cost = sum(item['carrying_cost'] for item in report_data)
+    avg_carrying_cost = total_carrying_cost / total_dead_items if total_dead_items > 0 else 0
+
+    context = {
+        'report_data': report_data,
+        'cutoff_date': cutoff_date,
+        'total_dead_items': total_dead_items,
+        'total_units': total_units,
+        'total_carrying_cost': total_carrying_cost,
+        'avg_carrying_cost': avg_carrying_cost,
+    }
+
+    return render(request, 'dashboard/dead_stock_report.html', context)
+
+
+def top_best_sellers_report(request):
+    """
+    Top 20 Best Sellers Report (DP-SM-004)
+    Show Top 20 Best Sellers sorted by revenue, units, and turn rate
+
+    Display: Top 20 products by multiple metrics
+    Sortable by: Revenue, Units Sold, Turn Rate
+    """
+    from django.db import connection
+    from datetime import datetime, timedelta
+
+    # Get date range from request (default: last 12 months)
+    end_date = datetime.now().date()
+    start_date = end_date - timedelta(days=365)
+
+    date_from = request.GET.get('date_from', start_date.strftime('%Y-%m-%d'))
+    date_to = request.GET.get('date_to', end_date.strftime('%Y-%m-%d'))
+    sort_by = request.GET.get('sort_by', 'revenue')  # revenue, units, turn_rate
+
+    # Query: Calculate best sellers with all metrics
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            WITH sales_data AS (
+                SELECT
+                    p.sub_category as customer,
+                    p.name as product_name,
+                    p.style_code,
+                    soli.code as sku,
+                    COALESCE(SUM(soli.qty), 0) as total_units,
+                    COALESCE(SUM(soli.qty * soli.unit_price), 0) as total_revenue
+                FROM cin7_sync_salesorderlineitem soli
+                INNER JOIN cin7_sync_salesorder so ON CAST(so.cin7_id AS CHAR) = soli.cin7_sales_order_id
+                INNER JOIN cin7_sync_product p ON soli.cin7_product_id = p.cin7_id
+                WHERE so.invoice_date >= %s
+                  AND so.invoice_date <= %s
+                  AND so.status != 'Cancelled'
+                  AND p.category_name LIKE %s
+                  AND p.sub_category IS NOT NULL
+                  AND p.sub_category <> ''
+                  AND p.sub_category NOT LIKE %s
+                GROUP BY p.sub_category, p.name, p.style_code, soli.code
+            ),
+            avg_inventory AS (
+                SELECT
+                    p.cin7_id as product_id,
+                    s.code as sku,
+                    AVG(COALESCE(s.stock_on_hand, 0)) as avg_stock
+                FROM cin7_sync_product p
+                LEFT JOIN cin7_sync_stock s ON p.cin7_id = s.cin7_product_id
+                WHERE p.category_name LIKE %s
+                  AND p.sub_category IS NOT NULL
+                  AND p.sub_category <> ''
+                  AND p.sub_category NOT LIKE %s
+                GROUP BY p.cin7_id, s.code
+            ),
+            product_ids AS (
+                SELECT DISTINCT
+                    p.cin7_id as product_id,
+                    p.name as product_name,
+                    soli.code as sku
+                FROM cin7_sync_salesorderlineitem soli
+                INNER JOIN cin7_sync_product p ON soli.cin7_product_id = p.cin7_id
+                WHERE p.category_name LIKE %s
+                  AND p.sub_category IS NOT NULL
+                  AND p.sub_category <> ''
+                  AND p.sub_category NOT LIKE %s
+            )
+            SELECT
+                sd.customer,
+                sd.product_name,
+                sd.style_code,
+                sd.sku,
+                sd.total_units,
+                sd.total_revenue,
+                COALESCE(ai.avg_stock, 0) as avg_stock,
+                CASE
+                    WHEN COALESCE(ai.avg_stock, 0) > 0 THEN sd.total_units / ai.avg_stock
+                    ELSE 0
+                END as turn_rate
+            FROM sales_data sd
+            LEFT JOIN product_ids pi ON sd.product_name = pi.product_name AND sd.sku = pi.sku
+            LEFT JOIN avg_inventory ai ON pi.product_id = ai.product_id AND sd.sku = ai.sku
+            ORDER BY sd.total_revenue DESC
+            LIMIT 20
+        """, [date_from, date_to, '% Shop', '%Shop%', '% Shop', '%Shop%', '% Shop', '%Shop%'])
+
+        rows = cursor.fetchall()
+
+    # Process results
+    report_data = []
+    rank = 1
+    for row in rows:
+        customer = row[0]
+        product_name = row[1]
+        style_code = row[2]
+        sku = row[3]
+        total_units = float(row[4] or 0)
+        total_revenue = float(row[5] or 0)
+        avg_stock = float(row[6] or 0)
+        turn_rate = float(row[7] or 0)
+
+        report_data.append({
+            'rank': rank,
+            'customer': customer or 'Unknown',
+            'product_name': product_name or 'Unknown Product',
+            'style_code': style_code or '',
+            'sku': sku or '',
+            'total_units': total_units,
+            'total_revenue': total_revenue,
+            'avg_stock': avg_stock,
+            'turn_rate': round(turn_rate, 2)
+        })
+        rank += 1
+
+    # Re-sort based on user selection
+    if sort_by == 'units':
+        report_data.sort(key=lambda x: x['total_units'], reverse=True)
+    elif sort_by == 'turn_rate':
+        report_data.sort(key=lambda x: x['turn_rate'], reverse=True)
+    else:  # revenue (default)
+        report_data.sort(key=lambda x: x['total_revenue'], reverse=True)
+
+    # Re-rank after sorting
+    for i, item in enumerate(report_data, 1):
+        item['rank'] = i
+
+    # Calculate summary stats
+    total_revenue = sum(item['total_revenue'] for item in report_data)
+    total_units = sum(item['total_units'] for item in report_data)
+    avg_turn_rate = sum(item['turn_rate'] for item in report_data) / len(report_data) if report_data else 0
+
+    context = {
+        'report_data': report_data,
+        'date_from': date_from,
+        'date_to': date_to,
+        'sort_by': sort_by,
+        'total_revenue': total_revenue,
+        'total_units': total_units,
+        'avg_turn_rate': round(avg_turn_rate, 2),
+    }
+
+    return render(request, 'dashboard/top_best_sellers_report.html', context)

@@ -1,0 +1,387 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block title %}Top 20 Best Sellers Report - SAS Pulse{% endblock %}
+
+{% block preloader %}
+<!-- Page Preloader - Active by default to show during page load -->
+<div id="pagePreloader" class="preloader-overlay active">
+    <div class="preloader-content">
+        <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <h4 class="mt-3">Loading Report...</h4>
+        <p class="text-muted">Processing data, please wait...</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
+<link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.bootstrap5.min.css">
+<style>
+/* Rank badge styling */
+.rank-badge {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 1rem;
+}
+.rank-1 { background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%); color: #000; }
+.rank-2 { background: linear-gradient(135deg, #C0C0C0 0%, #808080 100%); color: #000; }
+.rank-3 { background: linear-gradient(135deg, #CD7F32 0%, #8B4513 100%); color: #fff; }
+.rank-other { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; }
+
+/* DataTable buttons styling */
+.dt-buttons {
+    margin-bottom: 1rem;
+}
+
+.dt-button {
+    margin-right: 0.5rem !important;
+    border-radius: 0.375rem !important;
+    padding: 0.5rem 1rem !important;
+    font-size: 0.875rem !important;
+}
+
+/* Table styling */
+#bestSellersTable thead th {
+    background-color: #f8f9fa;
+    font-weight: 600;
+    border-bottom: 2px solid #dee2e6;
+}
+
+#bestSellersTable tbody tr:hover {
+    background-color: #f8f9fa;
+}
+
+/* Highlight top 3 */
+.top-3 {
+    background-color: #fff9e6;
+    font-weight: 500;
+}
+
+.top-3:hover {
+    background-color: #fff3d1;
+}
+
+/* Sort button styling */
+.sort-buttons .btn {
+    margin-right: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="pb-5">
+    <div class="row g-4">
+        <div class="col-12">
+            <!-- Page Header with Breadcrumbs -->
+            <div class="mb-8">
+                <h2 class="mb-2"><i class="fas fa-trophy me-2 text-warning"></i>Top 20 Best Sellers Report</h2>
+                <h5 class="text-body-tertiary fw-semibold">
+                    Top 20 best-selling products sorted by revenue, units sold, and turn rate
+                </h5>
+            </div>
+
+            <!-- Date Range and Sort Filter -->
+            <div class="card mb-4 filter-card">
+                <div class="card-body p-4">
+                    <h6 class="mb-3 fw-semibold"><i class="fas fa-filter me-2"></i>Filter Options</h6>
+                    <form method="GET" action="{% url 'dashboard:top_best_sellers_report' %}" id="filterForm">
+                        <div class="row g-4">
+                            <div class="col-md-3">
+                                <label class="form-label fw-semibold" for="date_from">
+                                    <i class="fas fa-calendar-alt me-1"></i>From Date
+                                </label>
+                                <input class="form-control" type="date" id="date_from" name="date_from" value="{{ date_from }}" required>
+                                <small class="form-text text-muted">Start of analysis period</small>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label fw-semibold" for="date_to">
+                                    <i class="fas fa-calendar-check me-1"></i>To Date
+                                </label>
+                                <input class="form-control" type="date" id="date_to" name="date_to" value="{{ date_to }}" required>
+                                <small class="form-text text-muted">End of analysis period</small>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label fw-semibold" for="sort_by">
+                                    <i class="fas fa-sort me-1"></i>Sort By
+                                </label>
+                                <select class="form-select" id="sort_by" name="sort_by">
+                                    <option value="revenue" {% if sort_by == 'revenue' %}selected{% endif %}>Revenue (Highest)</option>
+                                    <option value="units" {% if sort_by == 'units' %}selected{% endif %}>Units Sold (Most)</option>
+                                    <option value="turn_rate" {% if sort_by == 'turn_rate' %}selected{% endif %}>Turn Rate (Fastest)</option>
+                                </select>
+                                <small class="form-text text-muted">Ranking criteria</small>
+                            </div>
+                            <div class="col-md-3 d-flex align-items-end">
+                                <button class="btn btn-primary w-100" type="submit">
+                                    <i class="fas fa-sync-alt me-2"></i>Update Report
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Summary Cards -->
+            <div class="row g-4 mb-4">
+                <div class="col-12 col-md-4">
+                    <div class="card border-start border-success border-4 h-100">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <h6 class="text-muted mb-2">Total Revenue (Top 20)</h6>
+                                    <h2 class="mb-0 text-success fw-bold">${{ total_revenue|floatformat:0|intcomma }}</h2>
+                                    <small class="text-muted">From {{ date_from }} to {{ date_to }}</small>
+                                </div>
+                                <div class="fs-3 text-success">
+                                    <i class="fas fa-dollar-sign"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-md-4">
+                    <div class="card border-start border-info border-4 h-100">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <h6 class="text-muted mb-2">Total Units Sold</h6>
+                                    <h2 class="mb-0 text-info fw-bold">{{ total_units|floatformat:0|intcomma }}</h2>
+                                    <small class="text-muted">Across top 20 products</small>
+                                </div>
+                                <div class="fs-3 text-info">
+                                    <i class="fas fa-boxes"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-md-4">
+                    <div class="card border-start border-primary border-4 h-100">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <h6 class="text-muted mb-2">Average Turn Rate</h6>
+                                    <h2 class="mb-0 text-primary fw-bold">{{ avg_turn_rate }}x</h2>
+                                    <small class="text-muted">Average across top 20</small>
+                                </div>
+                                <div class="fs-3 text-primary">
+                                    <i class="fas fa-sync-alt"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sort Info Banner -->
+            <div class="alert alert-info border-start border-info border-4 mb-4" role="alert">
+                <div class="d-flex align-items-center">
+                    <i class="fas fa-info-circle fs-4 me-3"></i>
+                    <div>
+                        <h6 class="alert-heading mb-1">Current Sorting</h6>
+                        <p class="mb-0">
+                            {% if sort_by == 'revenue' %}
+                                Showing top 20 products by <strong>Total Revenue</strong> (highest to lowest)
+                            {% elif sort_by == 'units' %}
+                                Showing top 20 products by <strong>Units Sold</strong> (most to least)
+                            {% elif sort_by == 'turn_rate' %}
+                                Showing top 20 products by <strong>Turn Rate</strong> (fastest to slowest)
+                            {% endif %}
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Data Table -->
+            <div class="card mb-4">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <h4 class="mb-0">
+                            <i class="fas fa-medal me-2 text-warning"></i>Top 20 Best Sellers
+                        </h4>
+                    </div>
+                    <div class="table-responsive">
+                        <table id="bestSellersTable" class="table table-hover table-sm" style="width:100%">
+                            <thead>
+                                <tr>
+                                    <th>Rank</th>
+                                    <th>Customer</th>
+                                    <th>Product Name</th>
+                                    <th>Style Code</th>
+                                    <th>SKU</th>
+                                    <th>Revenue</th>
+                                    <th>Units Sold</th>
+                                    <th>Turn Rate</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in report_data %}
+                                <tr {% if item.rank <= 3 %}class="top-3"{% endif %}>
+                                    <td class="text-center">
+                                        <span class="rank-badge {% if item.rank == 1 %}rank-1{% elif item.rank == 2 %}rank-2{% elif item.rank == 3 %}rank-3{% else %}rank-other{% endif %}">
+                                            {{ item.rank }}
+                                        </span>
+                                    </td>
+                                    <td>{{ item.customer }}</td>
+                                    <td>
+                                        <strong>{{ item.product_name }}</strong>
+                                        {% if item.rank == 1 %}
+                                            <i class="fas fa-crown text-warning ms-1"></i>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ item.style_code }}</td>
+                                    <td>{{ item.sku }}</td>
+                                    <td class="text-end">
+                                        <strong class="text-success">${{ item.total_revenue|floatformat:2|intcomma }}</strong>
+                                    </td>
+                                    <td class="text-end">
+                                        <strong class="text-info">{{ item.total_units|floatformat:0|intcomma }}</strong>
+                                    </td>
+                                    <td class="text-end">
+                                        <strong class="text-primary">{{ item.turn_rate }}x</strong>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Business Logic Explanation -->
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="mb-3"><i class="fas fa-info-circle me-2 text-primary"></i>About This Report</h5>
+                    <p><strong>Top 20 Best Sellers</strong> identifies the highest-performing products based on selected metrics</p>
+                    <p><strong>Sorting Options:</strong></p>
+                    <ul>
+                        <li><strong>Revenue:</strong> Total sales value (Quantity × Unit Price)</li>
+                        <li><strong>Units Sold:</strong> Total quantity sold in the period</li>
+                        <li><strong>Turn Rate:</strong> Sales quantity divided by average inventory (efficiency metric)</li>
+                    </ul>
+                    <p><strong>Key Insights:</strong></p>
+                    <ul>
+                        <li><span class="rank-badge rank-1">1</span> <span class="rank-badge rank-2">2</span> <span class="rank-badge rank-3">3</span> Top 3 performers are highlighted for quick identification</li>
+                        <li>High revenue products contribute most to sales but may not be most efficient</li>
+                        <li>High turn rate products indicate efficient inventory management</li>
+                        <li>Compare across metrics to identify products that excel in multiple areas</li>
+                    </ul>
+                    <p><strong>Strategic Uses:</strong></p>
+                    <ul>
+                        <li><span class="badge bg-success">Inventory</span> Prioritize stock for top performers</li>
+                        <li><span class="badge bg-info">Marketing</span> Promote best sellers to drive more revenue</li>
+                        <li><span class="badge bg-warning text-dark">Bundling</span> Pair top sellers with slower-moving products</li>
+                        <li><span class="badge bg-primary">Forecasting</span> Use trends to predict future demand</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/dataTables.buttons.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.bootstrap5.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.print.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
+
+<script>
+$(document).ready(function() {
+    console.log('=== TOP BEST SELLERS PRELOADER DEBUG START ===');
+    console.log('Page load time:', new Date().toISOString());
+    console.log('Preloader active:', $('#pagePreloader').hasClass('active'));
+
+    var table = $('#bestSellersTable').DataTable({
+        pageLength: 20,
+        paging: false,  // Disable pagination since we only have 20 items
+        order: [[0, 'asc']],  // Sort by Rank ascending
+        dom: '<"row"<"col-sm-12 col-md-6"B><"col-sm-12 col-md-6"f>>rt',  // Remove pagination controls
+        buttons: [
+            {
+                extend: 'excelHtml5',
+                text: '<i class="fas fa-file-excel me-1"></i>Excel',
+                className: 'btn btn-success btn-sm',
+                title: 'Top 20 Best Sellers Report',
+                exportOptions: {
+                    columns: ':visible'
+                }
+            },
+            {
+                extend: 'csvHtml5',
+                text: '<i class="fas fa-file-csv me-1"></i>CSV',
+                className: 'btn btn-info btn-sm',
+                title: 'Top 20 Best Sellers Report',
+                exportOptions: {
+                    columns: ':visible'
+                }
+            },
+            {
+                extend: 'pdfHtml5',
+                text: '<i class="fas fa-file-pdf me-1"></i>PDF',
+                className: 'btn btn-danger btn-sm',
+                title: 'Top 20 Best Sellers Report',
+                orientation: 'landscape',
+                exportOptions: {
+                    columns: ':visible'
+                }
+            },
+            {
+                extend: 'print',
+                text: '<i class="fas fa-print me-1"></i>Print',
+                className: 'btn btn-secondary btn-sm',
+                exportOptions: {
+                    columns: ':visible'
+                }
+            }
+        ],
+        columnDefs: [
+            {
+                targets: [5, 6, 7],  // Numeric columns to right-align
+                className: "text-end"
+            }
+        ],
+        responsive: true,
+        language: {
+            search: "_INPUT_",
+            searchPlaceholder: "Search records..."
+        }
+    });
+
+    // Wait for table to be fully drawn before hiding preloader
+    table.on('draw.dt', function() {
+        setTimeout(function() {
+            console.log('Table drawn, hiding preloader');
+            $('#pagePreloader').removeClass('active');
+            console.log('✓ Preloader hidden:', new Date().toISOString());
+            console.log('=== TOP BEST SELLERS PRELOADER DEBUG END ===');
+        }, 300);
+    });
+
+    // Fallback: if draw.dt doesn't fire within 5 seconds, hide preloader anyway
+    setTimeout(function() {
+        if ($('#pagePreloader').hasClass('active')) {
+            console.warn('⚠ FALLBACK: draw.dt did not fire, hiding preloader anyway');
+            $('#pagePreloader').removeClass('active');
+            console.log('=== TOP BEST SELLERS PRELOADER DEBUG END ===');
+        }
+    }, 5000);
+});
+</script>
+{% endblock %}
