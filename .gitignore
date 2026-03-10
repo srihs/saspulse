@@ -145,3 +145,5 @@ stop_server.sh
 gunicorn_config.py
 gunicorn.log
 *.pid
+*.zip
+*.txt
