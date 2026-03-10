@@ -1,0 +1,554 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block title %}ABC Analysis Report - SAS Pulse{% endblock %}
+
+{% block preloader %}
+<!-- Page Preloader - Active by default to show during page load -->
+<div id="pagePreloader" class="preloader-overlay active">
+    <div class="preloader-content">
+        <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <h4 class="mt-3">Loading Report...</h4>
+        <p class="text-muted">Processing ABC analysis data, please wait...</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
+<link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.bootstrap5.min.css">
+<link rel="stylesheet" href="https://cdn.datatables.net/rowgroup/1.4.0/css/rowGroup.bootstrap5.min.css">
+<style>
+/* ABC Category badge styling */
+.abc-badge {
+    padding: 0.35rem 0.85rem;
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    display: inline-block;
+}
+
+.badge-success { background-color: #28a745; color: white; }
+.badge-primary { background-color: #0d6efd; color: white; }
+.badge-warning { background-color: #ffc107; color: #000; }
+
+/* Monitoring frequency badge */
+.monitoring-badge {
+    padding: 0.25rem 0.65rem;
+    border-radius: 0.25rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    display: inline-block;
+}
+
+/* DataTable buttons styling */
+.dt-buttons {
+    margin-bottom: 1rem;
+}
+
+.dt-button {
+    margin-right: 0.5rem !important;
+    border-radius: 0.375rem !important;
+    padding: 0.5rem 1rem !important;
+    font-size: 0.875rem !important;
+}
+
+/* Table styling */
+#abcAnalysisTable thead th {
+    background-color: #f8f9fa;
+    font-weight: 600;
+    border-bottom: 2px solid #dee2e6;
+}
+
+#abcAnalysisTable tbody tr:hover {
+    background-color: #f8f9fa;
+}
+
+/* Row grouping styling */
+.dtrg-group {
+    background-color: #e9ecef !important;
+    font-weight: 700;
+    font-size: 1rem;
+    color: #212529;
+}
+
+.dtrg-group td {
+    padding: 0.75rem 1rem !important;
+}
+
+/* Category-specific group row styling */
+.dtrg-group.category-a {
+    background-color: #d4edda !important;
+    border-left: 4px solid #28a745;
+}
+
+.dtrg-group.category-b {
+    background-color: #cfe2ff !important;
+    border-left: 4px solid #0d6efd;
+}
+
+.dtrg-group.category-c {
+    background-color: #fff3cd !important;
+    border-left: 4px solid #ffc107;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="pb-5">
+    <div class="row g-4">
+        <div class="col-12">
+            <!-- Page Header with Breadcrumbs -->
+            <div class="mb-8">
+                <h2 class="mb-2"><i class="fas fa-chart-pie me-2 text-primary"></i>ABC Analysis Report</h2>
+                <h5 class="text-body-tertiary fw-semibold">
+                    Classify inventory into A, B, and C categories based on revenue contribution to focus management attention where it matters most
+                </h5>
+            </div>
+
+            <!-- Date Range Filter -->
+            <div class="card mb-4 filter-card">
+                <div class="card-body p-4">
+                    <h6 class="mb-3 fw-semibold"><i class="fas fa-filter me-2"></i>Filter Options</h6>
+                    <form method="GET" action="{% url 'dashboard:abc_analysis_report' %}" id="filterForm">
+                        <div class="row g-4">
+                            <div class="col-md-4">
+                                <label class="form-label fw-semibold" for="date_from">
+                                    <i class="fas fa-calendar-alt me-1"></i>From Date
+                                </label>
+                                <input class="form-control" type="date" id="date_from" name="date_from" value="{{ date_from }}" required>
+                                <small class="form-text text-muted">Start of analysis period</small>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-semibold" for="date_to">
+                                    <i class="fas fa-calendar-check me-1"></i>To Date
+                                </label>
+                                <input class="form-control" type="date" id="date_to" name="date_to" value="{{ date_to }}" required>
+                                <small class="form-text text-muted">End of analysis period</small>
+                            </div>
+                            <div class="col-md-4 d-flex align-items-end">
+                                <button class="btn btn-primary w-100" type="submit">
+                                    <i class="fas fa-sync-alt me-2"></i>Update Report
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- ABC Category Summary Cards -->
+            <div class="row g-4 mb-4">
+                <div class="col-12 col-md-4">
+                    <div class="card border-start border-success border-4 h-100">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div class="flex-grow-1">
+                                    <h5 class="text-success mb-3">
+                                        <i class="fas fa-star me-2"></i>A Items (High Priority)
+                                    </h5>
+                                    <div class="mb-3">
+                                        <h2 class="mb-0 text-success fw-bold">{{ a_count }}</h2>
+                                        <small class="text-muted">Products ({{ a_product_pct }}% of total)</small>
+                                    </div>
+                                    <div class="mb-3">
+                                        <h4 class="mb-0 text-success">${{ a_revenue|floatformat:0|intcomma }}</h4>
+                                        <small class="text-muted">Revenue ({{ a_revenue_pct }}% of total)</small>
+                                    </div>
+                                    <span class="monitoring-badge badge-success">Monitor DAILY</span>
+                                </div>
+                                <div class="fs-1 text-success opacity-25">
+                                    <i class="fas fa-trophy"></i>
+                                </div>
+                            </div>
+                            <hr class="my-3">
+                            <small class="text-muted">
+                                <strong>First 80%</strong> of cumulative revenue<br>
+                                Critical to business success
+                            </small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-md-4">
+                    <div class="card border-start border-primary border-4 h-100">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div class="flex-grow-1">
+                                    <h5 class="text-primary mb-3">
+                                        <i class="fas fa-check-circle me-2"></i>B Items (Medium Priority)
+                                    </h5>
+                                    <div class="mb-3">
+                                        <h2 class="mb-0 text-primary fw-bold">{{ b_count }}</h2>
+                                        <small class="text-muted">Products ({{ b_product_pct }}% of total)</small>
+                                    </div>
+                                    <div class="mb-3">
+                                        <h4 class="mb-0 text-primary">${{ b_revenue|floatformat:0|intcomma }}</h4>
+                                        <small class="text-muted">Revenue ({{ b_revenue_pct }}% of total)</small>
+                                    </div>
+                                    <span class="monitoring-badge badge-primary">Monitor WEEKLY</span>
+                                </div>
+                                <div class="fs-1 text-primary opacity-25">
+                                    <i class="fas fa-medal"></i>
+                                </div>
+                            </div>
+                            <hr class="my-3">
+                            <small class="text-muted">
+                                <strong>Next 15%</strong> of cumulative revenue<br>
+                                Important but less critical
+                            </small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-md-4">
+                    <div class="card border-start border-warning border-4 h-100">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div class="flex-grow-1">
+                                    <h5 class="text-warning mb-3">
+                                        <i class="fas fa-circle me-2"></i>C Items (Low Priority)
+                                    </h5>
+                                    <div class="mb-3">
+                                        <h2 class="mb-0 text-warning fw-bold">{{ c_count }}</h2>
+                                        <small class="text-muted">Products ({{ c_product_pct }}% of total)</small>
+                                    </div>
+                                    <div class="mb-3">
+                                        <h4 class="mb-0 text-warning">${{ c_revenue|floatformat:0|intcomma }}</h4>
+                                        <small class="text-muted">Revenue ({{ c_revenue_pct }}% of total)</small>
+                                    </div>
+                                    <span class="monitoring-badge badge-warning">Monitor MONTHLY</span>
+                                </div>
+                                <div class="fs-1 text-warning opacity-25">
+                                    <i class="fas fa-dot-circle"></i>
+                                </div>
+                            </div>
+                            <hr class="my-3">
+                            <small class="text-muted">
+                                <strong>Final 5%</strong> of cumulative revenue<br>
+                                Review periodically
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Overall Summary -->
+            <div class="row g-4 mb-4">
+                <div class="col-12 col-md-6">
+                    <div class="card border-start border-dark border-4 h-100">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <h6 class="text-muted mb-2">Total Products</h6>
+                                    <h2 class="mb-0 text-dark fw-bold">{{ total_products|intcomma }}</h2>
+                                    <small class="text-muted">In analysis</small>
+                                </div>
+                                <div class="fs-3 text-dark">
+                                    <i class="fas fa-boxes"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-md-6">
+                    <div class="card border-start border-secondary border-4 h-100">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <h6 class="text-muted mb-2">Total Revenue</h6>
+                                    <h2 class="mb-0 text-secondary fw-bold">${{ total_revenue|floatformat:0|intcomma }}</h2>
+                                    <small class="text-muted">{{ date_from }} to {{ date_to }}</small>
+                                </div>
+                                <div class="fs-3 text-secondary">
+                                    <i class="fas fa-dollar-sign"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Data Table -->
+            <div class="card mb-4">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <h4 class="mb-0">
+                            <i class="fas fa-table me-2 text-primary"></i>Product ABC Classification
+                        </h4>
+                    </div>
+                    <div class="table-responsive">
+                        <table id="abcAnalysisTable" class="table table-hover table-sm" style="width:100%">
+                            <thead>
+                                <tr>
+                                    <th>Rank</th>
+                                    <th>Customer (School)</th>
+                                    <th>Product Name</th>
+                                    <th>Style Code</th>
+                                    <th>SKU</th>
+                                    <th>Annual Revenue</th>
+                                    <th>Cumulative %</th>
+                                    <th>ABC Category</th>
+                                    <th>Monitoring</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in report_data %}
+                                <tr>
+                                    <td class="text-center">{{ item.rank }}</td>
+                                    <td>{{ item.customer }}</td>
+                                    <td>{{ item.product_name }}</td>
+                                    <td>{{ item.style_code }}</td>
+                                    <td>{{ item.sku }}</td>
+                                    <td class="text-end">${{ item.annual_revenue|floatformat:2|intcomma }}</td>
+                                    <td class="text-end">{{ item.cumulative_pct }}%</td>
+                                    <td class="text-center">
+                                        <span class="abc-badge badge-{{ item.badge_color }}">{{ item.abc_category }}</span>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="monitoring-badge badge-{{ item.badge_color }}">{{ item.monitoring_frequency }}</span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Information Sections -->
+            <div class="row g-4 mb-4">
+                <div class="col-12 col-lg-6">
+                    <div class="card h-100 shadow-sm">
+                        <div class="card-body">
+                            <h5 class="mb-3">
+                                <i class="fas fa-info-circle me-2 text-primary"></i>About This Report
+                            </h5>
+                            <p><strong>ABC Analysis</strong> classifies inventory based on the Pareto Principle (80-20 rule), helping you focus management attention where it matters most.</p>
+
+                            <p class="mb-2"><strong>Formula:</strong></p>
+                            <div class="bg-light p-3 rounded mb-3">
+                                <code class="text-dark">Cumulative Revenue % = (Sum of revenue up to this product / Total revenue) × 100</code>
+                            </div>
+
+                            <p class="mb-2"><strong>Classification Boundaries:</strong></p>
+                            <ul class="list-unstyled mb-3">
+                                <li class="mb-2">
+                                    <span class="abc-badge badge-success me-2">A Items</span>
+                                    <strong>0-80%</strong> cumulative revenue
+                                </li>
+                                <li class="mb-2">
+                                    <span class="abc-badge badge-primary me-2">B Items</span>
+                                    <strong>80-95%</strong> cumulative revenue
+                                </li>
+                                <li class="mb-2">
+                                    <span class="abc-badge badge-warning me-2">C Items</span>
+                                    <strong>95-100%</strong> cumulative revenue
+                                </li>
+                            </ul>
+
+                            <p class="mb-0"><strong>Typical Distribution:</strong></p>
+                            <ul class="mb-0">
+                                <li>~20% of products generate 80% of revenue (A Items)</li>
+                                <li>~30% of products generate 15% of revenue (B Items)</li>
+                                <li>~50% of products generate 5% of revenue (C Items)</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-lg-6">
+                    <div class="card h-100 shadow-sm border-warning">
+                        <div class="card-body">
+                            <h5 class="mb-3">
+                                <i class="fas fa-lightbulb me-2 text-warning"></i>How to Interpret This Report
+                            </h5>
+
+                            <div class="mb-3">
+                                <h6 class="text-success">
+                                    <span class="abc-badge badge-success me-2">A Items</span> High-Value Products
+                                </h6>
+                                <ul class="small mb-0">
+                                    <li>Monitor <strong>DAILY</strong> - critical to business success</li>
+                                    <li>Never allow stockouts - maintain safety stock</li>
+                                    <li>Review pricing and promotions carefully</li>
+                                    <li>Forecast demand with highest accuracy</li>
+                                    <li>Priority for inventory investment</li>
+                                </ul>
+                            </div>
+
+                            <div class="mb-3">
+                                <h6 class="text-primary">
+                                    <span class="abc-badge badge-primary me-2">B Items</span> Medium-Value Products
+                                </h6>
+                                <ul class="small mb-0">
+                                    <li>Monitor <strong>WEEKLY</strong> - important but less critical</li>
+                                    <li>Maintain adequate stock levels</li>
+                                    <li>Standard forecasting methods acceptable</li>
+                                    <li>Balance between service level and inventory cost</li>
+                                </ul>
+                            </div>
+
+                            <div class="mb-3">
+                                <h6 class="text-warning">
+                                    <span class="abc-badge badge-warning me-2">C Items</span> Low-Value Products
+                                </h6>
+                                <ul class="small mb-0">
+                                    <li>Monitor <strong>MONTHLY</strong> - review periodically</li>
+                                    <li>Consider min/max inventory policies</li>
+                                    <li>Candidates for discontinuation if slow-moving</li>
+                                    <li>Lower safety stock acceptable</li>
+                                    <li>Simple ordering rules (e.g., order when below min)</li>
+                                </ul>
+                            </div>
+
+                            <div class="alert alert-info mb-0 py-2">
+                                <p class="mb-1 small"><strong>Strategic Actions:</strong></p>
+                                <ul class="mb-1 small">
+                                    <li><strong>A Items:</strong> Premium supplier relationships, expedited shipping</li>
+                                    <li><strong>B Items:</strong> Standard processes and lead times</li>
+                                    <li><strong>C Items:</strong> Bulk ordering, longer lead times acceptable</li>
+                                    <li>Review classifications quarterly - products can move between categories</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Alert Box -->
+            <div class="alert alert-warning border-warning" role="alert">
+                <h6 class="alert-heading">
+                    <i class="fas fa-exclamation-triangle me-2"></i>Pareto Principle in Action
+                </h6>
+                <ul class="mb-0">
+                    <li>Typically <strong>20% of products generate 80% of revenue</strong></li>
+                    <li><strong>Focus on A Items:</strong> Small number of products, large revenue impact</li>
+                    <li><strong>Don't ignore C Items completely:</strong> They may be important for customer satisfaction</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/dataTables.buttons.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.bootstrap5.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.print.min.js"></script>
+<script src="https://cdn.datatables.net/rowgroup/1.4.0/js/dataTables.rowGroup.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
+
+<script>
+$(document).ready(function() {
+    console.log('=== ABC ANALYSIS PRELOADER DEBUG START ===');
+    console.log('Page load time:', new Date().toISOString());
+    console.log('Preloader active:', $('#pagePreloader').hasClass('active'));
+
+    var table = $('#abcAnalysisTable').DataTable({
+        pageLength: 50,
+        order: [[0, 'asc']],  // Sort by Rank ascending (already sorted by revenue DESC)
+        dom: '<"row"<"col-sm-12 col-md-6"B><"col-sm-12 col-md-6"f>>rtip',
+        buttons: [
+            {
+                extend: 'excelHtml5',
+                text: '<i class="fas fa-file-excel me-1"></i>Excel',
+                className: 'btn btn-success btn-sm',
+                title: 'ABC Analysis Report',
+                exportOptions: {
+                    columns: ':visible'
+                }
+            },
+            {
+                extend: 'csvHtml5',
+                text: '<i class="fas fa-file-csv me-1"></i>CSV',
+                className: 'btn btn-info btn-sm',
+                title: 'ABC Analysis Report',
+                exportOptions: {
+                    columns: ':visible'
+                }
+            },
+            {
+                extend: 'pdfHtml5',
+                text: '<i class="fas fa-file-pdf me-1"></i>PDF',
+                className: 'btn btn-danger btn-sm',
+                title: 'ABC Analysis Report',
+                orientation: 'landscape',
+                exportOptions: {
+                    columns: ':visible'
+                }
+            },
+            {
+                extend: 'print',
+                text: '<i class="fas fa-print me-1"></i>Print',
+                className: 'btn btn-secondary btn-sm',
+                exportOptions: {
+                    columns: ':visible'
+                }
+            }
+        ],
+        rowGroup: {
+            dataSrc: 7,  // Group by ABC Category column (index 7)
+            startRender: function(rows, group) {
+                var categoryClass = 'category-' + group.toLowerCase();
+                var icon = '';
+                var description = '';
+
+                if (group === 'A') {
+                    icon = '<i class="fas fa-star text-success me-2"></i>';
+                    description = ' - High Priority (First 80% of revenue)';
+                } else if (group === 'B') {
+                    icon = '<i class="fas fa-check-circle text-primary me-2"></i>';
+                    description = ' - Medium Priority (Next 15% of revenue)';
+                } else {
+                    icon = '<i class="fas fa-circle text-warning me-2"></i>';
+                    description = ' - Low Priority (Final 5% of revenue)';
+                }
+
+                return $('<tr class="dtrg-group ' + categoryClass + '"/>')
+                    .append('<td colspan="9">' + icon + '<strong>' + group + ' Items</strong>' + description + ' (' + rows.count() + ' products)</td>');
+            }
+        },
+        columnDefs: [
+            {
+                targets: [0, 6, 7, 8],  // Rank, Cumulative %, ABC Category, Monitoring - center align
+                className: "text-center"
+            },
+            {
+                targets: [5, 6],  // Annual Revenue, Cumulative % - right align
+                className: "text-end"
+            }
+        ],
+        responsive: true,
+        language: {
+            search: "_INPUT_",
+            searchPlaceholder: "Search products..."
+        }
+    });
+
+    // Wait for table to be fully drawn before hiding preloader
+    table.on('draw.dt', function() {
+        setTimeout(function() {
+            console.log('Table drawn, hiding preloader');
+            $('#pagePreloader').removeClass('active');
+            console.log('✓ Preloader hidden:', new Date().toISOString());
+            console.log('=== ABC ANALYSIS PRELOADER DEBUG END ===');
+        }, 300);
+    });
+
+    // Fallback: if draw.dt doesn't fire within 5 seconds, hide preloader anyway
+    setTimeout(function() {
+        if ($('#pagePreloader').hasClass('active')) {
+            console.warn('⚠ FALLBACK: draw.dt did not fire, hiding preloader anyway');
+            $('#pagePreloader').removeClass('active');
+            console.log('=== ABC ANALYSIS PRELOADER DEBUG END ===');
+        }
+    }, 5000);
+});
+</script>
+{% endblock %}

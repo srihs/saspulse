@@ -5398,3 +5398,176 @@ def top_best_sellers_report(request):
     }
 
     return render(request, 'dashboard/top_best_sellers_report.html', context)
+
+
+def abc_analysis_report(request):
+    """
+    ABC Analysis Report (DP-ABC-001, DP-ABC-002)
+    Classify inventory into A, B, and C categories based on revenue contribution
+    to focus management attention where it matters most.
+
+    ABC Classification Rules:
+    - A Items: First 80% of cumulative revenue (~20% of products) - Monitor DAILY
+    - B Items: Next 15% of cumulative revenue (~30% of products) - Monitor WEEKLY
+    - C Items: Final 5% of cumulative revenue (~50% of products) - Monitor MONTHLY
+
+    Based on Pareto Principle (80-20 rule)
+    """
+    from django.db import connection
+    from datetime import datetime, timedelta
+
+    # Get date range from request (default: last 12 months)
+    end_date = datetime.now().date()
+    start_date = end_date - timedelta(days=365)
+
+    date_from = request.GET.get('date_from', start_date.strftime('%Y-%m-%d'))
+    date_to = request.GET.get('date_to', end_date.strftime('%Y-%m-%d'))
+
+    # Query: Calculate annual revenue per product and assign ABC classification
+    # DP-ABC-001: Calculate annual revenue per product and rank from highest to lowest
+    # DP-ABC-002: Calculate cumulative revenue percentages and assign A/B/C classifications
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            WITH product_revenue AS (
+                SELECT
+                    p.sub_category as customer,
+                    p.name as product_name,
+                    p.style_code,
+                    soli.code as sku,
+                    COALESCE(SUM(soli.qty * soli.unit_price), 0) as annual_revenue
+                FROM cin7_sync_salesorderlineitem soli
+                INNER JOIN cin7_sync_salesorder so ON CAST(so.cin7_id AS CHAR) = soli.cin7_sales_order_id
+                INNER JOIN cin7_sync_product p ON soli.cin7_product_id = p.cin7_id
+                WHERE so.invoice_date >= %s
+                  AND so.invoice_date <= %s
+                  AND so.status != 'Cancelled'
+                  AND p.category_name LIKE %s
+                  AND p.sub_category IS NOT NULL
+                  AND p.sub_category <> ''
+                  AND p.sub_category NOT LIKE %s
+                GROUP BY p.sub_category, p.name, p.style_code, soli.code
+                HAVING annual_revenue > 0
+            ),
+            total_revenue_calc AS (
+                SELECT SUM(annual_revenue) as total_revenue
+                FROM product_revenue
+            ),
+            ranked_products AS (
+                SELECT
+                    pr.customer,
+                    pr.product_name,
+                    pr.style_code,
+                    pr.sku,
+                    pr.annual_revenue,
+                    ROW_NUMBER() OVER (ORDER BY pr.annual_revenue DESC) as rank_num,
+                    SUM(pr.annual_revenue) OVER (ORDER BY pr.annual_revenue DESC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) as cumulative_revenue,
+                    tr.total_revenue
+                FROM product_revenue pr
+                CROSS JOIN total_revenue_calc tr
+            )
+            SELECT
+                rank_num,
+                customer,
+                product_name,
+                style_code,
+                sku,
+                annual_revenue,
+                cumulative_revenue,
+                total_revenue,
+                (cumulative_revenue / total_revenue * 100) as cumulative_pct,
+                CASE
+                    WHEN (cumulative_revenue / total_revenue * 100) <= 80 THEN 'A'
+                    WHEN (cumulative_revenue / total_revenue * 100) <= 95 THEN 'B'
+                    ELSE 'C'
+                END as abc_category
+            FROM ranked_products
+            ORDER BY rank_num
+        """, [date_from, date_to, '% Shop', '%Shop%'])
+
+        rows = cursor.fetchall()
+
+    # Process results
+    report_data = []
+    for row in rows:
+        rank_num = int(row[0])
+        customer = row[1]
+        product_name = row[2]
+        style_code = row[3]
+        sku = row[4]
+        annual_revenue = float(row[5] or 0)
+        cumulative_revenue = float(row[6] or 0)
+        total_revenue = float(row[7] or 0)
+        cumulative_pct = float(row[8] or 0)
+        abc_category = row[9]
+
+        # Assign badge color and monitoring frequency based on ABC category
+        if abc_category == 'A':
+            badge_color = 'success'  # Green
+            monitoring_frequency = 'Daily'
+        elif abc_category == 'B':
+            badge_color = 'primary'  # Blue
+            monitoring_frequency = 'Weekly'
+        else:  # C
+            badge_color = 'warning'  # Yellow
+            monitoring_frequency = 'Monthly'
+
+        report_data.append({
+            'rank': rank_num,
+            'customer': customer or 'Unknown',
+            'product_name': product_name or 'Unknown Product',
+            'style_code': style_code or '',
+            'sku': sku or '',
+            'annual_revenue': annual_revenue,
+            'cumulative_pct': round(cumulative_pct, 2),
+            'abc_category': abc_category,
+            'badge_color': badge_color,
+            'monitoring_frequency': monitoring_frequency
+        })
+
+    # Calculate summary statistics for each category (DP-ABC-003)
+    total_products = len(report_data)
+    a_items = [item for item in report_data if item['abc_category'] == 'A']
+    b_items = [item for item in report_data if item['abc_category'] == 'B']
+    c_items = [item for item in report_data if item['abc_category'] == 'C']
+
+    a_count = len(a_items)
+    b_count = len(b_items)
+    c_count = len(c_items)
+
+    a_revenue = sum(item['annual_revenue'] for item in a_items)
+    b_revenue = sum(item['annual_revenue'] for item in b_items)
+    c_revenue = sum(item['annual_revenue'] for item in c_items)
+    total_revenue = a_revenue + b_revenue + c_revenue
+
+    a_revenue_pct = (a_revenue / total_revenue * 100) if total_revenue > 0 else 0
+    b_revenue_pct = (b_revenue / total_revenue * 100) if total_revenue > 0 else 0
+    c_revenue_pct = (c_revenue / total_revenue * 100) if total_revenue > 0 else 0
+
+    a_product_pct = (a_count / total_products * 100) if total_products > 0 else 0
+    b_product_pct = (b_count / total_products * 100) if total_products > 0 else 0
+    c_product_pct = (c_count / total_products * 100) if total_products > 0 else 0
+
+    context = {
+        'report_data': report_data,
+        'date_from': date_from,
+        'date_to': date_to,
+        'total_products': total_products,
+        'total_revenue': total_revenue,
+        # A Items summary
+        'a_count': a_count,
+        'a_revenue': a_revenue,
+        'a_revenue_pct': round(a_revenue_pct, 1),
+        'a_product_pct': round(a_product_pct, 1),
+        # B Items summary
+        'b_count': b_count,
+        'b_revenue': b_revenue,
+        'b_revenue_pct': round(b_revenue_pct, 1),
+        'b_product_pct': round(b_product_pct, 1),
+        # C Items summary
+        'c_count': c_count,
+        'c_revenue': c_revenue,
+        'c_revenue_pct': round(c_revenue_pct, 1),
+        'c_product_pct': round(c_product_pct, 1),
+    }
+
+    return render(request, 'dashboard/abc_analysis_report.html', context)

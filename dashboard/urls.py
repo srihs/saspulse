@@ -47,4 +47,5 @@ urlpatterns = [
     path('stocks/days-inventory/', views.days_of_inventory_report, name='days_of_inventory_report'),
     path('stocks/dead-stock/', views.dead_stock_report, name='dead_stock_report'),
     path('stocks/best-sellers/', views.top_best_sellers_report, name='top_best_sellers_report'),
+    path('stocks/abc-analysis/', views.abc_analysis_report, name='abc_analysis_report'),
 ]
