@@ -265,19 +265,79 @@
                 </div>
             </div>
 
-            <!-- Business Logic Explanation -->
-            <div class="card mb-4">
-                <div class="card-body">
-                    <h5 class="mb-3"><i class="fas fa-info-circle me-2 text-primary"></i>About This Report</h5>
-                    <p><strong>Stock Turn Rate</strong> = Annual Sales / Average Inventory</p>
-                    <p><strong>Benchmark Classification:</strong></p>
-                    <ul>
-                        <li><span class="benchmark-badge badge-success">Excellent</span> Turn Rate > 12 (High inventory efficiency)</li>
-                        <li><span class="benchmark-badge badge-info">Good</span> Turn Rate 6-12 (Good inventory management)</li>
-                        <li><span class="benchmark-badge badge-warning">Average</span> Turn Rate 3-6 (Average performance)</li>
-                        <li><span class="benchmark-badge badge-danger">Poor</span> Turn Rate < 3 (Slow-moving inventory)</li>
-                    </ul>
-                    <p class="mb-0"><strong>Formula:</strong> Turn Rate = Total Sales Quantity / Average Stock on Hand</p>
+            <!-- Information Sections -->
+            <div class="row g-4 mb-4">
+                <div class="col-12 col-lg-6">
+                    <div class="card h-100 shadow-sm">
+                        <div class="card-body">
+                            <h5 class="mb-3">
+                                <i class="fas fa-info-circle me-2 text-primary"></i>About This Report
+                            </h5>
+                            <p><strong>Stock Turn Rate</strong> measures how efficiently you're managing inventory by comparing annual sales to average inventory levels.</p>
+
+                            <p class="mb-2"><strong>Formula:</strong></p>
+                            <div class="bg-light p-3 rounded mb-3">
+                                <code class="text-dark">Turn Rate = Total Sales Quantity / Average Stock on Hand</code>
+                            </div>
+
+                            <p class="mb-2"><strong>Benchmark Classification:</strong></p>
+                            <ul class="list-unstyled mb-0">
+                                <li class="mb-2">
+                                    <span class="benchmark-badge badge-success me-2">Excellent</span>
+                                    <strong>&gt; 12</strong> - High inventory efficiency
+                                </li>
+                                <li class="mb-2">
+                                    <span class="benchmark-badge badge-info me-2">Good</span>
+                                    <strong>6-12</strong> - Good inventory management
+                                </li>
+                                <li class="mb-2">
+                                    <span class="benchmark-badge badge-warning me-2">Average</span>
+                                    <strong>3-6</strong> - Average performance
+                                </li>
+                                <li class="mb-0">
+                                    <span class="benchmark-badge badge-danger me-2">Poor</span>
+                                    <strong>&lt; 3</strong> - Slow-moving inventory
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-lg-6">
+                    <div class="card h-100 shadow-sm border-warning">
+                        <div class="card-body">
+                            <h5 class="mb-3">
+                                <i class="fas fa-lightbulb me-2 text-warning"></i>How to Interpret This Report
+                            </h5>
+                            <p class="mb-3"><strong>Take these actions based on turn rate performance:</strong></p>
+
+                            <ul class="mb-3">
+                                <li class="mb-2">
+                                    <span class="benchmark-badge badge-success me-2">Excellent (&gt;12)</span><br>
+                                    <small>Fast-moving inventory. Ensure adequate stock levels to prevent stockouts.</small>
+                                </li>
+                                <li class="mb-2">
+                                    <span class="benchmark-badge badge-info me-2">Good (6-12)</span><br>
+                                    <small>Healthy turnover. Monitor stock levels regularly.</small>
+                                </li>
+                                <li class="mb-2">
+                                    <span class="benchmark-badge badge-warning me-2">Average (3-6)</span><br>
+                                    <small>Moderate movement. Review pricing and marketing strategies.</small>
+                                </li>
+                                <li class="mb-3">
+                                    <span class="benchmark-badge badge-danger me-2">Poor (&lt;3)</span><br>
+                                    <small>Slow-moving inventory. Consider promotions, bundling, or clearance.</small>
+                                </li>
+                            </ul>
+
+                            <div class="alert alert-warning mb-0 py-2">
+                                <p class="mb-1 small"><strong>Risk Indicators:</strong></p>
+                                <ul class="mb-0 small">
+                                    <li>Low turn rate + high stock = Risk of dead stock</li>
+                                    <li>High turn rate + low stock = Risk of stockout</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

@@ -259,31 +259,83 @@
                 </div>
             </div>
 
-            <!-- Business Logic Explanation -->
-            <div class="card mb-4">
-                <div class="card-body">
-                    <h5 class="mb-3"><i class="fas fa-info-circle me-2 text-primary"></i>About This Report</h5>
-                    <p><strong>Top 20 Best Sellers</strong> identifies the highest-performing products based on selected metrics</p>
-                    <p><strong>Sorting Options:</strong></p>
-                    <ul>
-                        <li><strong>Revenue:</strong> Total sales value (Quantity × Unit Price)</li>
-                        <li><strong>Units Sold:</strong> Total quantity sold in the period</li>
-                        <li><strong>Turn Rate:</strong> Sales quantity divided by average inventory (efficiency metric)</li>
-                    </ul>
-                    <p><strong>Key Insights:</strong></p>
-                    <ul>
-                        <li><span class="rank-badge rank-1">1</span> <span class="rank-badge rank-2">2</span> <span class="rank-badge rank-3">3</span> Top 3 performers are highlighted for quick identification</li>
-                        <li>High revenue products contribute most to sales but may not be most efficient</li>
-                        <li>High turn rate products indicate efficient inventory management</li>
-                        <li>Compare across metrics to identify products that excel in multiple areas</li>
-                    </ul>
-                    <p><strong>Strategic Uses:</strong></p>
-                    <ul>
-                        <li><span class="badge bg-success">Inventory</span> Prioritize stock for top performers</li>
-                        <li><span class="badge bg-info">Marketing</span> Promote best sellers to drive more revenue</li>
-                        <li><span class="badge bg-warning text-dark">Bundling</span> Pair top sellers with slower-moving products</li>
-                        <li><span class="badge bg-primary">Forecasting</span> Use trends to predict future demand</li>
-                    </ul>
+            <!-- Information Sections -->
+            <div class="row g-4 mb-4">
+                <div class="col-12 col-lg-6">
+                    <div class="card h-100 shadow-sm">
+                        <div class="card-body">
+                            <h5 class="mb-3">
+                                <i class="fas fa-info-circle me-2 text-primary"></i>About This Report
+                            </h5>
+                            <p><strong>Top 20 Best Sellers</strong> identifies your highest-performing products to help you focus on what drives revenue.</p>
+
+                            <p class="mb-2"><strong>Ranking Criteria (Sort By):</strong></p>
+                            <ul class="mb-3">
+                                <li><strong>Revenue:</strong> Total sales value (Quantity × Unit Price)</li>
+                                <li><strong>Units Sold:</strong> Total quantity sold in the period</li>
+                                <li><strong>Turn Rate:</strong> Sales quantity / average inventory (efficiency metric)</li>
+                            </ul>
+
+                            <div class="bg-light p-3 rounded mb-3">
+                                <p class="mb-2"><strong>Visual Indicators:</strong></p>
+                                <div class="d-flex align-items-center gap-2 mb-2">
+                                    <span class="rank-badge rank-1">1</span>
+                                    <span class="rank-badge rank-2">2</span>
+                                    <span class="rank-badge rank-3">3</span>
+                                    <small class="ms-2">Top 3 performers highlighted</small>
+                                </div>
+                                <p class="mb-0 small">Top performer gets a <i class="fas fa-crown text-warning"></i> crown icon for quick identification.</p>
+                            </div>
+
+                            <p class="mb-2"><strong>Key Insights:</strong></p>
+                            <ul class="mb-0 small">
+                                <li>High revenue products contribute most to sales but may not be most efficient</li>
+                                <li>High turn rate products indicate efficient inventory management</li>
+                                <li>Compare across metrics to identify products that excel in multiple areas</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-lg-6">
+                    <div class="card h-100 shadow-sm border-warning">
+                        <div class="card-body">
+                            <h5 class="mb-3">
+                                <i class="fas fa-lightbulb me-2 text-warning"></i>How to Interpret This Report
+                            </h5>
+                            <p class="mb-3"><strong>Make strategic decisions based on product performance:</strong></p>
+
+                            <ul class="mb-3">
+                                <li class="mb-2">
+                                    <strong>Top 5 products:</strong><br>
+                                    <small>Ensure always in stock - these drive significant revenue.</small>
+                                </li>
+                                <li class="mb-2">
+                                    <strong>High revenue + low turn rate:</strong><br>
+                                    <small>Premium products with high margins - focus on maintaining quality.</small>
+                                </li>
+                                <li class="mb-2">
+                                    <strong>High units + low revenue:</strong><br>
+                                    <small>Volume products with lower margins - optimize pricing.</small>
+                                </li>
+                                <li class="mb-3">
+                                    <strong>High turn rate:</strong><br>
+                                    <small>Optimize reorder quantities to maintain efficiency.</small>
+                                </li>
+                            </ul>
+
+                            <p class="mb-2"><strong>Use this report to:</strong></p>
+                            <ul class="mb-3 small">
+                                <li><span class="badge bg-success me-1">Prioritize</span> purchasing budget for top performers</li>
+                                <li><span class="badge bg-info me-1">Plan</span> promotional campaigns around best sellers</li>
+                                <li><span class="badge bg-warning text-dark me-1">Forecast</span> demand for next period</li>
+                                <li><span class="badge bg-primary me-1">Optimize</span> product placement in store/website</li>
+                            </ul>
+
+                            <div class="alert alert-info mb-0 py-2">
+                                <p class="mb-0 small"><strong>Tip:</strong> Monitor changes month-over-month to identify trends and adjust strategies accordingly.</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

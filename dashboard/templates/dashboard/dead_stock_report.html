@@ -203,31 +203,75 @@
                 </div>
             </div>
 
-            <!-- Business Logic Explanation -->
-            <div class="card mb-4">
-                <div class="card-body">
-                    <h5 class="mb-3"><i class="fas fa-info-circle me-2 text-primary"></i>About This Report</h5>
-                    <p><strong>Dead Stock Criteria:</strong> No sales in the last 584 days (1.6 years) AND inventory > 0</p>
-                    <p><strong>Why 1.6 Years?</strong></p>
-                    <ul>
-                        <li>Industry standard for identifying obsolete inventory</li>
-                        <li>Allows for seasonal products to complete multiple cycles</li>
-                        <li>Balances between identifying slow movers and giving products a fair chance</li>
-                    </ul>
-                    <p><strong>Financial Impact:</strong></p>
-                    <ul>
-                        <li><strong>Carrying Cost:</strong> Units Remaining × Cost Per Unit</li>
-                        <li>This capital could be reinvested in faster-moving products</li>
-                        <li>Additional costs include warehousing, insurance, and potential obsolescence</li>
-                    </ul>
-                    <p><strong>Recommended Actions:</strong></p>
-                    <ul>
-                        <li><span class="badge bg-warning text-dark">Discount</span> Consider clearance sales or promotions</li>
-                        <li><span class="badge bg-info">Bundle</span> Package with popular items</li>
-                        <li><span class="badge bg-danger">Liquidate</span> Sell to liquidators if unable to move</li>
-                        <li><span class="badge bg-secondary">Donate</span> Tax write-off for charitable donations</li>
-                    </ul>
-                    <p class="mb-0 text-muted"><em>Note: Items highlighted in red have carrying costs exceeding $5,000 and should be prioritized for action.</em></p>
+            <!-- Information Sections -->
+            <div class="row g-4 mb-4">
+                <div class="col-12 col-lg-6">
+                    <div class="card h-100 shadow-sm">
+                        <div class="card-body">
+                            <h5 class="mb-3">
+                                <i class="fas fa-info-circle me-2 text-primary"></i>About This Report
+                            </h5>
+                            <p><strong>Dead Stock</strong> identifies inventory items that haven't sold in 584 days (1.6 years) and are still taking up warehouse space and capital.</p>
+
+                            <p class="mb-2"><strong>Criteria:</strong></p>
+                            <div class="bg-light p-3 rounded mb-3">
+                                <code class="text-dark">No Sales in Last 584 Days + Inventory &gt; 0</code>
+                            </div>
+
+                            <p class="mb-2"><strong>Why 1.6 Years?</strong></p>
+                            <ul class="mb-3">
+                                <li>Industry standard for identifying obsolete inventory</li>
+                                <li>Allows seasonal products to complete multiple cycles</li>
+                                <li>Balances between identifying slow movers and giving products a fair chance</li>
+                            </ul>
+
+                            <p class="mb-2"><strong>Financial Impact:</strong></p>
+                            <div class="bg-danger bg-opacity-10 p-3 rounded border border-danger">
+                                <p class="mb-2"><strong>Carrying Cost Formula:</strong></p>
+                                <code class="text-dark">Units Remaining × Cost Per Unit</code>
+                                <p class="mb-0 mt-2 small">This capital could be reinvested in faster-moving products. Additional costs include warehousing, insurance, and potential obsolescence.</p>
+                            </div>
+
+                            <p class="mb-0 mt-3 text-muted small"><em>Note: Items highlighted in red have carrying costs exceeding $5,000 and should be prioritized for action.</em></p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-lg-6">
+                    <div class="card h-100 shadow-sm border-warning">
+                        <div class="card-body">
+                            <h5 class="mb-3">
+                                <i class="fas fa-lightbulb me-2 text-warning"></i>How to Interpret This Report
+                            </h5>
+                            <p class="mb-3"><strong>Prioritize clearance actions based on inventory age and value:</strong></p>
+
+                            <ul class="mb-3">
+                                <li class="mb-2">
+                                    <strong class="text-danger">High carrying cost items (red highlighted):</strong><br>
+                                    <small>Priority for clearance actions - highest financial impact.</small>
+                                </li>
+                                <li class="mb-2">
+                                    <strong>Recent dead stock (600-700 days):</strong><br>
+                                    <small>May respond well to promotional campaigns.</small>
+                                </li>
+                                <li class="mb-3">
+                                    <strong>Very old stock (&gt;1000 days):</strong><br>
+                                    <small>Consider liquidation or donation for tax benefits.</small>
+                                </li>
+                            </ul>
+
+                            <p class="mb-2"><strong>Action Recommendations:</strong></p>
+                            <ul class="mb-3">
+                                <li><span class="badge bg-warning text-dark me-1">Discount 20-50%</span> to clear inventory</li>
+                                <li><span class="badge bg-info me-1">Bundle</span> with popular items to move stock</li>
+                                <li><span class="badge bg-secondary me-1">Donate</span> for tax deduction and warehouse space</li>
+                                <li><span class="badge bg-danger me-1">Return to supplier</span> if possible (check agreements)</li>
+                            </ul>
+
+                            <div class="alert alert-warning mb-0 py-2">
+                                <p class="mb-0 small"><strong>Calculate opportunity cost:</strong> Money tied up could be invested in fast-moving inventory with better returns.</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

@@ -249,19 +249,79 @@
                 </div>
             </div>
 
-            <!-- Business Logic Explanation -->
-            <div class="card mb-4">
-                <div class="card-body">
-                    <h5 class="mb-3"><i class="fas fa-info-circle me-2 text-primary"></i>About This Report</h5>
-                    <p><strong>Days of Inventory</strong> = Current Stock / Average Daily Sales</p>
-                    <p><strong>Status Classification:</strong></p>
-                    <ul>
-                        <li><span class="status-badge badge-danger">Critical</span> 0-10 days (Immediate reorder needed)</li>
-                        <li><span class="status-badge badge-warning">Low</span> 10-30 days (Order soon to avoid stockout)</li>
-                        <li><span class="status-badge badge-success">Healthy</span> 30-90 days (Optimal inventory level)</li>
-                        <li><span class="status-badge badge-info">Overstocked</span> > 90 days (Consider reducing orders)</li>
-                    </ul>
-                    <p class="mb-0"><strong>Formula:</strong> Days of Inventory = (Current Stock on Hand) / (Total Sales / Number of Days in Period)</p>
+            <!-- Information Sections -->
+            <div class="row g-4 mb-4">
+                <div class="col-12 col-lg-6">
+                    <div class="card h-100 shadow-sm">
+                        <div class="card-body">
+                            <h5 class="mb-3">
+                                <i class="fas fa-info-circle me-2 text-primary"></i>About This Report
+                            </h5>
+                            <p><strong>Days of Inventory</strong> shows how many days your current stock will last based on average daily sales velocity.</p>
+
+                            <p class="mb-2"><strong>Formula:</strong></p>
+                            <div class="bg-light p-3 rounded mb-3">
+                                <code class="text-dark">Days of Inventory = Current Stock / Average Daily Sales</code>
+                            </div>
+
+                            <p class="mb-2"><strong>Status Thresholds:</strong></p>
+                            <ul class="list-unstyled mb-0">
+                                <li class="mb-2">
+                                    <span class="status-badge badge-danger me-2">CRITICAL</span>
+                                    <strong>0-10 days</strong> - Immediate reorder needed
+                                </li>
+                                <li class="mb-2">
+                                    <span class="status-badge badge-warning me-2">LOW</span>
+                                    <strong>10-30 days</strong> - Order soon to avoid stockout
+                                </li>
+                                <li class="mb-2">
+                                    <span class="status-badge badge-success me-2">HEALTHY</span>
+                                    <strong>30-90 days</strong> - Optimal inventory level
+                                </li>
+                                <li class="mb-0">
+                                    <span class="status-badge badge-info me-2">OVERSTOCKED</span>
+                                    <strong>&gt; 90 days</strong> - Consider reducing orders
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-lg-6">
+                    <div class="card h-100 shadow-sm border-warning">
+                        <div class="card-body">
+                            <h5 class="mb-3">
+                                <i class="fas fa-lightbulb me-2 text-warning"></i>How to Interpret This Report
+                            </h5>
+                            <p class="mb-3"><strong>Take these actions based on inventory status:</strong></p>
+
+                            <ul class="mb-3">
+                                <li class="mb-2">
+                                    <span class="status-badge badge-danger me-2">CRITICAL (0-10 days)</span><br>
+                                    <small>Immediate reorder needed. Place urgent orders to prevent stockouts.</small>
+                                </li>
+                                <li class="mb-2">
+                                    <span class="status-badge badge-warning me-2">LOW (10-30 days)</span><br>
+                                    <small>Order soon. Review lead times and place orders within the week.</small>
+                                </li>
+                                <li class="mb-2">
+                                    <span class="status-badge badge-success me-2">HEALTHY (30-90 days)</span><br>
+                                    <small>Optimal level. Monitor and maintain current ordering patterns.</small>
+                                </li>
+                                <li class="mb-3">
+                                    <span class="status-badge badge-info me-2">OVERSTOCKED (&gt;90 days)</span><br>
+                                    <small>Consider reducing future orders. Evaluate for promotional opportunities.</small>
+                                </li>
+                            </ul>
+
+                            <div class="alert alert-info mb-0 py-2">
+                                <p class="mb-1 small"><strong>Important Considerations:</strong></p>
+                                <ul class="mb-0 small">
+                                    <li>Check lead times: If supplier lead time is 30 days, maintain at least 30-40 days of inventory.</li>
+                                    <li>Seasonal items: May show OVERSTOCKED during off-season - this can be normal.</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
