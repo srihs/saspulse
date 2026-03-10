@@ -4,6 +4,19 @@
 
 {% block title %}Inventory Alignment Matrix - SAS Pulse{% endblock %}
 
+{% block preloader %}
+<!-- Page Preloader - Active by default to show during page load -->
+<div id="pagePreloader" class="preloader-overlay active">
+    <div class="preloader-content">
+        <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <h4 class="mt-3">Loading Matrix...</h4>
+        <p class="text-muted">Processing data, please wait...</p>
+    </div>
+</div>
+{% endblock %}
+
 {% block extra_css %}
 <link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
 <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
@@ -317,7 +330,11 @@
 
 <script>
 $(document).ready(function() {
-    $('#alignmentMatrixTable').DataTable({
+    console.log('=== INVENTORY ALIGNMENT PRELOADER DEBUG START ===');
+    console.log('Page load time:', new Date().toISOString());
+    console.log('Preloader active:', $('#pagePreloader').hasClass('active'));
+
+    var table = $('#alignmentMatrixTable').DataTable({
         pageLength: 25,
         order: [[0, 'asc'], [2, 'asc'], [9, 'asc']],  // Sort by Customer, Product Name, then Days Coverage
         dom: '<"row"<"col-sm-12 col-md-6"B><"col-sm-12 col-md-6"f>>rtip',
@@ -406,6 +423,25 @@ $(document).ready(function() {
             searchPlaceholder: "Search records..."
         }
     });
+
+    // Wait for table to be fully drawn before hiding preloader
+    table.on('draw.dt', function() {
+        setTimeout(function() {
+            console.log('Table drawn, hiding preloader');
+            $('#pagePreloader').removeClass('active');
+            console.log('✓ Preloader hidden:', new Date().toISOString());
+            console.log('=== INVENTORY ALIGNMENT PRELOADER DEBUG END ===');
+        }, 300);
+    });
+
+    // Fallback: if draw.dt doesn't fire within 5 seconds, hide preloader anyway
+    setTimeout(function() {
+        if ($('#pagePreloader').hasClass('active')) {
+            console.warn('⚠ FALLBACK: draw.dt did not fire, hiding preloader anyway');
+            $('#pagePreloader').removeClass('active');
+            console.log('=== INVENTORY ALIGNMENT PRELOADER DEBUG END ===');
+        }
+    }, 5000);
 });
 </script>
 {% endblock %}
