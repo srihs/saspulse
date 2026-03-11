@@ -1600,18 +1600,33 @@ def sales_forecasting(request):
         with connection.cursor() as cursor:
             cursor.execute("""
                 SELECT
-                    COALESCE(SUM(stock_on_hand), 0) as total_stock_on_hand,
-                    COALESCE(SUM(incoming), 0) as total_incoming,
-                    MAX(product_name) as product_name
-                FROM cin7_sync_stock
-                WHERE code = %s
-            """, [sku_code])
+                    COALESCE(SUM(s.stock_on_hand), 0) as total_stock_on_hand,
+                    COALESCE(SUM(s.incoming), 0) as total_incoming,
+                    COALESCE(
+                        MAX(p.name),
+                        (
+                            SELECT name
+                            FROM cin7_sync_salesorderlineitem
+                            WHERE code = %s
+                            AND name IS NOT NULL
+                            AND name != ''
+                            GROUP BY name
+                            ORDER BY COUNT(*) DESC
+                            LIMIT 1
+                        ),
+                        %s
+                    ) as product_name
+                FROM cin7_sync_productoption po
+                LEFT JOIN cin7_sync_product p ON p.cin7_id = po.cin7_product_id
+                LEFT JOIN cin7_sync_stock s ON s.code = po.code
+                WHERE po.code = %s
+            """, [sku_code, sku_code, sku_code])
             row = cursor.fetchone()
 
         return {
             'stock_on_hand': float(row[0] or 0),
             'incoming': float(row[1] or 0),
-            'product_name': row[2] or sku_code
+            'product_name': row[2] if row[2] else sku_code
         }
 
     # Helper function to aggregate product forecasts by shop
@@ -1655,7 +1670,7 @@ def sales_forecasting(request):
                 sf.mape,
                 sf.model_params,
                 sf.entity_name as sku_code,
-                p.name as product_name,
+                COALESCE(p.name, po.code, sf.entity_name) as product_name,
                 po.option1 as size
             FROM dashboard_salesforecastbase sf
             JOIN cin7_sync_productoption po ON po.code = sf.entity_name
@@ -2997,21 +3012,28 @@ def forecast_product_breakdown(request, school_name):
                     sf.accuracy_score,
                     sf.model_params,
                     sf.entity_name as product_code,
-                    product_info.product_name,
-                    product_info.size
+                    COALESCE(
+                        p.name,
+                        st.product_name,
+                        (
+                            SELECT name
+                            FROM cin7_sync_salesorderlineitem
+                            WHERE code = sf.entity_name
+                            AND name IS NOT NULL
+                            AND name != ''
+                            GROUP BY name
+                            ORDER BY COUNT(*) DESC
+                            LIMIT 1
+                        ),
+                        sf.entity_name
+                    ) as product_name,
+                    COALESCE(po.option1, SUBSTRING_INDEX(sf.entity_name, '-', -1)) as size
                 FROM dashboard_salesforecastbase sf
-                INNER JOIN (
-                    -- Subquery to get unique SKU to product mapping for this shop
-                    SELECT DISTINCT
-                        po.code as sku_code,
-                        COALESCE(p.name, po.code) as product_name,
-                        COALESCE(po.option1, 'N/A') as size
-                    FROM cin7_sync_productoption po
-                    JOIN cin7_sync_product p ON p.cin7_id = po.cin7_product_id
-                    WHERE p.category_name = %s
-                ) AS product_info ON product_info.sku_code = sf.entity_name
+                LEFT JOIN cin7_sync_productoption po ON po.code = sf.entity_name
+                LEFT JOIN cin7_sync_product p ON p.cin7_id = po.cin7_product_id AND p.category_name = %s
+                LEFT JOIN cin7_sync_stock st ON st.code = sf.entity_name AND st.product_name IS NOT NULL AND st.product_name != ''
                 WHERE sf.aggregation_level = 'product'
-                ORDER BY product_info.product_name, product_info.size
+                ORDER BY product_name, size
                 LIMIT 500
             """, [school_name])
         else:
@@ -3024,23 +3046,28 @@ def forecast_product_breakdown(request, school_name):
                     sf.accuracy_score,
                     sf.model_params,
                     sf.entity_name as product_code,
-                    product_info.product_name,
-                    product_info.size
+                    COALESCE(
+                        p.name,
+                        st.product_name,
+                        (
+                            SELECT li.name
+                            FROM cin7_sync_salesorderlineitem li
+                            WHERE li.code = sf.entity_name
+                            AND li.name IS NOT NULL
+                            AND li.name != ''
+                            GROUP BY li.name
+                            ORDER BY COUNT(*) DESC
+                            LIMIT 1
+                        ),
+                        sf.entity_name
+                    ) as product_name,
+                    COALESCE(po.option1, SUBSTRING_INDEX(sf.entity_name, '-', -1)) as size
                 FROM dashboard_salesforecastbase sf
-                INNER JOIN (
-                    -- Subquery to get unique SKU to product mapping
-                    SELECT DISTINCT
-                        li.code as sku_code,
-                        COALESCE(p.name, li.name) as product_name,
-                        COALESCE(po.option1, SUBSTRING_INDEX(li.code, '-', -1)) as size
-                    FROM cin7_sync_salesorderlineitem li
-                    JOIN cin7_sync_product p ON p.id = li.product_id
-                    LEFT JOIN cin7_sync_productoption po ON po.code = li.code
-                    WHERE p.sub_category = %s
-                      AND p.category_name LIKE '%%Shop'
-                ) AS product_info ON product_info.sku_code = sf.entity_name
+                LEFT JOIN cin7_sync_productoption po ON po.code = sf.entity_name
+                LEFT JOIN cin7_sync_product p ON p.cin7_id = po.cin7_product_id AND p.sub_category = %s AND p.category_name LIKE '%%Shop'
+                LEFT JOIN cin7_sync_stock st ON st.code = sf.entity_name AND st.product_name IS NOT NULL AND st.product_name != ''
                 WHERE sf.aggregation_level = 'product'
-                ORDER BY product_info.product_name, product_info.size
+                ORDER BY product_name, size
                 LIMIT 500
             """, [school_name])
 
