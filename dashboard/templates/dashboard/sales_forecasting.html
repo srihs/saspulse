@@ -562,9 +562,6 @@
                                                                                 <tr>
                                                                                     <th class="text-start">Product Name</th>
                                                                                     <th class="text-start">SKU Code</th>
-                                                                                    {% if not is_replenishment_view %}
-                                                                                    <th class="text-start">Variation</th>
-                                                                                    {% endif %}
                                                                                     <th class="text-end">Stock in Hand</th>
                                                                                     <th class="text-end">Incoming Stock</th>
                                                                                     <th class="text-end">Forecasted Stock</th>
@@ -577,9 +574,6 @@
                                                                                 <tr>
                                                                                     <td class="text-start align-middle">{{ variation.product_name }}</td>
                                                                                     <td class="text-start align-middle"><code>{{ variation.sku_code }}</code></td>
-                                                                                    {% if not is_replenishment_view %}
-                                                                                    <td class="text-start align-middle"><strong>{{ variation.size }}</strong></td>
-                                                                                    {% endif %}
                                                                                     <td class="text-end align-middle">{{ variation.stock_on_hand|floatformat:0 }}</td>
                                                                                     <td class="text-end align-middle">{{ variation.incoming_stock|floatformat:0 }}</td>
                                                                                     <td class="text-end align-middle">{{ variation.total_quantity|floatformat:0 }}</td>
@@ -669,9 +663,6 @@
                                                             <tr>
                                                                 <th class="text-start">Product Name</th>
                                                                 <th class="text-start">SKU Code</th>
-                                                                {% if not is_replenishment_view %}
-                                                                <th class="text-start">Variation</th>
-                                                                {% endif %}
                                                                 <th class="text-end">Stock in Hand</th>
                                                                 <th class="text-end">Incoming Stock</th>
                                                                 <th class="text-end">Forecasted Stock</th>
@@ -684,9 +675,6 @@
                                                             <tr>
                                                                 <td class="text-start align-middle">{{ variation.product_name }}</td>
                                                                 <td class="text-start align-middle"><code>{{ variation.sku_code }}</code></td>
-                                                                {% if not is_replenishment_view %}
-                                                                <td class="text-start align-middle"><strong>{{ variation.size }}</strong></td>
-                                                                {% endif %}
                                                                 <td class="text-end align-middle">{{ variation.stock_on_hand|floatformat:0 }}</td>
                                                                 <td class="text-end align-middle">{{ variation.incoming_stock|floatformat:0 }}</td>
                                                                 <td class="text-end align-middle">{{ variation.total_quantity|floatformat:0 }}</td>
@@ -766,9 +754,6 @@
                                                             <tr>
                                                                 <th class="text-start">Product Name</th>
                                                                 <th class="text-start">SKU Code</th>
-                                                                {% if not is_replenishment_view %}
-                                                                <th class="text-start">Variation</th>
-                                                                {% endif %}
                                                                 <th class="text-end">Stock in Hand</th>
                                                                 <th class="text-end">Incoming Stock</th>
                                                                 <th class="text-end">Forecasted Stock</th>
@@ -781,9 +766,6 @@
                                                             <tr>
                                                                 <td class="text-start align-middle">{{ variation.product_name }}</td>
                                                                 <td class="text-start align-middle"><code>{{ variation.sku_code }}</code></td>
-                                                                {% if not is_replenishment_view %}
-                                                                <td class="text-start align-middle"><strong>{{ variation.size }}</strong></td>
-                                                                {% endif %}
                                                                 <td class="text-end align-middle">{{ variation.stock_on_hand|floatformat:0 }}</td>
                                                                 <td class="text-end align-middle">{{ variation.incoming_stock|floatformat:0 }}</td>
                                                                 <td class="text-end align-middle">{{ variation.total_quantity|floatformat:0 }}</td>
@@ -1510,7 +1492,6 @@ $(document).ready(function() {
             html += '<thead style="background-color: #e9ecef;"><tr>';
             html += '<th>Product Name</th>';
             html += '<th style="white-space: nowrap;">SKU Code</th>';
-            html += '<th style="text-align: center;">Variation</th>';
             html += '<th class="text-center">Stock in Hand</th>';
             html += '<th class="text-center">Incoming Stock</th>';
             html += '<th class="text-center">Forecasted Stock</th>';
@@ -1526,7 +1507,6 @@ $(document).ready(function() {
                 html += '<tr>';
                 html += '<td style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">' + baseName + '</td>';
                 html += '<td style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"><code style="font-size: 0.75rem;">' + v.product_code + '</code></td>';
-                html += '<td class="text-center"><strong>' + (v.size || 'N/A') + '</strong></td>';
                 html += '<td class="text-center text-muted">N/A</td>';
                 html += '<td class="text-center text-muted">N/A</td>';
                 html += '<td class="text-center">' + Math.round(v.total_quantity) + '</td>';
