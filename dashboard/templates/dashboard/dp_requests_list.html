@@ -1,0 +1,511 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}DP Team - All Replenishment Requests{% endblock %}
+
+{% block extra_css %}
+<style>
+    .status-badge {
+        font-size: 0.9rem;
+        padding: 0.4rem 0.8rem;
+    }
+    .filter-card {
+        background-color: #f8f9fa;
+        border-left: 4px solid #0d6efd;
+    }
+    .stats-card {
+        transition: transform 0.2s;
+    }
+    .stats-card:hover {
+        transform: translateY(-5px);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="pb-5">
+    <div class="row g-4">
+        <div class="col-12">
+            <div class="mb-8">
+                <h2 class="mb-2">DP Team - All Replenishment Requests</h2>
+                <h5 class="text-body-tertiary fw-semibold">
+                    Comprehensive view of all store replenishment requests with advanced filters
+                </h5>
+            </div>
+
+            <!-- Summary Statistics Cards -->
+            <div class="row mb-4">
+                <div class="col-md-2">
+                    <div class="card stats-card border-primary">
+                        <div class="card-body text-center">
+                            <h6 class="text-muted mb-2">Total Requests</h6>
+                            <h3 class="text-primary mb-0">{{ total_requests }}</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="card stats-card border-secondary">
+                        <div class="card-body text-center">
+                            <h6 class="text-muted mb-2">Submitted</h6>
+                            <h3 class="text-secondary mb-0">{{ submitted_count }}</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="card stats-card border-info">
+                        <div class="card-body text-center">
+                            <h6 class="text-muted mb-2">Store Approved</h6>
+                            <h3 class="text-info mb-0">{{ store_approved_count }}</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="card stats-card border-success">
+                        <div class="card-body text-center">
+                            <h6 class="text-muted mb-2">DP Approved</h6>
+                            <h3 class="text-success mb-0">{{ dp_approved_count }}</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="card stats-card border-danger">
+                        <div class="card-body text-center">
+                            <h6 class="text-muted mb-2">Rejected</h6>
+                            <h3 class="text-danger mb-0">{{ rejected_count }}</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="card stats-card border-dark">
+                        <div class="card-body text-center">
+                            <h6 class="text-muted mb-2">Fulfilled</h6>
+                            <h3 class="text-dark mb-0">{{ fulfilled_count }}</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filters -->
+            <div class="card filter-card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title mb-3">
+                        <i data-feather="filter"></i> Filters
+                    </h5>
+                    <form method="get" action="{% url 'dashboard:dp_replenishment_requests_list' %}" id="filterForm">
+                        <div class="row g-3">
+                            <div class="col-md-3">
+                                <label for="status-filter" class="form-label">Status</label>
+                                <select class="form-select" id="status-filter" name="status">
+                                    <option value="all" {% if current_status == 'all' %}selected{% endif %}>All Statuses</option>
+                                    {% for status_value, status_label in status_choices %}
+                                    <option value="{{ status_value }}" {% if current_status == status_value %}selected{% endif %}>
+                                        {{ status_label }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label for="school-filter" class="form-label">School/Store</label>
+                                <select class="form-select" id="school-filter" name="school">
+                                    <option value="">All Schools</option>
+                                    {% for school in all_schools %}
+                                    <option value="{{ school }}" {% if current_school == school %}selected{% endif %}>
+                                        {{ school }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <label for="start-date" class="form-label">Start Date</label>
+                                <input type="date" class="form-control" id="start-date" name="start_date" value="{{ current_start_date }}">
+                            </div>
+                            <div class="col-md-2">
+                                <label for="end-date" class="form-label">End Date</label>
+                                <input type="date" class="form-control" id="end-date" name="end_date" value="{{ current_end_date }}">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">&nbsp;</label>
+                                <div class="d-grid gap-2">
+                                    <button type="submit" class="btn btn-primary">
+                                        <i data-feather="search"></i> Apply Filters
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-10">
+                                <label for="search-input" class="form-label">Search (Request Number, School, or User)</label>
+                                <input type="text" class="form-control" id="search-input" name="search"
+                                       placeholder="Search by request number, school name, or user..."
+                                       value="{{ current_search }}">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">&nbsp;</label>
+                                <div class="d-grid gap-2">
+                                    <a href="{% url 'dashboard:dp_replenishment_requests_list' %}" class="btn btn-secondary">
+                                        <i data-feather="x"></i> Clear All
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Requests Table -->
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-list me-2"></i>
+                            All Replenishment Requests
+                        </h5>
+                        <button class="btn btn-light btn-sm" id="exportBtn">
+                            <i data-feather="download"></i> Export to CSV
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    {% if batches %}
+                    <div class="table-responsive">
+                        <table id="requestsTable" class="table table-sm table-striped table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Request Number</th>
+                                    <th>School</th>
+                                    <th>Requested By</th>
+                                    <th>Status</th>
+                                    <th>Items</th>
+                                    <th>Total Qty</th>
+                                    <th>Request Date</th>
+                                    <th>Store Approved</th>
+                                    <th>DP Approved</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for batch in batches %}
+                                <tr id="request-row-{{ batch.id }}">
+                                    <td>
+                                        <a href="{% url 'dashboard:dp_replenishment_request_detail' batch.request_number %}">
+                                            <strong>{{ batch.request_number }}</strong>
+                                        </a>
+                                    </td>
+                                    <td>{{ batch.school }}</td>
+                                    <td>{{ batch.requested_by.get_full_name|default:batch.requested_by.username }}</td>
+                                    <td>
+                                        {% if batch.status == 'submitted' %}
+                                            <span class="badge bg-secondary status-badge">Submitted</span>
+                                        {% elif batch.status == 'store_approved' %}
+                                            <span class="badge bg-info status-badge">Store Approved</span>
+                                        {% elif batch.status == 'dp_approved' %}
+                                            <span class="badge bg-success status-badge">DP Approved</span>
+                                        {% elif batch.status == 'rejected' %}
+                                            <span class="badge bg-danger status-badge">Rejected</span>
+                                        {% elif batch.status == 'fulfilled' %}
+                                            <span class="badge bg-dark status-badge">Fulfilled</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-light text-dark">{{ batch.total_items }} items</span>
+                                    </td>
+                                    <td><strong>{{ batch.total_quantity }}</strong></td>
+                                    <td>{{ batch.request_date|date:"M d, Y H:i" }}</td>
+                                    <td>
+                                        {% if batch.store_approved_date %}
+                                            {{ batch.store_approved_date|date:"M d, Y" }}<br>
+                                            <small class="text-muted">by {{ batch.store_approved_by.get_full_name|default:batch.store_approved_by.username }}</small>
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if batch.dp_approved_date %}
+                                            {{ batch.dp_approved_date|date:"M d, Y" }}<br>
+                                            <small class="text-muted">by {{ batch.dp_approved_by.get_full_name|default:batch.dp_approved_by.username }}</small>
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <div class="btn-group" role="group">
+                                            <a href="{% url 'dashboard:dp_replenishment_request_detail' batch.request_number %}"
+                                               class="btn btn-sm btn-outline-primary" title="View Details">
+                                                <i data-feather="eye"></i>
+                                            </a>
+                                            {% if batch.status == 'store_approved' %}
+                                            <button class="btn btn-sm btn-success approve-btn"
+                                                    data-batch-id="{{ batch.id }}"
+                                                    data-request-number="{{ batch.request_number }}"
+                                                    title="Approve Request">
+                                                <i data-feather="check"></i>
+                                            </button>
+                                            <button class="btn btn-sm btn-danger reject-btn"
+                                                    data-batch-id="{{ batch.id }}"
+                                                    data-request-number="{{ batch.request_number }}"
+                                                    title="Reject Request">
+                                                <i data-feather="x"></i>
+                                            </button>
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        No replenishment requests found matching your filters.
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<!-- Reject Modal -->
+<div class="modal fade" id="rejectModal" tabindex="-1" aria-labelledby="rejectModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="rejectModalLabel">Reject Replenishment Request</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>You are about to reject request <strong id="reject-request-number"></strong>.</p>
+                <div class="mb-3">
+                    <label for="rejection-reason" class="form-label">Rejection Reason <span class="text-danger">*</span></label>
+                    <textarea class="form-control" id="rejection-reason" rows="3" required placeholder="Please provide a reason for rejection..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" id="confirm-reject-btn">Confirm Rejection</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(document).ready(function() {
+    // Initialize DataTables
+    const table = $('#requestsTable').DataTable({
+        order: [[6, 'desc']], // Sort by request date descending
+        pageLength: 25,
+        dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>rtip',
+        columnDefs: [
+            { orderable: false, targets: [9] } // Disable sorting on Actions column
+        ]
+    });
+
+    // Initialize Feather icons
+    if (typeof feather !== 'undefined') {
+        feather.replace();
+    }
+
+    let currentBatchId = null;
+    let currentRequestNumber = null;
+
+    // Export to CSV functionality
+    $('#exportBtn').on('click', function() {
+        const csv = [];
+        const headers = ['Request Number', 'School', 'Requested By', 'Status', 'Items', 'Total Qty', 'Request Date', 'Store Approved', 'DP Approved'];
+        csv.push(headers.join(','));
+
+        table.rows({ search: 'applied' }).every(function() {
+            const row = this.node();
+            const cells = $(row).find('td');
+            const rowData = [
+                $(cells[0]).text().trim(),
+                $(cells[1]).text().trim(),
+                $(cells[2]).text().trim(),
+                $(cells[3]).text().trim(),
+                $(cells[4]).text().trim(),
+                $(cells[5]).text().trim(),
+                $(cells[6]).text().trim(),
+                $(cells[7]).text().trim().replace(/\n/g, ' '),
+                $(cells[8]).text().trim().replace(/\n/g, ' ')
+            ];
+            csv.push(rowData.map(cell => `"${cell}"`).join(','));
+        });
+
+        const csvContent = csv.join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', `replenishment_requests_${new Date().toISOString().split('T')[0]}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    });
+
+    // Approve button handler
+    $(document).on('click', '.approve-btn', function() {
+        const button = $(this);
+        const batchId = button.data('batch-id');
+        const requestNumber = button.data('request-number');
+
+        showConfirmation(
+            `Are you sure you want to approve request ${requestNumber}? This will convert it to an order.`,
+            function() {
+                // Disable button
+                button.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i>');
+                approveRequest(button, batchId, requestNumber);
+            },
+            'Approve Request',
+            'Approve',
+            'btn-success'
+        );
+    });
+
+    function approveRequest(button, batchId, requestNumber) {
+        console.log('Approving request:', batchId, requestNumber);
+
+        // Make AJAX request
+        $.ajax({
+            url: `/dashboard/replenishment/dp/approve/${batchId}/`,
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            data: {},
+            success: function(response) {
+                console.log('Approval response:', response);
+                if (response.success) {
+                    // Show success message
+                    showAlert(`Request ${requestNumber} has been approved successfully and converted to an order.`, 'Success', 'check-circle');
+
+                    // Update row status badge
+                    const row = $(`#request-row-${batchId}`);
+                    row.find('td:eq(3)').html('<span class="badge bg-success status-badge">DP Approved</span>');
+
+                    // Remove action buttons
+                    row.find('.approve-btn, .reject-btn').remove();
+
+                    // Update statistics
+                    const storeApprovedCount = parseInt($('.border-info .text-info').text());
+                    const dpApprovedCount = parseInt($('.border-success .text-success').text());
+                    $('.border-info .text-info').text(storeApprovedCount - 1);
+                    $('.border-success .text-success').text(dpApprovedCount + 1);
+                } else {
+                    showAlert('Error: ' + response.error, 'Approval Failed', 'times-circle');
+                    button.prop('disabled', false).html('<i data-feather="check"></i>');
+                    feather.replace();
+                }
+            },
+            error: function(xhr) {
+                console.error('Approval error:', xhr.status, xhr.responseText);
+                let errorMsg = 'An error occurred while approving the request.';
+                try {
+                    const errorData = JSON.parse(xhr.responseText);
+                    if (errorData.error) {
+                        errorMsg = errorData.error;
+                    }
+                } catch (e) {
+                    errorMsg = xhr.responseText || errorMsg;
+                }
+                showAlert(errorMsg, 'Error', 'times-circle');
+                button.prop('disabled', false).html('<i data-feather="check"></i>');
+                feather.replace();
+            }
+        });
+    }
+
+    // Reject button handler
+    $(document).on('click', '.reject-btn', function() {
+        const button = $(this);
+        currentBatchId = button.data('batch-id');
+        currentRequestNumber = button.data('request-number');
+
+        // Populate modal
+        $('#reject-request-number').text(currentRequestNumber);
+        $('#rejection-reason').val('');
+
+        // Show modal
+        const modal = new bootstrap.Modal(document.getElementById('rejectModal'));
+        modal.show();
+    });
+
+    // Confirm reject button
+    $('#confirm-reject-btn').on('click', function() {
+        const reason = $('#rejection-reason').val().trim();
+
+        if (!reason) {
+            showAlert('Please provide a reason for rejecting this request.', 'Rejection Reason Required', 'exclamation-triangle');
+            return;
+        }
+
+        // Disable button
+        $(this).prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Rejecting...');
+
+        // Make AJAX request
+        $.ajax({
+            url: `/dashboard/replenishment/dp/reject/${currentBatchId}/`,
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            data: JSON.stringify({
+                reason: reason
+            }),
+            contentType: 'application/json',
+            success: function(response) {
+                if (response.success) {
+                    // Hide modal
+                    bootstrap.Modal.getInstance(document.getElementById('rejectModal')).hide();
+
+                    // Show success message
+                    showAlert(`Request ${currentRequestNumber} has been rejected.`, 'Request Rejected', 'check-circle');
+
+                    // Update row status badge
+                    const row = $(`#request-row-${currentBatchId}`);
+                    row.find('td:eq(3)').html('<span class="badge bg-danger status-badge">Rejected</span>');
+
+                    // Remove action buttons
+                    row.find('.approve-btn, .reject-btn').remove();
+
+                    // Update statistics
+                    const storeApprovedCount = parseInt($('.border-info .text-info').text());
+                    const rejectedCount = parseInt($('.border-danger .text-danger').text());
+                    $('.border-info .text-info').text(storeApprovedCount - 1);
+                    $('.border-danger .text-danger').text(rejectedCount + 1);
+                } else {
+                    showAlert('Error: ' + response.error, 'Rejection Failed', 'times-circle');
+                }
+
+                // Re-enable button
+                $('#confirm-reject-btn').prop('disabled', false).html('Confirm Rejection');
+            },
+            error: function(xhr) {
+                showAlert('An error occurred while rejecting the request. Please try again.', 'Error', 'times-circle');
+                $('#confirm-reject-btn').prop('disabled', false).html('Confirm Rejection');
+            }
+        });
+    });
+
+    // Helper function to get CSRF token
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+});
+</script>
+{% endblock %}

@@ -3961,21 +3961,28 @@ def dp_approve_request(request, batch_id):
     from django.shortcuts import get_object_or_404
 
     try:
+        print(f"[DEBUG] Step 1: Fetching batch_id={batch_id}")
         batch = get_object_or_404(StoreReplenishmentRequestBatch, id=batch_id)
+        print(f"[DEBUG] Step 2: Found batch {batch.request_number}, status={batch.status}")
 
         # Verify status is store_approved
         if batch.status != 'store_approved':
+            print(f"[DEBUG] Step 3: Invalid status, returning error")
             return JsonResponse({
                 'success': False,
                 'error': 'Request is not in store_approved status'
             }, status=400)
 
         # Update to DP approved
+        print(f"[DEBUG] Step 4: Updating status to dp_approved")
         batch.status = 'dp_approved'
         batch.dp_approved_by = request.user
         batch.dp_approved_date = timezone.now()
+        print(f"[DEBUG] Step 5: Calling batch.save()")
         batch.save()
+        print(f"[DEBUG] Step 6: Save completed successfully")
 
+        print(f"[DEBUG] Step 7: Returning success response")
         return JsonResponse({
             'success': True,
             'message': f'Request {batch.request_number} approved successfully',
@@ -3984,7 +3991,10 @@ def dp_approve_request(request, batch_id):
 
     except Exception as e:
         import traceback
+        print("[DEBUG] EXCEPTION OCCURRED:")
         print(traceback.format_exc())
+        print(f"[DEBUG] Exception type: {type(e).__name__}")
+        print(f"[DEBUG] Exception message: {str(e)}")
         return JsonResponse({
             'success': False,
             'error': str(e)
@@ -4041,6 +4051,228 @@ def dp_reject_request(request, batch_id):
             'success': False,
             'error': str(e)
         }, status=400)
+
+
+@login_required
+def dp_replenishment_request_detail(request, request_number):
+    """
+    DP Team detail view for a specific replenishment request
+    Shows comprehensive information including approval workflow, stock data, and DP actions
+    """
+    from dashboard.models import StoreReplenishmentRequestBatch
+    from django.shortcuts import get_object_or_404
+
+    # Get the batch - DP can view ANY request (not filtered by user)
+    batch = get_object_or_404(
+        StoreReplenishmentRequestBatch.objects.select_related(
+            'requested_by',
+            'store_approved_by',
+            'dp_approved_by'
+        ),
+        request_number=request_number
+    )
+
+    # Get all items with prefetch for performance
+    items = batch.items.all().order_by('product_name', 'size')
+
+    # Calculate statistics
+    total_stock_gap = sum(item.stock_gap for item in items)
+    total_requested = sum(item.requested_quantity for item in items)
+    items_with_gaps = sum(1 for item in items if item.stock_gap < 0)
+
+    # Approval timeline data
+    timeline = []
+
+    # Step 1: Request submitted
+    timeline.append({
+        'stage': 'Submitted',
+        'status': 'completed',
+        'user': batch.requested_by,
+        'date': batch.submitted_date or batch.request_date,
+        'icon': 'file-text'
+    })
+
+    # Step 2: Store approved
+    if batch.status in ['store_approved', 'dp_approved', 'fulfilled']:
+        timeline.append({
+            'stage': 'Store Approved',
+            'status': 'completed',
+            'user': batch.store_approved_by,
+            'date': batch.store_approved_date,
+            'icon': 'check-circle'
+        })
+    elif batch.status == 'rejected':
+        timeline.append({
+            'stage': 'Rejected',
+            'status': 'completed',
+            'user': batch.store_approved_by or batch.dp_approved_by,
+            'date': batch.store_approved_date,
+            'icon': 'x-circle'
+        })
+    else:
+        timeline.append({
+            'stage': 'Store Approval',
+            'status': 'pending',
+            'user': None,
+            'date': None,
+            'icon': 'clock'
+        })
+
+    # Step 3: DP approved
+    if batch.status in ['dp_approved', 'fulfilled']:
+        timeline.append({
+            'stage': 'DP Approved',
+            'status': 'completed',
+            'user': batch.dp_approved_by,
+            'date': batch.dp_approved_date,
+            'icon': 'check-circle'
+        })
+    elif batch.status == 'store_approved':
+        timeline.append({
+            'stage': 'DP Approval',
+            'status': 'in_progress',
+            'user': None,
+            'date': None,
+            'icon': 'clock'
+        })
+    elif batch.status != 'rejected':
+        timeline.append({
+            'stage': 'DP Approval',
+            'status': 'pending',
+            'user': None,
+            'date': None,
+            'icon': 'clock'
+        })
+
+    # Step 4: Fulfilled
+    if batch.status == 'fulfilled':
+        timeline.append({
+            'stage': 'Fulfilled',
+            'status': 'completed',
+            'user': None,
+            'date': None,
+            'icon': 'package'
+        })
+    elif batch.status == 'dp_approved':
+        timeline.append({
+            'stage': 'Fulfillment',
+            'status': 'pending',
+            'user': None,
+            'date': None,
+            'icon': 'clock'
+        })
+
+    # Determine if DP can take action on this request
+    can_approve = batch.status == 'store_approved'
+    can_modify = batch.status == 'store_approved'
+
+    context = {
+        'batch': batch,
+        'items': items,
+        'timeline': timeline,
+        'total_stock_gap': total_stock_gap,
+        'total_requested': total_requested,
+        'items_with_gaps': items_with_gaps,
+        'can_approve': can_approve,
+        'can_modify': can_modify,
+    }
+
+    return render(request, 'dashboard/dp_request_detail.html', context)
+
+
+@login_required
+def dp_replenishment_requests_list(request):
+    """
+    DP Team view to see ALL replenishment requests with comprehensive filters
+    Shows requests from all stores/schools with status, date, and search filters
+    """
+    from dashboard.models import StoreReplenishmentRequestBatch
+    from django.db.models import Q, Count
+    from datetime import datetime
+
+    # Get filter parameters
+    status_filter = request.GET.get('status', 'all')
+    school_filter = request.GET.get('school', '')
+    start_date = request.GET.get('start_date', '')
+    end_date = request.GET.get('end_date', '')
+    search = request.GET.get('search', '')
+
+    # Base query with select_related to avoid N+1 queries
+    batches = StoreReplenishmentRequestBatch.objects.select_related(
+        'requested_by', 'store_approved_by', 'dp_approved_by'
+    ).all()
+
+    # Apply status filter
+    if status_filter != 'all':
+        batches = batches.filter(status=status_filter)
+
+    # Apply school filter
+    if school_filter:
+        batches = batches.filter(school__icontains=school_filter)
+
+    # Apply date range filter
+    if start_date:
+        try:
+            start = datetime.strptime(start_date, '%Y-%m-%d')
+            batches = batches.filter(request_date__gte=start)
+        except ValueError:
+            pass
+
+    if end_date:
+        try:
+            end = datetime.strptime(end_date, '%Y-%m-%d')
+            batches = batches.filter(request_date__lte=end)
+        except ValueError:
+            pass
+
+    # Apply search filter (search in request_number, school, or user name)
+    if search:
+        batches = batches.filter(
+            Q(request_number__icontains=search) |
+            Q(school__icontains=search) |
+            Q(requested_by__username__icontains=search) |
+            Q(requested_by__first_name__icontains=search) |
+            Q(requested_by__last_name__icontains=search)
+        )
+
+    # Order by most recent first
+    batches = batches.order_by('-request_date')
+
+    # Calculate summary statistics
+    total_requests = batches.count()
+    submitted_count = batches.filter(status='submitted').count()
+    store_approved_count = batches.filter(status='store_approved').count()
+    dp_approved_count = batches.filter(status='dp_approved').count()
+    rejected_count = batches.filter(status='rejected').count()
+    fulfilled_count = batches.filter(status='fulfilled').count()
+
+    # Get unique schools for filter dropdown
+    all_schools = StoreReplenishmentRequestBatch.objects.values_list(
+        'school', flat=True
+    ).distinct().order_by('school')
+
+    # Status choices for filter dropdown
+    status_choices = StoreReplenishmentRequestBatch.STATUS_CHOICES
+
+    context = {
+        'batches': batches,
+        'total_requests': total_requests,
+        'submitted_count': submitted_count,
+        'store_approved_count': store_approved_count,
+        'dp_approved_count': dp_approved_count,
+        'rejected_count': rejected_count,
+        'fulfilled_count': fulfilled_count,
+        'all_schools': all_schools,
+        'status_choices': status_choices,
+        # Current filters
+        'current_status': status_filter,
+        'current_school': school_filter,
+        'current_start_date': start_date,
+        'current_end_date': end_date,
+        'current_search': search,
+    }
+
+    return render(request, 'dashboard/dp_requests_list.html', context)
 
 
 @login_required

@@ -1085,6 +1085,23 @@ table.dataTable tbody tr.child:hover {
 table.dataTable tbody tr.child td {
     border-top: 1px solid #dee2e6;
     padding: 0 !important;
+    box-sizing: border-box !important;
+}
+
+/* Ensure full width for content inside child rows */
+table.dataTable tbody tr.child td > div {
+    width: 100% !important;
+    box-sizing: border-box !important;
+}
+
+table.dataTable tbody tr.child td > div > div {
+    width: 100% !important;
+    box-sizing: border-box !important;
+}
+
+table.dataTable tbody tr.child td table {
+    width: 100% !important;
+    margin: 0 !important;
 }
 
 /* ================================================

@@ -119,21 +119,17 @@
         border-color: #4e73df transparent transparent;
     }
 
-    /* DataTables child row - Add left padding for visual indentation */
+    /* DataTables child row - Ensure no extra padding that conflicts with inline styles */
     table.dataTable tbody tr.child td {
-        padding-left: 15px !important;
-        padding-right: 10px !important;
-        padding-top: 0 !important;
-        padding-bottom: 0 !important;
+        padding: 0 !important;
         margin: 0 !important;
+        box-sizing: border-box !important;
     }
 
     table.dataTable tbody tr.child td.child {
-        padding-left: 15px !important;
-        padding-right: 10px !important;
-        padding-top: 0 !important;
-        padding-bottom: 0 !important;
+        padding: 0 !important;
         margin: 0 !important;
+        box-sizing: border-box !important;
     }
 
     /* Target parent table cells that might have padding */
@@ -141,30 +137,21 @@
         /* Keep normal padding for regular cells, but override for child rows below */
     }
 
-    /* Inner variation table - Add left padding for indentation */
+    /* Inner variation table - No extra padding, let inline styles handle it */
     .variation-group > td {
-        padding-left: 15px !important;
-        padding-right: 10px !important;
-        padding-top: 0 !important;
-        padding-bottom: 0 !important;
-        margin: 0 !important;
+        box-sizing: border-box !important;
     }
 
-    /* Also target any td inside shown parent row */
-    tr.shown + tr > td {
-        padding-left: 15px !important;
-        padding-right: 10px !important;
-        padding-top: 0 !important;
-        padding-bottom: 0 !important;
-    }
-
-    /* Target variation group when it's a child row */
-    table.dataTable tbody tr.child .variation-group {
-        margin: 0 !important;
-    }
-
+    /* Ensure tables inside child rows have proper width */
     table.dataTable tbody tr.child td > table {
         margin: 0 !important;
+        width: 100% !important;
+    }
+
+    /* Ensure wrapper divs inside child rows are full width */
+    table.dataTable tbody tr.child td > div {
+        width: 100% !important;
+        box-sizing: border-box !important;
     }
 
     /* Remove default Bootstrap table padding */
@@ -531,7 +518,7 @@
                                         <tr class="location-schools-group" id="location-schools-{{ forloop.counter }}">
                                             <td colspan="5" style="padding: 0 !important; margin: 0 !important; background-color: #f5f5f5;">
                                                 <!-- Nested table for schools within location -->
-                                                <div style="padding-left: 58px; padding-right: 0; padding-top: 0.5rem; padding-bottom: 0.5rem;">
+                                                <div style="padding-left: 40px !important; padding-right: 40px !important; padding-top: 0.5rem; padding-bottom: 0.5rem;">
                                                     <table class="table table-sm mb-0" style="width: 100%; background-color: white;">
                                                         <tbody>
                                                             {% for school in forecast.schools %}
@@ -556,7 +543,7 @@
                                                             <tr class="location-school-variations-group" id="location-school-variations-{{ forloop.parentloop.counter }}-{{ forloop.counter }}" style="display: none;">
                                                                 <td colspan="5" style="padding: 0 !important; background-color: #fafafa;">
                                                                     <!-- Variations Table -->
-                                                                    <div style="padding-left: 15px; padding-right: 10px; padding-top: 0.5rem; padding-bottom: 0.5rem;">
+                                                                    <div style="padding-left: 40px !important; padding-right: 40px !important; padding-top: 0.5rem; padding-bottom: 0.5rem;">
                                                                         <table class="table table-sm mb-0" style="width: 100%; background-color: white; font-size: 0.9rem;">
                                                                             <thead class="table-light">
                                                                                 <tr>
@@ -650,14 +637,14 @@
                                         <tr class="school-variations-group" id="school-variations-{{ forloop.counter }}">
                                             <td colspan="5" style="padding: 0 !important; margin: 0 !important; background-color: #f5f5f5;">
                                                 <!-- Info Alert -->
-                                                <div class="alert alert-info mb-0" style="font-size: 0.85rem; padding: 0.5rem 1rem; margin: 0.5rem 15px 0 15px !important;">
+                                                <div class="alert alert-info mb-0" style="font-size: 0.85rem; padding: 0.5rem 1rem; margin: 0.5rem 40px 0 40px !important;">
                                                     <i class="fas fa-info-circle me-2"></i>
                                                     <strong>Note:</strong> Only variations with at least 10 historical sales are forecasted to ensure statistical accuracy.
                                                     Low-volume sizes (e.g., 2XS, 3XL, 4XL) may not appear if they have insufficient sales history.
                                                 </div>
 
                                                 <!-- Variations Table (Direct under school) -->
-                                                <div style="padding-left: 15px; padding-right: 10px; padding-top: 0.5rem; padding-bottom: 0.5rem;">
+                                                <div style="padding-left: 40px !important; padding-right: 40px !important; padding-top: 0.5rem; padding-bottom: 0.5rem;">
                                                     <table class="table table-sm mb-0" style="width: 100%; table-layout: auto; background-color: white; font-size: 0.9rem;">
                                                         <thead class="table-light">
                                                             <tr>
@@ -742,7 +729,7 @@
 
                                         <!-- Variation Rows (Collapsed by default) -->
                                         <tr class="variation-group" id="variations-{{ forloop.counter }}">
-                                            <td colspan="5" style="padding-top: 0 !important; padding-bottom: 0 !important; padding-left: 15px !important; padding-right: 10px !important; margin: 0 !important; background-color: #f8f9fa;">
+                                            <td colspan="5" style="padding-top: 0 !important; padding-bottom: 0 !important; padding-left: 40px !important; padding-right: 40px !important; margin: 0 !important; background-color: #f8f9fa;">
                                                 <!-- Info Alert -->
                                                 <div class="alert alert-info mb-0" style="font-size: 0.85rem; padding: 0.5rem 1rem; margin: 0.5rem 0 0 0 !important; border-radius: 0 !important; width: 100%;">
                                                     <i class="fas fa-info-circle me-2"></i>
@@ -1435,7 +1422,7 @@ $(document).ready(function() {
 
     // Format function for shop product breakdown with nested parent/child rows
     function formatShopProducts(products, shopName, numDays) {
-        var html = '<div class="p-3">';
+        var html = '<div style="padding-left: 40px; padding-right: 40px; padding-top: 1rem; padding-bottom: 1rem; box-sizing: border-box;">';
 
         // Blue info banner
         html += '<div class="alert alert-info mb-3" style="font-size: 0.9rem;">';
@@ -1457,8 +1444,8 @@ $(document).ready(function() {
         var productNames = Object.keys(grouped).sort();
         var uniqueId = 'shop-products-' + Date.now();
 
-        html += '<div class="table-responsive">';
-        html += '<table class="table table-sm table-bordered mb-0" style="font-size: 0.9rem;">';
+        html += '<div style="width: 100%; overflow-x: auto;">';
+        html += '<table class="table table-sm table-bordered mb-0" style="font-size: 0.9rem; width: 100%;">';
         html += '<thead><tr style="background-color: #f8f9fa;">';
         html += '<th class="text-center"></th>';
         html += '<th>Product Name</th>';
@@ -1487,8 +1474,8 @@ $(document).ready(function() {
             html += '</tr>';
 
             // Child rows (hidden by default)
-            html += '<tr id="' + rowId + '" style="display: none;"><td colspan="5" style="padding-top: 0 !important; padding-bottom: 0 !important; padding-left: 15px !important; padding-right: 10px !important; margin: 0; background-color: #fff;">';
-            html += '<table class="table table-sm mb-0" style="font-size: 0.85rem; table-layout: auto; width: 100%;">';
+            html += '<tr id="' + rowId + '" style="display: none;"><td colspan="5" style="padding: 0.5rem 40px !important; margin: 0; background-color: #fff; box-sizing: border-box;">';
+            html += '<table class="table table-sm mb-0" style="font-size: 0.85rem; width: 100%;">';
             html += '<thead style="background-color: #e9ecef;"><tr>';
             html += '<th>Product Name</th>';
             html += '<th style="white-space: nowrap;">SKU Code</th>';

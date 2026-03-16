@@ -4,7 +4,6 @@
 {% block title %}DP Team - Replenishment Approval{% endblock %}
 
 {% block extra_css %}
-<link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet">
 <style>
     .status-badge {
         font-size: 0.9rem;
@@ -136,8 +135,6 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
-<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
 <script>
 $(document).ready(function() {
     $('#requestsTable').DataTable({
@@ -169,6 +166,8 @@ $(document).ready(function() {
     });
 
     function approveRequest(button, batchId, requestNumber) {
+        console.log('Approving request:', batchId, requestNumber);
+
         // Make AJAX request
         $.ajax({
             url: `/dashboard/replenishment/dp/approve/${batchId}/`,
@@ -176,7 +175,9 @@ $(document).ready(function() {
             headers: {
                 'X-CSRFToken': getCookie('csrftoken')
             },
+            data: {},
             success: function(response) {
+                console.log('Approval response:', response);
                 if (response.success) {
                     // Show success message
                     showAlert(`Request ${requestNumber} has been approved successfully and converted to an order.`, 'Success', 'check-circle');
@@ -195,7 +196,17 @@ $(document).ready(function() {
                 }
             },
             error: function(xhr) {
-                showAlert('An error occurred while approving the request. Please try again.', 'Error', 'times-circle');
+                console.error('Approval error:', xhr.status, xhr.responseText);
+                let errorMsg = 'An error occurred while approving the request.';
+                try {
+                    const errorData = JSON.parse(xhr.responseText);
+                    if (errorData.error) {
+                        errorMsg = errorData.error;
+                    }
+                } catch (e) {
+                    errorMsg = xhr.responseText || errorMsg;
+                }
+                showAlert(errorMsg, 'Error', 'times-circle');
                 button.prop('disabled', false).html('<i class="fas fa-check"></i> Approve');
             }
         });

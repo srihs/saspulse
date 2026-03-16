@@ -1,0 +1,560 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}DP Review - {{ batch.request_number }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .status-badge {
+        font-size: 1.1rem;
+        padding: 0.5rem 1rem;
+    }
+    .info-label {
+        font-weight: 600;
+        color: #6c757d;
+    }
+    .timeline-container {
+        position: relative;
+        padding: 20px 0;
+    }
+    .timeline-item {
+        position: relative;
+        padding-left: 60px;
+        margin-bottom: 30px;
+    }
+    .timeline-icon {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.2rem;
+    }
+    .timeline-icon.completed {
+        background-color: #198754;
+        color: white;
+    }
+    .timeline-icon.in-progress {
+        background-color: #0dcaf0;
+        color: white;
+        animation: pulse 2s infinite;
+    }
+    .timeline-icon.pending {
+        background-color: #6c757d;
+        color: white;
+    }
+    .timeline-icon.rejected {
+        background-color: #dc3545;
+        color: white;
+    }
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
+    .timeline-line {
+        position: absolute;
+        left: 19px;
+        top: 40px;
+        bottom: -30px;
+        width: 2px;
+        background-color: #dee2e6;
+    }
+    .timeline-item:last-child .timeline-line {
+        display: none;
+    }
+    .stock-gap-negative {
+        color: #dc3545;
+        font-weight: bold;
+    }
+    .stock-gap-positive {
+        color: #6c757d;
+    }
+    .action-buttons-sticky {
+        position: sticky;
+        bottom: 0;
+        background-color: white;
+        padding: 1rem 0;
+        border-top: 2px solid #dee2e6;
+        z-index: 100;
+        margin-top: 2rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="pb-5">
+    <div class="row g-4">
+        <div class="col-12">
+            <!-- Breadcrumb -->
+            <div class="mb-4">
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb">
+                        <li class="breadcrumb-item"><a href="{% url 'dashboard:home' %}">Dashboard</a></li>
+                        <li class="breadcrumb-item"><a href="{% url 'dashboard:dp_replenishment_requests_list' %}">DP - All Requests</a></li>
+                        <li class="breadcrumb-item active">{{ batch.request_number }}</li>
+                    </ol>
+                </nav>
+                <h2 class="mb-2">DP Team - Request Review</h2>
+                <h5 class="text-body-tertiary fw-semibold">{{ batch.request_number }}</h5>
+            </div>
+
+            <!-- Request Information Card -->
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-info-circle me-2"></i>
+                        Request Information
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><span class="info-label">Request Number:</span> <strong>{{ batch.request_number }}</strong></p>
+                            <p><span class="info-label">School/Store:</span> <strong>{{ batch.school }}</strong></p>
+                            <p><span class="info-label">Requested By:</span> {{ batch.requested_by.get_full_name|default:batch.requested_by.username }}</p>
+                            <p><span class="info-label">Email:</span> <a href="mailto:{{ batch.requested_by.email }}">{{ batch.requested_by.email }}</a></p>
+                            <p><span class="info-label">Total Items:</span> <span class="badge bg-info">{{ batch.total_items }}</span></p>
+                        </div>
+                        <div class="col-md-6">
+                            <p>
+                                <span class="info-label">Status:</span>
+                                {% if batch.status == 'submitted' %}
+                                    <span class="badge bg-secondary status-badge">Submitted</span>
+                                {% elif batch.status == 'store_approved' %}
+                                    <span class="badge bg-info status-badge">Store Approved - Awaiting DP Review</span>
+                                {% elif batch.status == 'dp_approved' %}
+                                    <span class="badge bg-success status-badge">DP Approved</span>
+                                {% elif batch.status == 'rejected' %}
+                                    <span class="badge bg-danger status-badge">Rejected</span>
+                                {% elif batch.status == 'fulfilled' %}
+                                    <span class="badge bg-dark status-badge">Fulfilled</span>
+                                {% endif %}
+                            </p>
+                            <p><span class="info-label">Request Date:</span> {{ batch.request_date|date:"F d, Y H:i" }}</p>
+                            {% if batch.submitted_date %}
+                            <p><span class="info-label">Submitted Date:</span> {{ batch.submitted_date|date:"F d, Y H:i" }}</p>
+                            {% endif %}
+                            <p><span class="info-label">Total Quantity:</span> <strong>{{ total_requested }} units</strong></p>
+                            <p><span class="info-label">Items with Stock Gaps:</span> <span class="badge bg-warning text-dark">{{ items_with_gaps }}</span></p>
+                        </div>
+                    </div>
+
+                    {% if batch.notes %}
+                    <div class="mt-3">
+                        <span class="info-label">Store Manager Notes:</span>
+                        <p class="mb-0 p-2 bg-light rounded">{{ batch.notes }}</p>
+                    </div>
+                    {% endif %}
+
+                    {% if batch.status == 'rejected' and batch.rejection_reason %}
+                    <div class="alert alert-danger mt-3 mb-0">
+                        <i class="fas fa-times-circle me-2"></i>
+                        <strong>Rejection Reason:</strong> {{ batch.rejection_reason }}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Approval Timeline Card -->
+            <div class="card mb-4">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-timeline me-2"></i>
+                        Approval Timeline
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="timeline-container">
+                        {% for step in timeline %}
+                        <div class="timeline-item">
+                            <div class="timeline-icon {{ step.status }}{% if step.status == 'completed' and 'Rejected' in step.stage %} rejected{% endif %}">
+                                <i data-feather="{{ step.icon }}"></i>
+                            </div>
+                            <div class="timeline-line"></div>
+                            <div class="timeline-content">
+                                <h6 class="mb-1">{{ step.stage }}</h6>
+                                {% if step.user %}
+                                <p class="mb-0 text-muted">
+                                    By: <strong>{{ step.user.get_full_name|default:step.user.username }}</strong>
+                                    {% if step.date %}
+                                    <br>On: {{ step.date|date:"F d, Y H:i" }}
+                                    {% endif %}
+                                </p>
+                                {% elif step.status == 'in_progress' %}
+                                <p class="mb-0"><span class="badge bg-info">In Progress - Awaiting DP Action</span></p>
+                                {% elif step.status == 'pending' %}
+                                <p class="mb-0 text-muted">Pending</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stock Summary Card -->
+            <div class="card mb-4">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="mb-0">
+                        <i class="fas fa-chart-bar me-2"></i>
+                        Stock Summary
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center">
+                        <div class="col-md-3">
+                            <h6 class="text-muted">Total Stock Gap</h6>
+                            <h3 class="{% if total_stock_gap < 0 %}stock-gap-negative{% else %}stock-gap-positive{% endif %}">
+                                {{ total_stock_gap }}
+                            </h3>
+                            <small class="text-muted">units</small>
+                        </div>
+                        <div class="col-md-3">
+                            <h6 class="text-muted">Total Requested</h6>
+                            <h3 class="text-primary">{{ total_requested }}</h3>
+                            <small class="text-muted">units</small>
+                        </div>
+                        <div class="col-md-3">
+                            <h6 class="text-muted">Total Items</h6>
+                            <h3 class="text-info">{{ batch.total_items }}</h3>
+                            <small class="text-muted">items</small>
+                        </div>
+                        <div class="col-md-3">
+                            <h6 class="text-muted">Items with Gaps</h6>
+                            <h3 class="text-warning">{{ items_with_gaps }}</h3>
+                            <small class="text-muted">items</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Items Table -->
+            <div class="card mb-4">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-box me-2"></i>
+                        Requested Items ({{ items.count }})
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped table-hover" id="itemsTable">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>#</th>
+                                    <th>Product Name</th>
+                                    <th>SKU</th>
+                                    <th>Size</th>
+                                    <th>Stock on Hand</th>
+                                    <th>Incoming Stock</th>
+                                    <th>Forecasted Demand</th>
+                                    <th>Stock Gap</th>
+                                    <th>Requested Qty</th>
+                                    {% if batch.status == 'store_approved' and can_modify %}
+                                    <th>DP Approved Qty</th>
+                                    {% endif %}
+                                    <th>Modified</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in items %}
+                                <tr {% if item.is_modified %}class="table-warning"{% endif %}>
+                                    <td>{{ forloop.counter }}</td>
+                                    <td><strong>{{ item.product_name }}</strong></td>
+                                    <td><code>{{ item.sku }}</code></td>
+                                    <td><span class="badge bg-secondary">{{ item.size|default:"N/A" }}</span></td>
+                                    <td>{{ item.stock_on_hand }}</td>
+                                    <td>{{ item.incoming_stock }}</td>
+                                    <td>{{ item.forecasted_stock }}</td>
+                                    <td>
+                                        {% if item.stock_gap < 0 %}
+                                            <span class="badge bg-danger">{{ item.stock_gap }}</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">{{ item.stock_gap }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td><strong class="text-primary">{{ item.requested_quantity }}</strong></td>
+                                    {% if batch.status == 'store_approved' and can_modify %}
+                                    <td>
+                                        <input type="number"
+                                               class="form-control form-control-sm dp-approved-qty"
+                                               data-item-id="{{ item.id }}"
+                                               value="{{ item.approved_quantity|default:item.requested_quantity }}"
+                                               min="0"
+                                               style="width: 80px;">
+                                    </td>
+                                    {% endif %}
+                                    <td>
+                                        {% if item.is_modified %}
+                                            <span class="badge bg-warning">Yes</span>
+                                            {% if item.modification_reason %}
+                                            <br><small class="text-muted">{{ item.modification_reason }}</small>
+                                            {% endif %}
+                                        {% else %}
+                                            <span class="badge bg-secondary">No</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                            <tfoot class="table-light">
+                                <tr>
+                                    <td colspan="8" class="text-end"><strong>Total Requested:</strong></td>
+                                    <td><strong class="text-primary fs-5">{{ total_requested }} units</strong></td>
+                                    {% if batch.status == 'store_approved' and can_modify %}
+                                    <td colspan="2"></td>
+                                    {% else %}
+                                    <td></td>
+                                    {% endif %}
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Action Buttons (Sticky) -->
+            <div class="action-buttons-sticky">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <a href="{% url 'dashboard:dp_replenishment_requests_list' %}" class="btn btn-secondary">
+                            <i class="fas fa-arrow-left"></i> Back to All Requests
+                        </a>
+                        <button class="btn btn-outline-primary" onclick="window.print()">
+                            <i class="fas fa-print"></i> Print
+                        </button>
+                    </div>
+
+                    {% if can_approve %}
+                    <div>
+                        <button class="btn btn-danger me-2" id="rejectBtn">
+                            <i class="fas fa-times-circle"></i> Reject Request
+                        </button>
+                        {% if can_modify %}
+                        <button class="btn btn-warning me-2" id="modifyApproveBtn">
+                            <i class="fas fa-edit"></i> Modify & Approve
+                        </button>
+                        {% endif %}
+                        <button class="btn btn-success" id="approveAllBtn">
+                            <i class="fas fa-check-circle"></i> Approve All Items
+                        </button>
+                    </div>
+                    {% elif batch.status == 'dp_approved' %}
+                    <div>
+                        <span class="badge bg-success status-badge">
+                            <i class="fas fa-check-circle"></i> This request has been approved
+                        </span>
+                    </div>
+                    {% elif batch.status == 'rejected' %}
+                    <div>
+                        <span class="badge bg-danger status-badge">
+                            <i class="fas fa-times-circle"></i> This request has been rejected
+                        </span>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<!-- Reject Modal -->
+<div class="modal fade" id="rejectModal" tabindex="-1" aria-labelledby="rejectModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="rejectModalLabel">Reject Replenishment Request</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>You are about to reject request <strong>{{ batch.request_number }}</strong> from <strong>{{ batch.school }}</strong>.</p>
+                <div class="mb-3">
+                    <label for="rejection-reason" class="form-label">Rejection Reason <span class="text-danger">*</span></label>
+                    <textarea class="form-control" id="rejection-reason" rows="4" required placeholder="Please provide a detailed reason for rejection..."></textarea>
+                    <small class="text-muted">This reason will be visible to the store manager.</small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" id="confirm-reject-btn">
+                    <i class="fas fa-times-circle"></i> Confirm Rejection
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(document).ready(function() {
+    // Initialize Feather icons
+    if (typeof feather !== 'undefined') {
+        feather.replace();
+    }
+
+    // Initialize DataTable for better sorting/filtering
+    $('#itemsTable').DataTable({
+        pageLength: 25,
+        order: [[1, 'asc']], // Sort by product name
+        columnDefs: [
+            { orderable: false, targets: {% if can_modify %}-1{% else %}-1{% endif %} }
+        ]
+    });
+
+    // Approve All Items
+    $('#approveAllBtn').on('click', function() {
+        showConfirmation(
+            'Are you sure you want to approve all items in request {{ batch.request_number }}? This will convert it to an order.',
+            function() {
+                approveRequest();
+            },
+            'Approve Request',
+            'Approve All',
+            'btn-success'
+        );
+    });
+
+    function approveRequest() {
+        const button = $('#approveAllBtn');
+        button.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Approving...');
+
+        $.ajax({
+            url: '/dashboard/replenishment/dp/approve/{{ batch.id }}/',
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            data: {},
+            success: function(response) {
+                if (response.success) {
+                    showAlert('Request {{ batch.request_number }} has been approved successfully!', 'Success', 'check-circle');
+                    setTimeout(function() {
+                        window.location.href = '{% url "dashboard:dp_replenishment_requests_list" %}';
+                    }, 2000);
+                } else {
+                    showAlert('Error: ' + response.error, 'Approval Failed', 'times-circle');
+                    button.prop('disabled', false).html('<i class="fas fa-check-circle"></i> Approve All Items');
+                }
+            },
+            error: function(xhr) {
+                let errorMsg = 'An error occurred while approving the request.';
+                try {
+                    const errorData = JSON.parse(xhr.responseText);
+                    if (errorData.error) {
+                        errorMsg = errorData.error;
+                    }
+                } catch (e) {
+                    errorMsg = xhr.responseText || errorMsg;
+                }
+                showAlert(errorMsg, 'Error', 'times-circle');
+                button.prop('disabled', false).html('<i class="fas fa-check-circle"></i> Approve All Items');
+            }
+        });
+    }
+
+    // Modify & Approve
+    $('#modifyApproveBtn').on('click', function() {
+        // Collect modified quantities
+        const modifications = [];
+        $('.dp-approved-qty').each(function() {
+            const itemId = $(this).data('item-id');
+            const approvedQty = parseInt($(this).val()) || 0;
+            modifications.push({
+                item_id: itemId,
+                approved_quantity: approvedQty
+            });
+        });
+
+        showConfirmation(
+            'This will save your quantity modifications and approve the request. Continue?',
+            function() {
+                modifyAndApprove(modifications);
+            },
+            'Modify & Approve',
+            'Confirm',
+            'btn-warning'
+        );
+    });
+
+    function modifyAndApprove(modifications) {
+        const button = $('#modifyApproveBtn');
+        button.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Processing...');
+
+        // Note: You would need to create a new endpoint to handle modifications
+        // For now, we'll just approve without modifications
+        // TODO: Implement modification endpoint
+        showAlert('Modification feature coming soon. Please use Approve All for now.', 'Coming Soon', 'info-circle');
+        button.prop('disabled', false).html('<i class="fas fa-edit"></i> Modify & Approve');
+    }
+
+    // Reject Request
+    $('#rejectBtn').on('click', function() {
+        $('#rejection-reason').val('');
+        const modal = new bootstrap.Modal(document.getElementById('rejectModal'));
+        modal.show();
+    });
+
+    $('#confirm-reject-btn').on('click', function() {
+        const reason = $('#rejection-reason').val().trim();
+
+        if (!reason) {
+            showAlert('Please provide a reason for rejecting this request.', 'Rejection Reason Required', 'exclamation-triangle');
+            return;
+        }
+
+        const button = $(this);
+        button.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Rejecting...');
+
+        $.ajax({
+            url: '/dashboard/replenishment/dp/reject/{{ batch.id }}/',
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            data: JSON.stringify({
+                reason: reason
+            }),
+            contentType: 'application/json',
+            success: function(response) {
+                if (response.success) {
+                    bootstrap.Modal.getInstance(document.getElementById('rejectModal')).hide();
+                    showAlert('Request {{ batch.request_number }} has been rejected.', 'Request Rejected', 'check-circle');
+                    setTimeout(function() {
+                        window.location.href = '{% url "dashboard:dp_replenishment_requests_list" %}';
+                    }, 2000);
+                } else {
+                    showAlert('Error: ' + response.error, 'Rejection Failed', 'times-circle');
+                    button.prop('disabled', false).html('<i class="fas fa-times-circle"></i> Confirm Rejection');
+                }
+            },
+            error: function(xhr) {
+                showAlert('An error occurred while rejecting the request. Please try again.', 'Error', 'times-circle');
+                button.prop('disabled', false).html('<i class="fas fa-times-circle"></i> Confirm Rejection');
+            }
+        });
+    });
+
+    // Helper function to get CSRF token
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+});
+</script>
+{% endblock %}
