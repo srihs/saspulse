@@ -26,6 +26,7 @@ RISK_THRESHOLD = 2.0  # Stock ratio > 2.0 is considered risky
 # Category Filter: Only include categories ending with " Shop" or " Store"
 CATEGORY_FILTER = """
     (p.category_name LIKE '% Shop' OR p.category_name LIKE '% Store')
+    AND p.category_name NOT IN ('Shop', 'Store')
 """
 
 
@@ -165,6 +166,7 @@ def calculate_customer_rankings(start_date=None, end_date=None):
                 LEFT JOIN cin7_sync_stock s ON p.cin7_id = s.cin7_product_id
                 LEFT JOIN cin7_sync_productoption po ON s.cin7_product_option_id = po.cin7_id
                 WHERE (p.category_name LIKE '%% Shop' OR p.category_name LIKE '%% Store')
+                  AND p.category_name NOT IN ('Shop', 'Store')
                   AND p.sub_category IS NOT NULL
                   AND p.sub_category <> ''
                   AND p.sub_category NOT LIKE '%%Shop%%'
@@ -178,6 +180,7 @@ def calculate_customer_rankings(start_date=None, end_date=None):
                 JOIN cin7_sync_salesorderlineitem soli ON CAST(so.cin7_id AS CHAR) = soli.cin7_sales_order_id
                 JOIN cin7_sync_product p ON soli.cin7_product_id = p.cin7_id
                 WHERE (p.category_name LIKE '%% Shop' OR p.category_name LIKE '%% Store')
+                  AND p.category_name NOT IN ('Shop', 'Store')
                   AND so.invoice_date >= %s
                   AND so.invoice_date <= %s
                   AND p.sub_category IS NOT NULL
@@ -1530,6 +1533,7 @@ def forecasting_filter_options(request):
             SELECT DISTINCT sub_category
             FROM cin7_sync_product
             WHERE (category_name LIKE '%%Shop' OR category_name LIKE '%%Store')
+              AND category_name NOT IN ('Shop', 'Store')
               AND category_name NOT LIKE 'Wholesale%%'
               AND sub_category IS NOT NULL
               AND sub_category != ''
@@ -1543,6 +1547,7 @@ def forecasting_filter_options(request):
             SELECT DISTINCT p.name, p.cin7_id
             FROM cin7_sync_product p
             WHERE (p.category_name LIKE '%%Shop' OR p.category_name LIKE '%%Store')
+              AND p.category_name NOT IN ('Shop', 'Store')
               AND p.category_name NOT LIKE 'Wholesale%%'
               AND p.name IS NOT NULL
             ORDER BY p.name
@@ -1557,6 +1562,7 @@ def forecasting_filter_options(request):
             WHERE style_code IS NOT NULL
               AND style_code != ''
               AND (category_name LIKE '%% Shop' OR category_name LIKE '%% Store')
+              AND category_name NOT IN ('Shop', 'Store')
             ORDER BY style_code
         """)
         result['style_codes'] = [{'value': row[0], 'label': row[0]} for row in cursor.fetchall()]
@@ -1567,7 +1573,7 @@ def forecasting_filter_options(request):
             SELECT DISTINCT category_name
             FROM cin7_sync_product
             WHERE (category_name LIKE '%% Shop' OR category_name LIKE '%% Store')
-              AND category_name != 'Shop'
+              AND category_name NOT IN ('Shop', 'Store')
             ORDER BY category_name
         """)
         result['shops'] = [{'value': row[0], 'label': row[0]} for row in cursor.fetchall()]
@@ -2028,6 +2034,7 @@ def sales_forecasting(request):
         else:
             # Show all shop/store products
             sql += " AND (p.category_name LIKE '%%Shop' OR p.category_name LIKE '%%Store')"
+            sql += " AND p.category_name NOT IN ('Shop', 'Store')"
 
         # Exclude Wholesale categories
         sql += " AND p.category_name NOT LIKE 'Wholesale%%'"
@@ -2083,6 +2090,7 @@ def sales_forecasting(request):
                 LEFT JOIN cin7_sync_product p ON p.cin7_id = po.cin7_product_id
                 WHERE sf.aggregation_level = 'product'
                   AND (p.category_name LIKE '%%Shop' OR p.category_name LIKE '%%Store')
+                  AND p.category_name NOT IN ('Shop', 'Store')
                   AND p.category_name NOT LIKE 'Wholesale%%'
                   AND p.sub_category IS NOT NULL
                   AND p.sub_category != ''
@@ -3119,7 +3127,7 @@ def forecast_product_breakdown(request, school_name):
                     COALESCE(po.option1, SUBSTRING_INDEX(sf.entity_name, '-', -1)) as size
                 FROM dashboard_salesforecastbase sf
                 LEFT JOIN cin7_sync_productoption po ON po.code = sf.entity_name
-                LEFT JOIN cin7_sync_product p ON p.cin7_id = po.cin7_product_id AND p.sub_category = %s AND (p.category_name LIKE '%%Shop' OR p.category_name LIKE '%%Store')
+                LEFT JOIN cin7_sync_product p ON p.cin7_id = po.cin7_product_id AND p.sub_category = %s AND (p.category_name LIKE '%%Shop' OR p.category_name LIKE '%%Store') AND p.category_name NOT IN ('Shop', 'Store')
                 LEFT JOIN cin7_sync_stock st ON st.code = sf.entity_name AND st.product_name IS NOT NULL AND st.product_name != ''
                 WHERE sf.aggregation_level = 'product'
                 ORDER BY product_name, size
@@ -3382,6 +3390,7 @@ def store_manager_replenishment(request):
               WHERE aggregation_level = 'product'
           )
           AND (p.category_name LIKE '%%Shop' OR p.category_name LIKE '%%Store')
+          AND p.category_name NOT IN ('Shop', 'Store')
           AND p.category_name NOT LIKE 'Wholesale%%'
           AND p.sub_category IS NOT NULL
           AND p.sub_category != ''
@@ -5181,7 +5190,7 @@ def inventory_alignment_matrix(request):
             SELECT DISTINCT category_name
             FROM cin7_sync_product
             WHERE (category_name LIKE %s OR category_name LIKE %s)
-              AND category_name != 'Shop'
+              AND category_name NOT IN ('Shop', 'Store')
             ORDER BY category_name
         """, ['% Shop', '% Store'])
         categories = [row[0] for row in cursor.fetchall()]
