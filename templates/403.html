@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Access Denied - SASPulse{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <div class="card shadow-sm border-0">
+                <div class="card-body text-center py-5">
+                    <!-- Icon -->
+                    <div class="mb-4">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#dc3545" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                            <line x1="12" y1="9" x2="12" y2="13"></line>
+                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                        </svg>
+                    </div>
+
+                    <!-- Title -->
+                    <h1 class="display-5 fw-bold text-danger mb-3">Access Denied</h1>
+
+                    <!-- Message -->
+                    <p class="text-muted mb-4">
+                        {% if message %}
+                            {{ message }}
+                        {% else %}
+                            You do not have permission to access this page.
+                        {% endif %}
+                    </p>
+
+                    {% if required_permission %}
+                    <div class="alert alert-light border" role="alert">
+                        <small class="text-muted">
+                            <strong>Required Permission:</strong> <code>{{ required_permission }}</code>
+                        </small>
+                    </div>
+                    {% endif %}
+
+                    <!-- Additional Info -->
+                    <p class="text-muted small mb-4">
+                        If you believe this is an error, please contact your system administrator.
+                    </p>
+
+                    <!-- Action Buttons -->
+                    <div class="d-flex gap-2 justify-content-center">
+                        <a href="javascript:history.back()" class="btn btn-outline-secondary">
+                            <i data-feather="arrow-left" class="feather-sm"></i>
+                            Go Back
+                        </a>
+                        {% if user.is_authenticated %}
+                            {% if user.has_nested_permission %}
+                                <a href="{% url 'dashboard:dashboard' %}" class="btn btn-primary">
+                                    <i data-feather="home" class="feather-sm"></i>
+                                    Return to Dashboard
+                                </a>
+                            {% else %}
+                                <a href="/" class="btn btn-primary">
+                                    <i data-feather="home" class="feather-sm"></i>
+                                    Return Home
+                                </a>
+                            {% endif %}
+                        {% else %}
+                            <a href="/auth/login/" class="btn btn-primary">
+                                <i data-feather="log-in" class="feather-sm"></i>
+                                Login
+                            </a>
+                        {% endif %}
+                    </div>
+
+                    <!-- Debug Info (only in development) -->
+                    {% if debug %}
+                    <div class="mt-5 pt-4 border-top">
+                        <details>
+                            <summary class="text-muted small cursor-pointer">Debug Information</summary>
+                            <div class="mt-3 text-start">
+                                <pre class="bg-light p-3 rounded small"><code>User: {{ user.username }}
+Is Authenticated: {{ user.is_authenticated }}
+Is Superuser: {{ user.is_superuser }}
+Roles: {{ user.roles.all|join:", " }}
+Data Scope: {{ user.get_data_scope }}
+Required Permission: {{ required_permission }}
+Request Path: {{ request.path }}
+Request Method: {{ request.method }}</code></pre>
+                            </div>
+                        </details>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Help Card -->
+            <div class="card shadow-sm border-0 mt-4">
+                <div class="card-body">
+                    <h6 class="card-title">
+                        <i data-feather="info" class="feather-sm text-info"></i>
+                        Need Access?
+                    </h6>
+                    <p class="card-text text-muted small mb-0">
+                        To request access to this feature, please contact your manager or system administrator.
+                        Include the page you're trying to access and your business justification.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .feather-sm {
+        width: 16px;
+        height: 16px;
+        vertical-align: middle;
+        margin-top: -2px;
+    }
+    .cursor-pointer {
+        cursor: pointer;
+    }
+    details summary {
+        user-select: none;
+    }
+    details summary:hover {
+        color: #0d6efd !important;
+    }
+</style>
+
+<script>
+    // Initialize Feather icons
+    if (typeof feather !== 'undefined') {
+        feather.replace();
+    }
+</script>
+{% endblock %}

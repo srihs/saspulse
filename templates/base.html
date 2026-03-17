@@ -1,4 +1,5 @@
 {% load static %}
+{% load permission_tags %}
 <!DOCTYPE html>
 <html lang="en-US" dir="ltr" data-navigation-type="default" data-navbar-horizontal-shape="default">
 
@@ -161,6 +162,7 @@
                   </div>
                 </div>
               </li>
+              {% if request.user|has_perm:'forecasting.view' %}
               <li class="nav-item">
                 <!-- Forecasts Section -->
                 <p class="navbar-vertical-label">Forecasts</p>
@@ -174,10 +176,15 @@
                   </a>
                 </div>
               </li>
+              {% endif %}
+              {% can_view_menu request.user 'replenishment' as can_view_replenishment %}
+              {% if can_view_replenishment %}
               <li class="nav-item">
                 <!-- Replenishment Section -->
                 <p class="navbar-vertical-label">Replenishment</p>
                 <hr class="navbar-vertical-line" />
+                {% can_view_menu request.user 'replenishment_stores' as can_view_stores %}
+                {% if can_view_stores %}
                 <div class="nav-item-wrapper"><a class="nav-link dropdown-indicator label-1" href="#nv-replenishment-stores" role="button" data-bs-toggle="collapse" aria-expanded="false" aria-controls="nv-replenishment-stores">
                     <div class="d-flex align-items-center">
                       <div class="dropdown-indicator-icon-wrapper"><span class="fas fa-caret-right dropdown-indicator-icon"></span></div><span class="nav-link-icon"><span data-feather="shopping-bag"></span></span><span class="nav-link-text">Stores</span>
@@ -186,17 +193,30 @@
                   <div class="parent-wrapper label-1">
                     <ul class="nav collapse parent" data-bs-parent="#navbarVerticalCollapse" id="nv-replenishment-stores">
                       <li class="collapsed-nav-item-title d-none">Stores</li>
+                      {% if request.user|has_perm:'replenishment.stores.review' %}
                       <li class="nav-item"><a class="nav-link" href="/dashboard/replenishment/store/">
                           <div class="d-flex align-items-center"><span class="nav-link-text">Store Manager Review</span></div>
                         </a>
                       </li>
+                      {% endif %}
+                      {% if request.user|has_perm:'replenishment.stores.view' %}
                       <li class="nav-item"><a class="nav-link" href="/dashboard/replenishment/store/requests/">
                           <div class="d-flex align-items-center"><span class="nav-link-text">My Requests</span></div>
                         </a>
                       </li>
+                      {% endif %}
+                      {% if request.user|has_perm:'replenishment.daily_pick_list.view' %}
+                      <li class="nav-item"><a class="nav-link" href="/dashboard/replenishment/store/daily-pick-list/">
+                          <div class="d-flex align-items-center"><span class="nav-link-text">Daily Pick List</span></div>
+                        </a>
+                      </li>
+                      {% endif %}
                     </ul>
                   </div>
                 </div>
+                {% endif %}
+                {% can_view_menu request.user 'replenishment_dp' as can_view_dp %}
+                {% if can_view_dp %}
                 <div class="nav-item-wrapper"><a class="nav-link dropdown-indicator label-1" href="#nv-replenishment-dp" role="button" data-bs-toggle="collapse" aria-expanded="false" aria-controls="nv-replenishment-dp">
                     <div class="d-flex align-items-center">
                       <div class="dropdown-indicator-icon-wrapper"><span class="fas fa-caret-right dropdown-indicator-icon"></span></div><span class="nav-link-icon"><span data-feather="trending-up"></span></span><span class="nav-link-text">Demand Planning</span>
@@ -205,18 +225,24 @@
                   <div class="parent-wrapper label-1">
                     <ul class="nav collapse parent" data-bs-parent="#navbarVerticalCollapse" id="nv-replenishment-dp">
                       <li class="collapsed-nav-item-title d-none">Demand Planning</li>
+                      {% if request.user|has_perm:'replenishment.demand_planning.approve' %}
                       <li class="nav-item"><a class="nav-link" href="/dashboard/replenishment/dp/approval/">
                           <div class="d-flex align-items-center"><span class="nav-link-text">DP Team Approval</span></div>
                         </a>
                       </li>
+                      {% endif %}
+                      {% if request.user|has_perm:'replenishment.demand_planning.view_all_requests' %}
                       <li class="nav-item"><a class="nav-link" href="/dashboard/replenishment/dp/requests/">
                           <div class="d-flex align-items-center"><span class="nav-link-text">All Requests</span></div>
                         </a>
                       </li>
+                      {% endif %}
                     </ul>
                   </div>
                 </div>
+                {% endif %}
               </li>
+              {% endif %}
               <li class="nav-item">
                 <!-- Finance Section -->
                 <p class="navbar-vertical-label">Finance</p>
@@ -237,6 +263,7 @@
                   </div>
                 </div>
               </li>
+              {% if request.user|has_perm:'admin.users.view' %}
               <li class="nav-item">
                 <!-- Admin Section -->
                 <p class="navbar-vertical-label">Admin</p>
@@ -249,14 +276,21 @@
                   <div class="parent-wrapper label-1">
                     <ul class="nav collapse parent" data-bs-parent="#navbarVerticalCollapse" id="nv-admin">
                       <li class="collapsed-nav-item-title d-none">Admin</li>
-                      <li class="nav-item"><a class="nav-link" href="/system/users/">
+                      {% if request.user|has_perm:'admin.users.view' %}
+                      <li class="nav-item"><a class="nav-link" href="{% url 'users:user_list' %}">
                           <div class="d-flex align-items-center"><span class="nav-link-text">Users</span></div>
                         </a>
                       </li>
+                      <li class="nav-item"><a class="nav-link" href="{% url 'users:role_list' %}">
+                          <div class="d-flex align-items-center"><span class="nav-link-text">Roles</span></div>
+                        </a>
+                      </li>
+                      {% endif %}
                     </ul>
                   </div>
                 </div>
               </li>
+              {% endif %}
             </ul>
           </div>
         </div>

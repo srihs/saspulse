@@ -51,12 +51,12 @@ class CustomUserAdmin(admin.ModelAdmin):
     Admin interface for CustomUser model.
     """
     list_display = ['username', 'email', 'first_name', 'last_name', 'is_active',
-                    'is_staff', 'email_verified', 'get_roles', 'last_login']
+                    'is_staff', 'email_verified', 'get_roles', 'get_data_scope_display', 'last_login']
     list_filter = ['is_active', 'is_staff', 'is_superuser', 'email_verified',
-                   'created_at', 'roles']
+                   'created_at', 'roles', 'assigned_branches']
     search_fields = ['username', 'email', 'first_name', 'last_name',
                      'department', 'job_title']
-    filter_horizontal = ['roles']
+    filter_horizontal = ['roles', 'assigned_branches', 'assigned_schools']
     readonly_fields = ['created_at', 'updated_at', 'last_login', 'last_password_change',
                       'failed_login_attempts', 'locked_until']
     ordering = ['-created_at']
@@ -70,7 +70,15 @@ class CustomUserAdmin(admin.ModelAdmin):
                       'job_title', 'bio')
         }),
         ('Roles & Permissions', {
-            'fields': ('roles', 'is_active', 'is_staff', 'is_superuser')
+            'fields': ('roles', 'is_active', 'is_staff', 'is_superuser'),
+            'description': 'Assign roles to control user permissions and access levels.'
+        }),
+        ('Data Scope & Assignments (RBAC)', {
+            'fields': ('assigned_branches', 'assigned_branch', 'assigned_schools'),
+            'description': '<strong>Store Managers:</strong> Assign branches using "assigned_branches".<br>'
+                          '<strong>Sales Team:</strong> Assign schools using "assigned_schools".<br>'
+                          '<em>Note: "assigned_branch" (singular) is deprecated - use "assigned_branches" instead.</em>',
+            'classes': ('wide',)
         }),
         ('Account Status', {
             'fields': ('email_verified', 'failed_login_attempts', 'locked_until')
@@ -93,10 +101,21 @@ class CustomUserAdmin(admin.ModelAdmin):
         return '-'
     get_roles.short_description = 'Roles'
 
+    def get_data_scope_display(self, obj):
+        """Display the user's data scope (all, branch, school)."""
+        scope = obj.get_data_scope()
+        scope_map = {
+            'all': '🌐 All Data',
+            'branch': '🏪 Branch-Scoped',
+            'school': '🎓 School-Scoped',
+        }
+        return scope_map.get(scope, scope)
+    get_data_scope_display.short_description = 'Data Scope'
+
     def get_queryset(self, request):
         """Optimize queryset with prefetch_related."""
         queryset = super().get_queryset(request)
-        return queryset.prefetch_related('roles')
+        return queryset.prefetch_related('roles', 'assigned_branches', 'assigned_schools')
 
 
 @admin.register(UserSession)

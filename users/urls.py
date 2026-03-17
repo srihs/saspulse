@@ -1,12 +1,9 @@
-from django.urls import path, include
+from django.urls import path
 from . import views, auth_views
 
 app_name = 'users'
 
 urlpatterns = [
-    # Authentication URLs (prefixed with auth/)
-    path('auth/', include('users.auth_urls')),
-
     # Profile and Password Management (authenticated users)
     path('profile/', auth_views.ProfileView.as_view(), name='profile'),
     path('change-password/', auth_views.ChangePasswordView.as_view(), name='change_password'),

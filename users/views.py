@@ -3,20 +3,33 @@ from django.urls import reverse_lazy
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView, View
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.models import User
 from django.contrib import messages
 from django.db.models import Q
-from .models import Role  # UserProfile commented out - using CustomUser now
-from .forms import (
-    RoleForm, UserCreateForm, UserUpdateForm,
-    # UserProfileForm,  # Commented out - using CustomUser now
-    UserRolesForm
-)
+from django.core.exceptions import PermissionDenied
+from .models import CustomUser, Role
+from .forms import RoleForm, CustomUserCreateForm, CustomUserUpdateForm, UserRolesForm
+
+
+# ==================== Permission Mixin ====================
+
+class PermissionRequiredMixin:
+    """Mixin to check RBAC permissions for class-based views"""
+    permission_required = None  # Override in subclass
+
+    def dispatch(self, request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return redirect('auth:login')
+
+        if self.permission_required and not request.user.has_nested_permission(self.permission_required):
+            raise PermissionDenied(f"You don't have permission: {self.permission_required}")
+
+        return super().dispatch(request, *args, **kwargs)
 
 
 # ==================== Role Views ====================
 
-class RoleListView(LoginRequiredMixin, ListView):
+class RoleListView(PermissionRequiredMixin, LoginRequiredMixin, ListView):
+    permission_required = 'admin.users.view'
     """
     View to list all roles with search functionality.
     """
@@ -43,7 +56,8 @@ class RoleListView(LoginRequiredMixin, ListView):
         return context
 
 
-class RoleCreateView(LoginRequiredMixin, CreateView):
+class RoleCreateView(PermissionRequiredMixin, LoginRequiredMixin, CreateView):
+    permission_required = 'admin.users.create'
     """
     View to create a new role.
     """
@@ -61,7 +75,8 @@ class RoleCreateView(LoginRequiredMixin, CreateView):
         return super().form_invalid(form)
 
 
-class RoleUpdateView(LoginRequiredMixin, UpdateView):
+class RoleUpdateView(PermissionRequiredMixin, LoginRequiredMixin, UpdateView):
+    permission_required = 'admin.users.edit'
     """
     View to update an existing role.
     """
@@ -85,7 +100,8 @@ class RoleUpdateView(LoginRequiredMixin, UpdateView):
         return context
 
 
-class RoleDeleteView(LoginRequiredMixin, DeleteView):
+class RoleDeleteView(PermissionRequiredMixin, LoginRequiredMixin, DeleteView):
+    permission_required = 'admin.users.delete'
     """
     View to delete a role.
     """
@@ -102,23 +118,24 @@ class RoleDeleteView(LoginRequiredMixin, DeleteView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         # Count users with this role
-        context['user_count'] = self.object.user_profiles.count()
+        context['user_count'] = self.object.custom_users.count()
         return context
 
 
 # ==================== User Views ====================
 
-class UserListView(LoginRequiredMixin, ListView):
+class UserListView(PermissionRequiredMixin, LoginRequiredMixin, ListView):
+    permission_required = 'admin.users.view'
     """
     View to list all users with search functionality.
     """
-    model = User
+    model = CustomUser
     template_name = 'users/user_list.html'
     context_object_name = 'users'
     paginate_by = 20
 
     def get_queryset(self):
-        queryset = User.objects.select_related('profile').prefetch_related('profile__roles')
+        queryset = CustomUser.objects.prefetch_related('roles', 'assigned_branches', 'assigned_schools')
         search_query = self.request.GET.get('search', '')
 
         if search_query:
@@ -127,8 +144,8 @@ class UserListView(LoginRequiredMixin, ListView):
                 Q(email__icontains=search_query) |
                 Q(first_name__icontains=search_query) |
                 Q(last_name__icontains=search_query) |
-                Q(profile__department__icontains=search_query) |
-                Q(profile__job_title__icontains=search_query)
+                Q(department__icontains=search_query) |
+                Q(job_title__icontains=search_query)
             )
 
         return queryset.order_by('username')
@@ -139,12 +156,13 @@ class UserListView(LoginRequiredMixin, ListView):
         return context
 
 
-class UserCreateView(LoginRequiredMixin, CreateView):
+class UserCreateView(PermissionRequiredMixin, LoginRequiredMixin, CreateView):
+    permission_required = 'admin.users.create'
     """
     View to create a new user.
     """
-    model = User
-    form_class = UserCreateForm
+    model = CustomUser
+    form_class = CustomUserCreateForm
     template_name = 'users/user_form.html'
     success_url = reverse_lazy('users:user_list')
 
@@ -157,12 +175,13 @@ class UserCreateView(LoginRequiredMixin, CreateView):
         return super().form_invalid(form)
 
 
-class UserUpdateView(LoginRequiredMixin, UpdateView):
+class UserUpdateView(PermissionRequiredMixin, LoginRequiredMixin, UpdateView):
+    permission_required = 'admin.users.edit'
     """
     View to update an existing user.
     """
-    model = User
-    form_class = UserUpdateForm
+    model = CustomUser
+    form_class = CustomUserUpdateForm
     template_name = 'users/user_form.html'
     success_url = reverse_lazy('users:user_list')
     pk_url_kwarg = 'id'
@@ -181,11 +200,12 @@ class UserUpdateView(LoginRequiredMixin, UpdateView):
         return context
 
 
-class UserDeleteView(LoginRequiredMixin, DeleteView):
+class UserDeleteView(PermissionRequiredMixin, LoginRequiredMixin, DeleteView):
+    permission_required = 'admin.users.delete'
     """
     View to delete a user.
     """
-    model = User
+    model = CustomUser
     template_name = 'users/user_confirm_delete.html'
     success_url = reverse_lazy('users:user_list')
     pk_url_kwarg = 'id'
@@ -199,30 +219,30 @@ class UserDeleteView(LoginRequiredMixin, DeleteView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         # Get user's roles
-        if hasattr(self.object, 'profile'):
-            context['user_roles'] = self.object.profile.roles.all()
+        context['user_roles'] = self.object.roles.all()
         return context
 
 
-class UserRolesView(LoginRequiredMixin, View):
+class UserRolesView(PermissionRequiredMixin, LoginRequiredMixin, View):
+    permission_required = 'admin.users.edit'
     """
     View to manage role assignments for a user.
     """
     template_name = 'users/user_roles.html'
 
     def get(self, request, id):
-        user = get_object_or_404(User, pk=id)
+        user = get_object_or_404(CustomUser, pk=id)
         form = UserRolesForm(user=user)
 
         context = {
             'user': user,
             'form': form,
-            'current_roles': user.profile.roles.all() if hasattr(user, 'profile') else []
+            'current_roles': user.roles.all()
         }
         return render(request, self.template_name, context)
 
     def post(self, request, id):
-        user = get_object_or_404(User, pk=id)
+        user = get_object_or_404(CustomUser, pk=id)
         form = UserRolesForm(user=user, data=request.POST)
 
         if form.is_valid():
@@ -241,14 +261,15 @@ class UserRolesView(LoginRequiredMixin, View):
         context = {
             'user': user,
             'form': form,
-            'current_roles': user.profile.roles.all() if hasattr(user, 'profile') else []
+            'current_roles': user.roles.all()
         }
         return render(request, self.template_name, context)
 
 
 # ==================== Additional Helper Views ====================
 
-class UserDetailView(LoginRequiredMixin, View):
+class UserDetailView(PermissionRequiredMixin, LoginRequiredMixin, View):
+    permission_required = 'admin.users.view'
     """
     View to display detailed information about a user.
     This can be used as a quick overview before editing.
@@ -257,19 +278,21 @@ class UserDetailView(LoginRequiredMixin, View):
 
     def get(self, request, id):
         user = get_object_or_404(
-            User.objects.select_related('profile').prefetch_related('profile__roles'),
+            CustomUser.objects.prefetch_related('roles', 'assigned_branches', 'assigned_schools'),
             pk=id
         )
 
         context = {
             'user': user,
-            'profile': user.profile if hasattr(user, 'profile') else None,
-            'roles': user.profile.roles.all() if hasattr(user, 'profile') else []
+            'roles': user.roles.all(),
+            'branches': user.assigned_branches.all(),
+            'schools': user.assigned_schools.all(),
         }
         return render(request, self.template_name, context)
 
 
-class RoleDetailView(LoginRequiredMixin, View):
+class RoleDetailView(PermissionRequiredMixin, LoginRequiredMixin, View):
+    permission_required = 'admin.users.view'
     """
     View to display detailed information about a role.
     Shows role details and users assigned to this role.
@@ -278,14 +301,12 @@ class RoleDetailView(LoginRequiredMixin, View):
 
     def get(self, request, id):
         role = get_object_or_404(
-            Role.objects.prefetch_related('user_profiles__user'),
+            Role.objects.prefetch_related('custom_users'),
             pk=id
         )
 
         # Get all users with this role
-        users_with_role = User.objects.filter(
-            profile__roles=role
-        ).select_related('profile')
+        users_with_role = role.custom_users.all()
 
         context = {
             'role': role,

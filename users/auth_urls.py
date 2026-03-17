@@ -1,17 +1,17 @@
 """
 URL configuration for authentication views.
 
-These URLs are prefixed with 'auth/' in the main users urls.py:
-- /system/auth/login/
-- /system/auth/logout/
-- /system/auth/register/
+These URLs are prefixed with 'auth/' in the main saspulse urls.py:
+- /auth/login/
+- /auth/logout/
+- /auth/register/
 - etc.
 """
 
 from django.urls import path
 from . import auth_views
 
-app_name = 'users'
+app_name = 'auth'
 
 urlpatterns = [
     # Authentication URLs

@@ -74,15 +74,19 @@ class BranchManager(models.Manager):
 
 class Branch(TimestampedModel):
     """Warehouses/branches from Cin7"""
-    cin7_id = models.IntegerField(unique=True, db_index=True, help_text="Cin7 branch ID")
-    name = models.CharField(max_length=255)
-    code = models.CharField(max_length=50, unique=True, db_index=True)
-    address = models.TextField(blank=True)
-    city = models.CharField(max_length=100, blank=True)
-    state = models.CharField(max_length=100, blank=True)
-    country = models.CharField(max_length=100, blank=True)
-    postal_code = models.CharField(max_length=20, blank=True)
+    cin7_id = models.CharField(max_length=100, unique=True, db_index=True, help_text="Cin7 branch ID")
+    name = models.CharField(max_length=255, db_column='company', help_text="Branch/Company name")
+    branch_type = models.CharField(max_length=100)
     is_active = models.BooleanField(default=True)
+    email = models.EmailField(max_length=254)
+    phone = models.CharField(max_length=50)
+    address1 = models.CharField(max_length=255, db_column='address1')
+    address2 = models.CharField(max_length=255, blank=True, db_column='address2')
+    city = models.CharField(max_length=100)
+    state = models.CharField(max_length=100)
+    postcode = models.CharField(max_length=20)
+    country = models.CharField(max_length=100)
+    account_number = models.CharField(max_length=100)
 
     objects = BranchManager()
 
@@ -90,14 +94,15 @@ class Branch(TimestampedModel):
         db_table = 'cin7_sync_branch'
         verbose_name_plural = "Branches"
         ordering = ['name']
-        indexes = [
-            models.Index(fields=['cin7_id']),
-            models.Index(fields=['code']),
-            models.Index(fields=['is_active']),
-        ]
+        managed = False  # This table is managed by Cin7 sync, not Django migrations
 
     def __str__(self):
-        return f"{self.name} ({self.code})"
+        return f"{self.name} ({self.account_number})"
+
+    @property
+    def code(self):
+        """Return account_number as code for backward compatibility"""
+        return self.account_number
 
 
 # ==================== PRODUCT ====================
@@ -141,30 +146,37 @@ class Product(TimestampedModel):
     ]
 
     # Core Identifiers
-    cin7_id = models.IntegerField(unique=True, db_index=True, help_text="Cin7 product ID")
+    cin7_id = models.CharField(max_length=100, unique=True, db_index=True, help_text="Cin7 product ID")
+    code = models.CharField(max_length=100, blank=True, db_index=True, help_text="Product code/SKU")
     style_code = models.CharField(max_length=100, blank=True, db_index=True, help_text="Product style identifier")
     name = models.CharField(max_length=250, db_index=True)
+    barcode = models.CharField(max_length=100, blank=True, db_index=True, help_text="Product barcode")
 
     # Status & Dates
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Public', db_index=True)
+    is_active = models.BooleanField(default=True, help_text="Product active status")
     cin7_created_date = models.DateTimeField(null=True, blank=True)
-    cin7_modified_date = models.DateTimeField(null=True, blank=True)
+    cin7_modified_date = models.DateTimeField(null=True, blank=True, db_column='modified_date')
 
     # Description & Content
     description = models.TextField(blank=True)
     tags = models.TextField(blank=True, help_text="Comma delimited list of custom tags")
 
     # Classification
-    brand = models.CharField(max_length=250, blank=True, db_index=True)
-    category = models.CharField(max_length=250, blank=True, db_index=True)
+    brand = models.CharField(max_length=100, blank=True)
+    # category = models.CharField(max_length=250, blank=True, db_index=True)  # Doesn't exist in DB
     category_id = models.BigIntegerField(null=True, blank=True, db_index=True, help_text="Primary category ID")
-    category_name = models.CharField(max_length=255, blank=True, db_index=True, help_text="Primary category name (e.g., 'Avondale Shop')")
-    sub_category = models.CharField(max_length=250, blank=True)
+    category_name = models.CharField(max_length=255, blank=True, help_text="Primary category name (e.g., 'Avondale Shop')")
+    sub_category = models.CharField(max_length=255, blank=True)
     category_id_array = models.JSONField(default=list, blank=True, help_text="Array of category IDs")
 
     # Supplier
     supplier_id = models.IntegerField(null=True, blank=True)
-    supplier_code = models.CharField(max_length=100, blank=True)
+    # supplier_code = models.CharField(max_length=100, blank=True)  # Doesn't exist in DB
+
+    # Pricing
+    cost_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Cost price")
+    sell_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Sell price")
 
     # Sales Channels
     channels = models.TextField(blank=True, help_text="Selling channels list")
@@ -201,9 +213,9 @@ class Product(TimestampedModel):
     project_name = models.CharField(max_length=250, blank=True)
 
     # Product Options/Variants Configuration
-    option_label_1 = models.CharField(max_length=100, blank=True, help_text="e.g., Color")
-    option_label_2 = models.CharField(max_length=100, blank=True, help_text="e.g., Size")
-    option_label_3 = models.CharField(max_length=100, blank=True, help_text="e.g., Fabric")
+    option_label1 = models.CharField(max_length=100, blank=True, help_text="e.g., Color")
+    option_label2 = models.CharField(max_length=100, blank=True, help_text="e.g., Size")
+    option_label3 = models.CharField(max_length=100, blank=True, help_text="e.g., Fabric")
 
     # Accounting
     sales_account = models.CharField(max_length=100, blank=True)
@@ -222,22 +234,26 @@ class Product(TimestampedModel):
     pdf_upload = models.URLField(max_length=500, blank=True)
     pdf_description = models.TextField(blank=True)
 
+    # Raw JSON data from Cin7
+    raw_data = models.JSONField(null=True, blank=True, help_text="Complete raw data from Cin7 API")
+
     # Metadata
-    last_synced_at = models.DateTimeField(null=True, blank=True)
+    last_synced = models.DateTimeField(null=True, blank=True, help_text="Last sync timestamp")
 
     objects = ProductManager()
 
     class Meta:
         db_table = 'cin7_sync_product'
         ordering = ['name']
+        managed = False  # This table is managed by Cin7 sync, not Django migrations
         indexes = [
             models.Index(fields=['cin7_id']),
             models.Index(fields=['style_code']),
             models.Index(fields=['name']),
             models.Index(fields=['brand']),
-            models.Index(fields=['category']),
+            # models.Index(fields=['category']),  # Field doesn't exist in DB
             models.Index(fields=['status']),
-            models.Index(fields=['last_synced_at']),
+            models.Index(fields=['last_synced']),
         ]
 
     def __str__(self):
@@ -245,8 +261,8 @@ class Product(TimestampedModel):
 
     def mark_synced(self):
         """Mark product as synced with Cin7"""
-        self.last_synced_at = timezone.now()
-        self.save(update_fields=['last_synced_at'])
+        self.last_synced = timezone.now()
+        self.save(update_fields=['last_synced'])
 
 
 # ==================== PRODUCT OPTION (Variants) ====================
@@ -288,7 +304,7 @@ class ProductOption(TimestampedModel):
     # Status & Dates
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Public', db_index=True)
     cin7_created_date = models.DateTimeField(null=True, blank=True)
-    cin7_modified_date = models.DateTimeField(null=True, blank=True)
+    cin7_modified_date = models.DateTimeField(null=True, blank=True, db_column='modified_date')
 
     # Variant Attributes
     option_1 = models.CharField(max_length=50, blank=True, help_text="e.g., Red")
@@ -323,12 +339,13 @@ class ProductOption(TimestampedModel):
     price_columns = models.JSONField(default=dict, blank=True, help_text="Custom price column values")
 
     # Metadata
-    last_synced_at = models.DateTimeField(null=True, blank=True)
+    last_synced = models.DateTimeField(null=True, blank=True, help_text="Last sync timestamp")
 
     objects = ProductOptionManager()
 
     class Meta:
         db_table = 'cin7_sync_productoption'
+        managed = False  # This table is managed by Cin7 sync, not Django migrations
         ordering = ['product', 'code']
         indexes = [
             models.Index(fields=['cin7_id']),
@@ -353,8 +370,8 @@ class ProductOption(TimestampedModel):
 
     def mark_synced(self):
         """Mark option as synced with Cin7"""
-        self.last_synced_at = timezone.now()
-        self.save(update_fields=['last_synced_at'])
+        self.last_synced = timezone.now()
+        self.save(update_fields=['last_synced'])
 
 
 # ==================== CONTACT ====================
@@ -483,11 +500,13 @@ class Contact(TimestampedModel):
     comments = models.TextField(blank=True)
 
     # Metadata
-    last_synced_at = models.DateTimeField(null=True, blank=True)
+    last_synced = models.DateTimeField(null=True, blank=True, help_text="Last sync timestamp")
 
     objects = ContactManager()
 
     class Meta:
+        db_table = 'cin7_sync_contact'
+        managed = False  # This table is managed by Cin7 sync, not Django migrations
         ordering = ['company', 'last_name', 'first_name']
         indexes = [
             models.Index(fields=['cin7_id']),
@@ -509,8 +528,8 @@ class Contact(TimestampedModel):
 
     def mark_synced(self):
         """Mark contact as synced with Cin7"""
-        self.last_synced_at = timezone.now()
-        self.save(update_fields=['last_synced_at'])
+        self.last_synced = timezone.now()
+        self.save(update_fields=['last_synced'])
 
 
 # ==================== SALES ORDER ====================
@@ -646,12 +665,13 @@ class SalesOrder(TimestampedModel):
     accounting_integration_id = models.JSONField(default=dict, blank=True)
 
     # Metadata
-    last_synced_at = models.DateTimeField(null=True, blank=True)
+    last_synced = models.DateTimeField(null=True, blank=True, help_text="Last sync timestamp")
 
     objects = SalesOrderManager()
 
     class Meta:
         db_table = 'cin7_sync_salesorder'
+        managed = False  # This table is managed by Cin7 sync, not Django migrations
         ordering = ['-created_date']
         indexes = [
             models.Index(fields=['cin7_id']),
@@ -673,8 +693,8 @@ class SalesOrder(TimestampedModel):
 
     def mark_synced(self):
         """Mark order as synced with Cin7"""
-        self.last_synced_at = timezone.now()
-        self.save(update_fields=['last_synced_at'])
+        self.last_synced = timezone.now()
+        self.save(update_fields=['last_synced'])
 
 
 # ==================== SALES ORDER LINE ITEM ====================
@@ -877,12 +897,13 @@ class PurchaseOrder(TimestampedModel):
     accounting_integration_id = models.JSONField(default=dict, blank=True)
 
     # Metadata
-    last_synced_at = models.DateTimeField(null=True, blank=True)
+    last_synced = models.DateTimeField(null=True, blank=True, help_text="Last sync timestamp")
 
     objects = PurchaseOrderManager()
 
     class Meta:
         db_table = 'cin7_sync_purchaseorder'
+        managed = False  # This table is managed by Cin7 sync, not Django migrations
         ordering = ['-created_date']
         indexes = [
             models.Index(fields=['cin7_id']),
@@ -899,8 +920,8 @@ class PurchaseOrder(TimestampedModel):
 
     def mark_synced(self):
         """Mark order as synced with Cin7"""
-        self.last_synced_at = timezone.now()
-        self.save(update_fields=['last_synced_at'])
+        self.last_synced = timezone.now()
+        self.save(update_fields=['last_synced'])
 
 
 # ==================== STOCK ====================
@@ -924,14 +945,18 @@ class Stock(TimestampedModel):
     """
 
     # Relations
-    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='stock_levels', null=True, blank=True)
-    product_option = models.ForeignKey(ProductOption, on_delete=models.CASCADE, related_name='stock_levels', null=True, blank=True)
-    branch = models.ForeignKey(Branch, on_delete=models.CASCADE, related_name='stock_levels', null=True, blank=True)
+    # NOTE: These ForeignKeys are for reference only. The actual lookups should use the varchar fields below
+    # because the database schema uses cin7_* VARCHAR fields, not INTEGER foreign keys
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='stock_levels', null=True, blank=True, db_column='product_id')
+    # product_option ForeignKey is commented out because the DB doesn't have a product_option_id column
+    # It only has cin7_product_option_id (VARCHAR), so we use that directly instead
+    # product_option = models.ForeignKey(ProductOption, on_delete=models.CASCADE, related_name='stock_levels', null=True, blank=True)
+    branch = models.ForeignKey(Branch, on_delete=models.CASCADE, related_name='stock_levels', null=True, blank=True, db_column='branch_id')
 
     # Identifiers (denormalized from Cin7)
-    cin7_product_id = models.IntegerField(db_index=True, help_text="Cin7 product ID")
-    cin7_product_option_id = models.IntegerField(db_index=True, help_text="Product option ID")
-    cin7_branch_id = models.IntegerField(db_index=True, help_text="Cin7 branch ID")
+    cin7_product_id = models.CharField(max_length=100, db_index=True, help_text="Cin7 product ID")
+    cin7_product_option_id = models.CharField(max_length=100, db_index=True, help_text="Product option ID")
+    cin7_branch_id = models.CharField(max_length=100, db_index=True, help_text="Cin7 branch ID")
     branch_name = models.CharField(max_length=255, blank=True)
 
     # Product Info (denormalized for quick lookup)
@@ -941,9 +966,9 @@ class Stock(TimestampedModel):
     product_name = models.CharField(max_length=250, blank=True)
 
     # Variant Attributes
-    option_1 = models.CharField(max_length=50, blank=True)
-    option_2 = models.CharField(max_length=50, blank=True)
-    option_3 = models.CharField(max_length=50, blank=True)
+    option1 = models.CharField(max_length=50, blank=True, db_column='option1')
+    option2 = models.CharField(max_length=50, blank=True, db_column='option2')
+    option3 = models.CharField(max_length=50, blank=True, db_column='option3')
     size = models.CharField(max_length=50, blank=True)
 
     # Stock Quantities
@@ -960,13 +985,26 @@ class Stock(TimestampedModel):
     # Dates
     modified_date = models.DateTimeField(null=True, blank=True, help_text="Last transaction date")
 
+    # Additional stock tracking fields
+    allocated = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text="Allocated stock")
+    committed = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text="Committed stock")
+    last_count_date = models.DateTimeField(null=True, blank=True, help_text="Last stock count date")
+    minimum_level = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, help_text="Minimum stock level")
+    maximum_level = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, help_text="Maximum stock level")
+    on_order = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text="Stock on order")
+    reorder_quantity = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, help_text="Reorder quantity")
+
+    # Raw JSON data from Cin7
+    raw_data = models.JSONField(null=True, blank=True, help_text="Complete raw data from Cin7 API")
+
     # Metadata
-    last_synced_at = models.DateTimeField(null=True, blank=True)
+    last_synced = models.DateTimeField(null=True, blank=True, help_text="Last sync timestamp")
 
     objects = StockManager()
 
     class Meta:
         db_table = 'cin7_sync_stock'
+        managed = False  # This table is managed by Cin7 sync, not Django migrations
         unique_together = [['cin7_product_option_id', 'cin7_branch_id']]
         ordering = ['product_name', 'code', 'branch_name']
         indexes = [
@@ -989,5 +1027,5 @@ class Stock(TimestampedModel):
 
     def mark_synced(self):
         """Mark stock as synced with Cin7"""
-        self.last_synced_at = timezone.now()
-        self.save(update_fields=['last_synced_at'])
+        self.last_synced = timezone.now()
+        self.save(update_fields=['last_synced'])

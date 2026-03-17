@@ -64,6 +64,8 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'users.middleware.AuthenticationMiddleware',  # Custom auth middleware
     'users.middleware.SessionSecurityMiddleware',  # Custom session security
+    'users.middleware.DataScopeMiddleware',  # RBAC: Add data scope to request
+    'users.middleware.PermissionCheckMiddleware',  # RBAC: Log unauthorized access
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -89,6 +91,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'dashboard.context_processors.user_permissions',  # RBAC system
             ],
         },
     },

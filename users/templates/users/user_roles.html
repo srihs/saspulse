@@ -171,7 +171,7 @@
           <h6 class="mb-0">Quick Actions</h6>
         </div>
         <div class="card-body">
-          <a href="{% url 'users:user_update' user.id %}" class="btn btn-phoenix-primary w-100 mb-2">
+          <a href="{% url 'users:user_edit' user.id %}" class="btn btn-phoenix-primary w-100 mb-2">
             <span data-feather="edit-2" class="me-2"></span>Edit User
           </a>
           <a href="{% url 'users:role_list' %}" class="btn btn-phoenix-secondary w-100">

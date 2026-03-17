@@ -112,7 +112,7 @@ class LogoutView(View):
         """Process logout request."""
         auth_backend.logout(request)
         messages.success(request, 'You have been successfully logged out.')
-        return redirect('users:login')
+        return redirect('auth:login')
 
 
 class RegisterView(View):
@@ -163,7 +163,7 @@ class RegisterView(View):
                 request,
                 'Registration successful! Please check your email to activate your account.'
             )
-            return redirect('users:check_email', email_type='activation')
+            return redirect('auth:check_email', email_type='activation')
         else:
             messages.error(request, 'Please correct the errors below.')
 
@@ -186,7 +186,7 @@ class ActivateAccountView(View):
             # Check if already activated
             if user.is_active and user.email_verified:
                 messages.info(request, 'Your account is already activated.')
-                return redirect('users:login')
+                return redirect('auth:login')
 
             # Activate account
             user.is_active = True
@@ -244,7 +244,7 @@ class ForgotPasswordView(View):
                     request,
                     'Password reset instructions have been sent to your email.'
                 )
-                return redirect('users:check_email', email_type='reset')
+                return redirect('auth:check_email', email_type='reset')
 
             except CustomUser.DoesNotExist:
                 # Don't reveal if email exists (security best practice)
@@ -252,7 +252,7 @@ class ForgotPasswordView(View):
                     request,
                     'If an account exists with this email, you will receive reset instructions.'
                 )
-                return redirect('users:check_email', email_type='reset')
+                return redirect('auth:check_email', email_type='reset')
         else:
             messages.error(request, 'Please correct the errors below.')
 
@@ -321,7 +321,7 @@ class ResetPasswordView(View):
                 request,
                 'Your password has been successfully reset. You can now log in with your new password.'
             )
-            return redirect('users:login')
+            return redirect('auth:login')
         else:
             messages.error(request, 'Please correct the errors below.')
 
@@ -345,7 +345,7 @@ class ChangePasswordView(View):
         user = auth_backend.get_user_from_session(request)
         if not user.is_authenticated:
             messages.error(request, 'Please log in to change your password.')
-            return redirect('users:login')
+            return redirect('auth:login')
 
         form = ChangePasswordForm(user=user)
         return render(request, self.template_name, {'form': form})
@@ -356,7 +356,7 @@ class ChangePasswordView(View):
         user = auth_backend.get_user_from_session(request)
         if not user.is_authenticated:
             messages.error(request, 'Please log in to change your password.')
-            return redirect('users:login')
+            return redirect('auth:login')
 
         form = ChangePasswordForm(user=user, data=request.POST)
 
@@ -388,7 +388,7 @@ class ProfileView(View):
         user = auth_backend.get_user_from_session(request)
         if not user.is_authenticated:
             messages.error(request, 'Please log in to view your profile.')
-            return redirect('users:login')
+            return redirect('auth:login')
 
         form = ProfileForm(instance=user)
 
@@ -415,7 +415,7 @@ class ProfileView(View):
         user = auth_backend.get_user_from_session(request)
         if not user.is_authenticated:
             messages.error(request, 'Please log in to update your profile.')
-            return redirect('users:login')
+            return redirect('auth:login')
 
         form = ProfileForm(request.POST, instance=user)
 
@@ -455,7 +455,7 @@ class CheckEmailView(View):
         """Display check email page."""
         if email_type not in ['activation', 'reset']:
             messages.error(request, 'Invalid email type.')
-            return redirect('users:login')
+            return redirect('auth:login')
 
         return render(request, self.template_name, {
             'email_type': email_type

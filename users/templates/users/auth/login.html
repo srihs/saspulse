@@ -59,7 +59,7 @@
                                         {% endif %}
 
                                         <!-- Login Form -->
-                                        <form method="post" action="{% url 'users:login' %}">
+                                        <form method="post" action="{% url 'auth:login' %}">
                                             {% csrf_token %}
                                             {% if next %}
                                                 <input type="hidden" name="next" value="{{ next }}">
@@ -106,7 +106,7 @@
                                                     </div>
                                                 </div>
                                                 <div class="col-auto">
-                                                    <a class="fs-9 fw-semibold" href="{% url 'users:forgot_password' %}">Forgot Password?</a>
+                                                    <a class="fs-9 fw-semibold" href="{% url 'auth:forgot_password' %}">Forgot Password?</a>
                                                 </div>
                                             </div>
 

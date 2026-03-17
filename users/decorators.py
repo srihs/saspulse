@@ -94,7 +94,16 @@ def permission_required(permission_key, raise_exception=True):
                 return redirect('/auth/login/')
 
             # Check if user has the required permission
-            if not request.user.has_permission(permission_key):
+            # Support both old flat permissions and new nested permissions (dot notation)
+            has_perm = False
+            if '.' in permission_key:
+                # New hierarchical permission system (e.g., 'dashboard.view')
+                has_perm = request.user.has_nested_permission(permission_key)
+            else:
+                # Old flat permission system (backward compatibility)
+                has_perm = request.user.has_permission(permission_key)
+
+            if not has_perm:
                 if raise_exception:
                     if request.path.startswith('/api/'):
                         return JsonResponse({

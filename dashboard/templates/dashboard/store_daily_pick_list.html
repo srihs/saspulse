@@ -1,0 +1,439 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Daily Pick List{% endblock %}
+
+{% block extra_css %}
+<style>
+    .priority-critical { background-color: #fee; border-left: 4px solid #dc3545; }
+    .priority-high { background-color: #fff3cd; border-left: 4px solid #ffc107; }
+    .priority-medium { background-color: #d1ecf1; border-left: 4px solid #17a2b8; }
+    .priority-low { background-color: #d4edda; border-left: 4px solid #28a745; }
+
+    .pick-list-table th {
+        background-color: #f8f9fa;
+        font-weight: 600;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+    }
+
+    .priority-badge {
+        padding: 0.4rem 0.8rem;
+        font-size: 0.85rem;
+        font-weight: 600;
+    }
+
+    @media print {
+        .no-print { display: none; }
+        .card { border: 1px solid #dee2e6 !important; box-shadow: none !important; }
+        .pick-checkbox { display: inline-block; }
+        h2 { font-size: 1.5rem; }
+        h5 { font-size: 1rem; }
+    }
+
+    .days-critical { color: #dc3545; font-weight: bold; }
+    .days-high { color: #ffc107; font-weight: bold; }
+    .days-medium { color: #17a2b8; }
+    .days-low { color: #28a745; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="pb-5">
+    <div class="row g-4">
+        <div class="col-12">
+            <!-- Header -->
+            <div class="mb-4">
+                <h2 class="mb-2">Daily Pick List</h2>
+                <h5 class="text-body-tertiary fw-semibold">
+                    Warehouse replenishment based on {{ target_date|date:"l, F d, Y" }} sales
+                </h5>
+            </div>
+
+            {% if error %}
+            <div class="alert alert-danger">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                {{ error }}
+            </div>
+            {% else %}
+
+            <!-- Branch Info Banner -->
+            <div class="alert alert-info mb-4 no-print">
+                <i class="fas fa-store me-2"></i>
+                <strong>Branch:</strong> {{ branch_name }}
+                {% if not is_admin %}
+                <span class="text-muted ms-3">(Store Manager View)</span>
+                {% endif %}
+            </div>
+
+            <!-- Filters and Controls -->
+            <div class="card mb-4 no-print">
+                <div class="card-body">
+                    <form method="GET" id="filterForm">
+                        <div class="row g-3">
+                            <div class="col-md-3">
+                                <label class="form-label">Sales Date</label>
+                                <input type="date"
+                                       name="date"
+                                       class="form-control"
+                                       value="{{ target_date|date:'Y-m-d' }}"
+                                       max="{{ today|date:'Y-m-d' }}">
+                                <small class="text-muted">Pick list based on this date's sales</small>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Category Filter</label>
+                                <select name="category" class="form-select">
+                                    <option value="">All Categories</option>
+                                    {% for cat in all_categories %}
+                                        <option value="{{ cat }}" {% if cat == selected_category %}selected{% endif %}>
+                                            {{ cat }}
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Min. Qty Sold</label>
+                                <input type="number"
+                                       name="min_qty"
+                                       class="form-control"
+                                       value="{{ min_quantity }}"
+                                       min="1">
+                                <small class="text-muted">Show items with at least this quantity sold</small>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">&nbsp;</label>
+                                <div class="d-grid gap-2">
+                                    <button type="submit" class="btn btn-primary">
+                                        <i class="fas fa-sync-alt me-2"></i>Refresh List
+                                    </button>
+                                    <button type="button" class="btn btn-outline-secondary" onclick="window.print()">
+                                        <i class="fas fa-print me-2"></i>Print Pick List
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Summary Cards -->
+            <div class="row mb-4">
+                <div class="col-md-3">
+                    <div class="card border-primary">
+                        <div class="card-body text-center">
+                            <h6 class="text-muted mb-2">Total Items</h6>
+                            <h2 class="text-primary mb-0">{{ total_items }}</h2>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card border-success">
+                        <div class="card-body text-center">
+                            <h6 class="text-muted mb-2">Total Pick Quantity</h6>
+                            <h2 class="text-success mb-0">{{ total_pick_quantity }}</h2>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card border-info">
+                        <div class="card-body text-center">
+                            <h6 class="text-muted mb-2">Categories</h6>
+                            <h2 class="text-info mb-0">{{ category_count }}</h2>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card border-warning">
+                        <div class="card-body text-center">
+                            <h6 class="text-muted mb-2">Critical Items</h6>
+                            <h2 class="text-warning mb-0">{{ critical_items|length }}</h2>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {% if pick_list %}
+
+            <!-- Critical Priority Items -->
+            {% if critical_items %}
+            <div class="card mb-4 priority-critical">
+                <div class="card-header bg-danger text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        CRITICAL Priority ({{ critical_items|length }} items)
+                        <small class="ms-3">Less than 1 day of stock remaining</small>
+                    </h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-0 pick-list-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 50px;" class="no-print">
+                                        <input type="checkbox" class="form-check-input">
+                                    </th>
+                                    <th>SKU</th>
+                                    <th>Product</th>
+                                    <th>Category</th>
+                                    <th class="text-center">Qty Sold</th>
+                                    <th class="text-center">Current Stock</th>
+                                    <th class="text-center">Days Left</th>
+                                    <th class="text-center">Pick Qty</th>
+                                    <th class="text-center">Target Stock</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in critical_items %}
+                                <tr>
+                                    <td class="no-print">
+                                        <input type="checkbox" class="form-check-input pick-checkbox">
+                                    </td>
+                                    <td><code>{{ item.sku }}</code></td>
+                                    <td><strong>{{ item.product_name }}</strong></td>
+                                    <td><small class="text-muted">{{ item.category }}</small></td>
+                                    <td class="text-center"><span class="badge bg-primary">{{ item.qty_sold }}</span></td>
+                                    <td class="text-center">{{ item.current_stock }}</td>
+                                    <td class="text-center days-critical">{{ item.days_of_stock }}</td>
+                                    <td class="text-center"><strong class="text-danger">{{ item.pick_qty }}</strong></td>
+                                    <td class="text-center text-muted">{{ item.target_stock }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- High Priority Items -->
+            {% if high_items %}
+            <div class="card mb-4 priority-high">
+                <div class="card-header bg-warning">
+                    <h5 class="mb-0">
+                        <i class="fas fa-exclamation-circle me-2"></i>
+                        HIGH Priority ({{ high_items|length }} items)
+                        <small class="ms-3">1-2 days of stock remaining</small>
+                    </h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-0 pick-list-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 50px;" class="no-print">
+                                        <input type="checkbox" class="form-check-input">
+                                    </th>
+                                    <th>SKU</th>
+                                    <th>Product</th>
+                                    <th>Category</th>
+                                    <th class="text-center">Qty Sold</th>
+                                    <th class="text-center">Current Stock</th>
+                                    <th class="text-center">Days Left</th>
+                                    <th class="text-center">Pick Qty</th>
+                                    <th class="text-center">Target Stock</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in high_items %}
+                                <tr>
+                                    <td class="no-print">
+                                        <input type="checkbox" class="form-check-input pick-checkbox">
+                                    </td>
+                                    <td><code>{{ item.sku }}</code></td>
+                                    <td>{{ item.product_name }}</td>
+                                    <td><small class="text-muted">{{ item.category }}</small></td>
+                                    <td class="text-center"><span class="badge bg-primary">{{ item.qty_sold }}</span></td>
+                                    <td class="text-center">{{ item.current_stock }}</td>
+                                    <td class="text-center days-high">{{ item.days_of_stock }}</td>
+                                    <td class="text-center"><strong class="text-warning">{{ item.pick_qty }}</strong></td>
+                                    <td class="text-center text-muted">{{ item.target_stock }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Medium Priority Items -->
+            {% if medium_items %}
+            <div class="card mb-4 priority-medium">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-info-circle me-2"></i>
+                        MEDIUM Priority ({{ medium_items|length }} items)
+                        <small class="ms-3">2-3 days of stock remaining</small>
+                    </h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-0 pick-list-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 50px;" class="no-print">
+                                        <input type="checkbox" class="form-check-input">
+                                    </th>
+                                    <th>SKU</th>
+                                    <th>Product</th>
+                                    <th>Category</th>
+                                    <th class="text-center">Qty Sold</th>
+                                    <th class="text-center">Current Stock</th>
+                                    <th class="text-center">Days Left</th>
+                                    <th class="text-center">Pick Qty</th>
+                                    <th class="text-center">Target Stock</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in medium_items %}
+                                <tr>
+                                    <td class="no-print">
+                                        <input type="checkbox" class="form-check-input pick-checkbox">
+                                    </td>
+                                    <td><code>{{ item.sku }}</code></td>
+                                    <td>{{ item.product_name }}</td>
+                                    <td><small class="text-muted">{{ item.category }}</small></td>
+                                    <td class="text-center"><span class="badge bg-primary">{{ item.qty_sold }}</span></td>
+                                    <td class="text-center">{{ item.current_stock }}</td>
+                                    <td class="text-center days-medium">{{ item.days_of_stock }}</td>
+                                    <td class="text-center"><strong class="text-info">{{ item.pick_qty }}</strong></td>
+                                    <td class="text-center text-muted">{{ item.target_stock }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Low Priority Items -->
+            {% if low_items %}
+            <div class="card mb-4 priority-low">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-check-circle me-2"></i>
+                        LOW Priority ({{ low_items|length }} items)
+                        <small class="ms-3">More than 3 days of stock</small>
+                    </h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-0 pick-list-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 50px;" class="no-print">
+                                        <input type="checkbox" class="form-check-input">
+                                    </th>
+                                    <th>SKU</th>
+                                    <th>Product</th>
+                                    <th>Category</th>
+                                    <th class="text-center">Qty Sold</th>
+                                    <th class="text-center">Current Stock</th>
+                                    <th class="text-center">Days Left</th>
+                                    <th class="text-center">Pick Qty</th>
+                                    <th class="text-center">Target Stock</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in low_items %}
+                                <tr>
+                                    <td class="no-print">
+                                        <input type="checkbox" class="form-check-input pick-checkbox">
+                                    </td>
+                                    <td><code>{{ item.sku }}</code></td>
+                                    <td>{{ item.product_name }}</td>
+                                    <td><small class="text-muted">{{ item.category }}</small></td>
+                                    <td class="text-center"><span class="badge bg-primary">{{ item.qty_sold }}</span></td>
+                                    <td class="text-center">{{ item.current_stock }}</td>
+                                    <td class="text-center days-low">{{ item.days_of_stock }}</td>
+                                    <td class="text-center"><strong class="text-success">{{ item.pick_qty }}</strong></td>
+                                    <td class="text-center text-muted">{{ item.target_stock }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Pick List Logic Explanation -->
+            <div class="card mb-4 no-print">
+                <div class="card-header bg-light">
+                    <h6 class="mb-0">
+                        <i class="fas fa-question-circle me-2"></i>
+                        How the Pick List Works
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>Calculation Logic:</h6>
+                            <ul class="mb-0">
+                                <li><strong>Target Stock:</strong> Yesterday's Sales × 2.5 days</li>
+                                <li><strong>Pick Quantity:</strong> Target Stock - (Current Stock + Incoming)</li>
+                                <li><strong>Days of Stock:</strong> Current Stock ÷ Yesterday's Sales</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Priority Levels:</h6>
+                            <ul class="mb-0">
+                                <li><strong class="text-danger">Critical:</strong> Less than 1 day of stock</li>
+                                <li><strong class="text-warning">High:</strong> 1-2 days of stock</li>
+                                <li><strong class="text-info">Medium:</strong> 2-3 days of stock</li>
+                                <li><strong class="text-success">Low:</strong> More than 3 days of stock</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {% else %}
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle me-2"></i>
+                No items to pick for {{ target_date|date:"F d, Y" }}. Either no sales were made, or all products have sufficient stock.
+            </div>
+            {% endif %}
+
+            {% endif %}
+
+        </div>
+    </div>
+</div>
+
+<!-- Print Signature Section (only visible when printing) -->
+<div style="display:none;">
+    <div class="print-signature" style="display:block; page-break-before: always;">
+        <h5>Pick List Completion</h5>
+        <p><strong>Date:</strong> {{ target_date|date:"F d, Y" }}</p>
+        <p><strong>Branch:</strong> {{ branch_name }}</p>
+        <p><strong>Total Items:</strong> {{ total_items }} | <strong>Total Quantity:</strong> {{ total_pick_quantity }}</p>
+        <br><br>
+        <p>Picked By: _____________________________ Date: _______________</p>
+        <p>Verified By: _____________________________ Date: _______________</p>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(document).ready(function() {
+    // Auto-submit form when date or category changes
+    $('#filterForm input[type="date"], #filterForm select[name="category"]').on('change', function() {
+        $('#filterForm').submit();
+    });
+});
+
+// Print styling
+window.addEventListener('beforeprint', function() {
+    document.querySelector('.print-signature').style.display = 'block';
+});
+
+window.addEventListener('afterprint', function() {
+    document.querySelector('.print-signature').style.display = 'none';
+});
+</script>
+{% endblock %}

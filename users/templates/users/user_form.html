@@ -24,23 +24,28 @@
   <!-- Card -->
   <div class="row">
     <div class="col-xl-9">
-      <div class="card">
-        <div class="card-header">
-          <h5 class="mb-0">User Information</h5>
-        </div>
-        <div class="card-body">
-          {% if messages %}
+      <form method="post" novalidate>
+        {% csrf_token %}
+
+        {% if messages %}
+          <div class="mb-3">
             {% for message in messages %}
               <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
                 {{ message }}
                 <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
               </div>
             {% endfor %}
-          {% endif %}
+          </div>
+        {% endif %}
 
-          <form method="post" novalidate>
-            {% csrf_token %}
-
+        <!-- Basic Information Card -->
+        <div class="card mb-3">
+          <div class="card-header bg-body-tertiary">
+            <h5 class="mb-0">
+              <span data-feather="user" class="me-2"></span>Basic Information
+            </h5>
+          </div>
+          <div class="card-body">
             <div class="row gx-3">
               <!-- Username Field -->
               <div class="col-md-6 mb-3">
@@ -75,7 +80,7 @@
               <!-- First Name Field -->
               <div class="col-md-6 mb-3">
                 <label class="form-label" for="{{ form.first_name.id_for_label }}">
-                  First Name
+                  First Name <span class="text-danger">*</span>
                 </label>
                 {{ form.first_name }}
                 {% if form.first_name.errors %}
@@ -88,7 +93,7 @@
               <!-- Last Name Field -->
               <div class="col-md-6 mb-3">
                 <label class="form-label" for="{{ form.last_name.id_for_label }}">
-                  Last Name
+                  Last Name <span class="text-danger">*</span>
                 </label>
                 {{ form.last_name }}
                 {% if form.last_name.errors %}
@@ -100,7 +105,7 @@
             </div>
 
             {% if not form.instance.pk %}
-            <!-- Password Field (Create Only) -->
+            <!-- Password Fields (Create Only) -->
             <div class="row gx-3">
               <div class="col-md-6 mb-3">
                 <label class="form-label" for="{{ form.password1.id_for_label }}">
@@ -130,74 +135,351 @@
             </div>
             {% endif %}
 
-            <!-- Is Active Field -->
-            <div class="mb-3">
-              <div class="form-check">
-                {{ form.is_active }}
-                <label class="form-check-label" for="{{ form.is_active.id_for_label }}">
-                  Active User
+            <div class="row gx-3">
+              <!-- Phone Number Field -->
+              <div class="col-md-4 mb-3">
+                <label class="form-label" for="{{ form.phone_number.id_for_label }}">
+                  Phone Number
                 </label>
-                {% if form.is_active.errors %}
+                {{ form.phone_number }}
+                {% if form.phone_number.errors %}
                   <div class="invalid-feedback d-block">
-                    {{ form.is_active.errors.0 }}
+                    {{ form.phone_number.errors.0 }}
                   </div>
                 {% endif %}
+                <div class="form-text">Optional contact number.</div>
               </div>
-              <div class="form-text">Inactive users cannot log in to the system.</div>
+
+              <!-- Department Field -->
+              <div class="col-md-4 mb-3">
+                <label class="form-label" for="{{ form.department.id_for_label }}">
+                  Department
+                </label>
+                {{ form.department }}
+                {% if form.department.errors %}
+                  <div class="invalid-feedback d-block">
+                    {{ form.department.errors.0 }}
+                  </div>
+                {% endif %}
+                <div class="form-text">User's department.</div>
+              </div>
+
+              <!-- Job Title Field -->
+              <div class="col-md-4 mb-3">
+                <label class="form-label" for="{{ form.job_title.id_for_label }}">
+                  Job Title
+                </label>
+                {{ form.job_title }}
+                {% if form.job_title.errors %}
+                  <div class="invalid-feedback d-block">
+                    {{ form.job_title.errors.0 }}
+                  </div>
+                {% endif %}
+                <div class="form-text">User's position.</div>
+              </div>
             </div>
 
-            <!-- Form Actions -->
-            <div class="d-flex justify-content-end gap-2 mt-4">
-              <a href="{% url 'users:user_list' %}" class="btn btn-phoenix-secondary">
-                <span data-feather="x" class="me-2"></span>Cancel
-              </a>
-              <button type="submit" class="btn btn-primary">
-                <span data-feather="save" class="me-2"></span>Save User
-              </button>
+            <!-- Bio Field -->
+            <div class="mb-0">
+              <label class="form-label" for="{{ form.bio.id_for_label }}">
+                Biography / Notes
+              </label>
+              {{ form.bio }}
+              {% if form.bio.errors %}
+                <div class="invalid-feedback d-block">
+                  {{ form.bio.errors.0 }}
+                </div>
+              {% endif %}
+              <div class="form-text">Optional notes or biography about this user.</div>
             </div>
-          </form>
+          </div>
         </div>
-      </div>
+
+        <!-- Role Assignment Card -->
+        <div class="card mb-3">
+          <div class="card-header bg-body-tertiary">
+            <h5 class="mb-0">
+              <span data-feather="shield" class="me-2"></span>Role Assignment
+            </h5>
+          </div>
+          <div class="card-body">
+            <p class="text-muted mb-3">
+              <span data-feather="info" class="me-1"></span>
+              Select one or more roles to define this user's permissions and capabilities within the system.
+            </p>
+
+            {% if form.roles %}
+              <div class="role-checkboxes">
+                {% for role in form.roles %}
+                  <div class="form-check mb-2">
+                    {{ role.tag }}
+                    <label class="form-check-label" for="{{ role.id_for_label }}">
+                      <strong>{{ role.choice_label }}</strong>
+                    </label>
+                  </div>
+                {% endfor %}
+              </div>
+              {% if form.roles.errors %}
+                <div class="invalid-feedback d-block">
+                  {{ form.roles.errors.0 }}
+                </div>
+              {% endif %}
+            {% else %}
+              <div class="alert alert-warning mb-0">
+                <span data-feather="alert-triangle" class="me-2"></span>
+                No active roles available. Please create roles first.
+              </div>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Data Scope Assignments Card -->
+        <div class="card mb-3">
+          <div class="card-header bg-body-tertiary">
+            <h5 class="mb-0">
+              <span data-feather="map-pin" class="me-2"></span>Data Scope Assignments
+            </h5>
+          </div>
+          <div class="card-body">
+            <div class="alert alert-info mb-4">
+              <span data-feather="info" class="me-2"></span>
+              <strong>Role-Based Assignment Guide:</strong>
+              <ul class="mb-0 mt-2">
+                <li><strong>Store Managers</strong> - Assign specific branches to limit data access to those locations</li>
+                <li><strong>Sales Team</strong> - Assign specific schools to limit product/sales data to those categories</li>
+                <li><strong>Administrators & Demand Planners</strong> - No assignments needed (full system access)</li>
+              </ul>
+            </div>
+
+            <!-- Branch Assignment Section -->
+            <div class="mb-4" id="branch-assignment-section">
+              <h6 class="mb-3">
+                <span data-feather="home" class="me-2"></span>Assigned Branches
+              </h6>
+              <p class="text-muted small mb-3">
+                For <strong>Store Managers</strong>: Select one or more branches/shops this user can manage.
+                Users will only see data for their assigned branches.
+              </p>
+
+              {% if form.assigned_branches %}
+                <div class="row">
+                  {% for branch in form.assigned_branches %}
+                    <div class="col-md-4 col-lg-3 mb-2">
+                      <div class="form-check">
+                        {{ branch.tag }}
+                        <label class="form-check-label" for="{{ branch.id_for_label }}">
+                          {{ branch.choice_label }}
+                        </label>
+                      </div>
+                    </div>
+                  {% endfor %}
+                </div>
+                {% if form.assigned_branches.errors %}
+                  <div class="invalid-feedback d-block">
+                    {{ form.assigned_branches.errors.0 }}
+                  </div>
+                {% endif %}
+              {% else %}
+                <div class="alert alert-warning mb-0">
+                  <span data-feather="alert-triangle" class="me-2"></span>
+                  No active branches available.
+                </div>
+              {% endif %}
+            </div>
+
+            <hr class="my-4">
+
+            <!-- School Assignment Section -->
+            <div class="mb-0" id="school-assignment-section">
+              <h6 class="mb-3">
+                <span data-feather="book" class="me-2"></span>Assigned Schools
+              </h6>
+              <p class="text-muted small mb-3">
+                For <strong>Sales Team</strong>: Select one or more schools this user is responsible for.
+                Users will only see products and sales data for their assigned schools.
+              </p>
+
+              {% if form.assigned_schools %}
+                <div class="row">
+                  {% for school in form.assigned_schools %}
+                    <div class="col-md-4 col-lg-3 mb-2">
+                      <div class="form-check">
+                        {{ school.tag }}
+                        <label class="form-check-label" for="{{ school.id_for_label }}">
+                          {{ school.choice_label }}
+                        </label>
+                      </div>
+                    </div>
+                  {% endfor %}
+                </div>
+                {% if form.assigned_schools.errors %}
+                  <div class="invalid-feedback d-block">
+                    {{ form.assigned_schools.errors.0 }}
+                  </div>
+                {% endif %}
+              {% else %}
+                <div class="alert alert-warning mb-0">
+                  <span data-feather="alert-triangle" class="me-2"></span>
+                  No schools available. Schools are derived from product subcategories.
+                </div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+
+        <!-- Permissions & Status Card -->
+        <div class="card mb-3">
+          <div class="card-header bg-body-tertiary">
+            <h5 class="mb-0">
+              <span data-feather="lock" class="me-2"></span>Permissions & Status
+            </h5>
+          </div>
+          <div class="card-body">
+            <div class="row">
+              <!-- Is Active Field -->
+              <div class="col-md-6 mb-3">
+                <div class="form-check form-switch">
+                  {{ form.is_active }}
+                  <label class="form-check-label" for="{{ form.is_active.id_for_label }}">
+                    <strong>Active User</strong>
+                  </label>
+                  {% if form.is_active.errors %}
+                    <div class="invalid-feedback d-block">
+                      {{ form.is_active.errors.0 }}
+                    </div>
+                  {% endif %}
+                  <div class="form-text">Inactive users cannot log in to the system.</div>
+                </div>
+              </div>
+
+              <!-- Email Verified Field -->
+              <div class="col-md-6 mb-3">
+                <div class="form-check form-switch">
+                  {{ form.email_verified }}
+                  <label class="form-check-label" for="{{ form.email_verified.id_for_label }}">
+                    <strong>Email Verified</strong>
+                  </label>
+                  {% if form.email_verified.errors %}
+                    <div class="invalid-feedback d-block">
+                      {{ form.email_verified.errors.0 }}
+                    </div>
+                  {% endif %}
+                  <div class="form-text">Indicates if the user's email has been verified.</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="alert alert-warning mt-3 mb-3">
+              <span data-feather="alert-circle" class="me-2"></span>
+              <strong>Administrative Permissions:</strong> Only assign these to trusted administrators.
+            </div>
+
+            <div class="row">
+              <!-- Is Staff Field -->
+              <div class="col-md-6 mb-3">
+                <div class="form-check form-switch">
+                  {{ form.is_staff }}
+                  <label class="form-check-label" for="{{ form.is_staff.id_for_label }}">
+                    <strong>Staff Status</strong>
+                  </label>
+                  {% if form.is_staff.errors %}
+                    <div class="invalid-feedback d-block">
+                      {{ form.is_staff.errors.0 }}
+                    </div>
+                  {% endif %}
+                  <div class="form-text">Allows access to the Django admin interface.</div>
+                </div>
+              </div>
+
+              <!-- Is Superuser Field -->
+              <div class="col-md-6 mb-0">
+                <div class="form-check form-switch">
+                  {{ form.is_superuser }}
+                  <label class="form-check-label" for="{{ form.is_superuser.id_for_label }}">
+                    <strong>Superuser Status</strong>
+                  </label>
+                  {% if form.is_superuser.errors %}
+                    <div class="invalid-feedback d-block">
+                      {{ form.is_superuser.errors.0 }}
+                    </div>
+                  {% endif %}
+                  <div class="form-text">Grants all permissions without explicit assignment.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Form Actions -->
+        <div class="d-flex justify-content-end gap-2">
+          <a href="{% url 'users:user_list' %}" class="btn btn-phoenix-secondary">
+            <span data-feather="x" class="me-2"></span>Cancel
+          </a>
+          <button type="submit" class="btn btn-primary">
+            <span data-feather="save" class="me-2"></span>Save User
+          </button>
+        </div>
+      </form>
     </div>
 
+    <!-- Sidebar -->
     <div class="col-xl-3">
-      <div class="card">
+      <div class="card sticky-sidebar">
         <div class="card-header">
-          <h6 class="mb-0">Help</h6>
+          <h6 class="mb-0">
+            <span data-feather="help-circle" class="me-2"></span>Help
+          </h6>
         </div>
         <div class="card-body">
-          <p class="text-muted fs-10 mb-3">
-            <span data-feather="info" class="me-1"></span>
-            <strong>Username:</strong> Must be unique and will be used for login.
-          </p>
-          <p class="text-muted fs-10 mb-3">
-            <span data-feather="info" class="me-1"></span>
-            <strong>Email:</strong> Required for password reset and notifications.
-          </p>
-          {% if not form.instance.pk %}
-          <p class="text-muted fs-10 mb-3">
-            <span data-feather="info" class="me-1"></span>
-            <strong>Password:</strong> Must be at least 8 characters long and secure.
-          </p>
-          {% endif %}
-          <p class="text-muted fs-10 mb-0">
-            <span data-feather="info" class="me-1"></span>
-            <strong>Status:</strong> Inactive users cannot access the system.
-          </p>
+          <div class="mb-3">
+            <h6 class="text-body-emphasis fs-10 mb-2">Basic Information</h6>
+            <p class="text-muted fs-10 mb-0">
+              Username and email must be unique. First and last names are required for proper identification.
+            </p>
+          </div>
+
+          <div class="mb-3">
+            <h6 class="text-body-emphasis fs-10 mb-2">Role Assignment</h6>
+            <p class="text-muted fs-10 mb-0">
+              Roles define what a user can do. Multiple roles can be assigned to grant combined permissions.
+            </p>
+          </div>
+
+          <div class="mb-3">
+            <h6 class="text-body-emphasis fs-10 mb-2">Data Scope</h6>
+            <p class="text-muted fs-10 mb-0">
+              <strong>Branches:</strong> Assign to Store Managers to limit their view to specific locations.
+              <br><br>
+              <strong>Schools:</strong> Assign to Sales Team to limit product visibility by category.
+            </p>
+          </div>
+
+          <div class="mb-0">
+            <h6 class="text-body-emphasis fs-10 mb-2">Permissions</h6>
+            <p class="text-muted fs-10 mb-0">
+              <strong>Active:</strong> Controls login access.
+              <br><br>
+              <strong>Staff:</strong> Admin panel access.
+              <br><br>
+              <strong>Superuser:</strong> Full system access.
+            </p>
+          </div>
         </div>
       </div>
 
       {% if form.instance.pk %}
       <div class="card mt-3">
         <div class="card-header">
-          <h6 class="mb-0">Quick Actions</h6>
+          <h6 class="mb-0">
+            <span data-feather="zap" class="me-2"></span>Quick Actions
+          </h6>
         </div>
         <div class="card-body">
-          <a href="{% url 'users:user_roles' form.instance.pk %}" class="btn btn-phoenix-primary w-100 mb-2">
-            <span data-feather="shield" class="me-2"></span>Manage Roles
-          </a>
-          <a href="#" class="btn btn-phoenix-secondary w-100">
+          <a href="#" class="btn btn-phoenix-secondary w-100 mb-2">
             <span data-feather="key" class="me-2"></span>Reset Password
+          </a>
+          <a href="{% url 'users:user_list' %}" class="btn btn-phoenix-secondary w-100">
+            <span data-feather="list" class="me-2"></span>View All Users
           </a>
         </div>
       </div>
@@ -206,13 +488,30 @@
   </div>
 </div>
 
+<style>
+  .sticky-sidebar {
+    position: sticky;
+    top: 20px;
+  }
+
+  .role-checkboxes {
+    max-height: 300px;
+    overflow-y: auto;
+    padding-right: 10px;
+  }
+
+  .form-check-label strong {
+    font-weight: 600;
+  }
+</style>
+
 <script src="https://unpkg.com/feather-icons"></script>
 <script>
   document.addEventListener('DOMContentLoaded', function() {
     feather.replace();
 
-    // Add form-control class to form fields
-    const textFields = document.querySelectorAll('input[type="text"], input[type="email"], input[type="password"]');
+    // Add form-control class to text input fields
+    const textFields = document.querySelectorAll('input[type="text"], input[type="email"], input[type="password"], textarea');
     textFields.forEach(field => {
       field.classList.add('form-control');
     });
@@ -222,6 +521,119 @@
     checkboxes.forEach(checkbox => {
       checkbox.classList.add('form-check-input');
     });
+
+    // Convert status checkboxes to switches
+    const statusCheckboxes = document.querySelectorAll('#id_is_active, #id_is_staff, #id_is_superuser, #id_email_verified');
+    statusCheckboxes.forEach(checkbox => {
+      checkbox.classList.remove('form-check-input');
+      checkbox.classList.add('form-check-input');
+    });
+
+    // ============================================================
+    // ROLE-BASED SECTION VISIBILITY AND AUTO-SELECTION
+    // ============================================================
+
+    // Get role checkboxes
+    const roleCheckboxes = document.querySelectorAll('.role-checkbox');
+    const branchSection = document.getElementById('branch-assignment-section');
+    const schoolSection = document.getElementById('school-assignment-section');
+    const branchCheckboxes = document.querySelectorAll('.branch-checkbox');
+    const schoolCheckboxes = document.querySelectorAll('.school-checkbox');
+
+    // Function to get selected role names
+    function getSelectedRoles() {
+      const selectedRoles = [];
+      roleCheckboxes.forEach(checkbox => {
+        if (checkbox.checked) {
+          // Get the role name from the label
+          const label = checkbox.parentElement.querySelector('label');
+          if (label) {
+            const roleName = label.textContent.trim();
+            selectedRoles.push(roleName);
+          }
+        }
+      });
+      return selectedRoles;
+    }
+
+    // Function to update section visibility
+    function updateSectionVisibility() {
+      const selectedRoles = getSelectedRoles();
+
+      // Check for specific roles
+      const hasAdmin = selectedRoles.includes('Admin');
+      const hasSalesTeam = selectedRoles.includes('Sales Team');
+      const hasStoreManager = selectedRoles.includes('Store Manager');
+      const hasDemandPlanner = selectedRoles.includes('Demand Planner');
+
+      // Branch Section Logic
+      if (hasDemandPlanner && !hasStoreManager && !hasAdmin) {
+        // Demand Planner only: hide branches
+        branchSection.style.display = 'none';
+      } else if (hasStoreManager || hasAdmin) {
+        // Store Manager or Admin: show branches
+        branchSection.style.display = 'block';
+      } else {
+        // No relevant role: hide branches
+        branchSection.style.display = 'none';
+      }
+
+      // School Section Logic
+      if (hasDemandPlanner && !hasSalesTeam && !hasAdmin) {
+        // Demand Planner only: hide schools
+        schoolSection.style.display = 'none';
+      } else if (hasSalesTeam || hasAdmin) {
+        // Sales Team or Admin: show schools
+        schoolSection.style.display = 'block';
+      } else {
+        // No relevant role: hide schools
+        schoolSection.style.display = 'none';
+      }
+
+      // Admin Auto-Selection Logic
+      if (hasAdmin) {
+        // Select all branches
+        branchCheckboxes.forEach(checkbox => {
+          if (!checkbox.checked) {
+            checkbox.checked = true;
+          }
+        });
+
+        // Select all schools
+        schoolCheckboxes.forEach(checkbox => {
+          if (!checkbox.checked) {
+            checkbox.checked = true;
+          }
+        });
+      }
+    }
+
+    // Function to handle Admin role checkbox
+    function handleAdminRoleChange(checkbox) {
+      const label = checkbox.parentElement.querySelector('label');
+      const isAdminCheckbox = label && label.textContent.trim() === 'Admin';
+
+      if (isAdminCheckbox && checkbox.checked) {
+        // Admin was just checked - select all branches and schools
+        branchCheckboxes.forEach(cb => cb.checked = true);
+        schoolCheckboxes.forEach(cb => cb.checked = true);
+      } else if (isAdminCheckbox && !checkbox.checked) {
+        // Admin was just unchecked - uncheck all branches and schools
+        branchCheckboxes.forEach(cb => cb.checked = false);
+        schoolCheckboxes.forEach(cb => cb.checked = false);
+      }
+    }
+
+    // Add event listeners to role checkboxes
+    roleCheckboxes.forEach(checkbox => {
+      checkbox.addEventListener('change', function() {
+        handleAdminRoleChange(this);
+        updateSectionVisibility();
+      });
+    });
+
+    // Initial setup on page load
+    updateSectionVisibility();
   });
 </script>
 {% endblock %}

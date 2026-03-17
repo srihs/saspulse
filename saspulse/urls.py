@@ -19,9 +19,10 @@ from django.urls import path, include
 from django.views.generic import RedirectView
 
 urlpatterns = [
-    path('', RedirectView.as_view(pattern_name='users:login', permanent=False), name='index'),
+    path('', RedirectView.as_view(pattern_name='auth:login', permanent=False), name='index'),
     path('dashboard/', include('dashboard.urls')),  # Stock Analysis Dashboard
-    path('admin/', admin.site.urls),
-    path('auth/', include('users.auth_urls')),  # Authentication URLs
-    path('system/', include('users.urls')),  # User management URLs
+    # Django admin disabled - use custom admin UI at /system/users/ and /system/roles/
+    # path('admin/', admin.site.urls),
+    path('auth/', include('users.auth_urls')),  # Authentication URLs (namespace: auth)
+    path('system/', include('users.urls')),  # User management URLs (namespace: users)
 ]

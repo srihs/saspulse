@@ -71,14 +71,33 @@ class CustomUser(models.Model):
         help_text="Roles assigned to this user"
     )
 
-    # Branch Assignment (for shop managers)
+    # Branch Assignment (for store managers)
+    # Changed from ForeignKey to ManyToMany to support multiple branch assignments
+    assigned_branches = models.ManyToManyField(
+        'cin7.Branch',
+        related_name='assigned_managers',
+        blank=True,
+        help_text="Assigned branches/shops for store managers (can have multiple)"
+    )
+
+    # Keep old field temporarily for backward compatibility during migration
     assigned_branch = models.ForeignKey(
         'cin7.Branch',
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='assigned_managers',
-        help_text="Assigned branch/shop for store managers"
+        related_name='assigned_managers_legacy',
+        help_text="DEPRECATED: Use assigned_branches instead"
+    )
+
+    # School Assignment (for sales team)
+    # Schools are represented via Product.sub_category field
+    assigned_schools = models.ManyToManyField(
+        'cin7.Product',
+        related_name='assigned_sales_users',
+        blank=True,
+        limit_choices_to={'sub_category__isnull': False},
+        help_text="Assigned schools for sales team (via Product sub_category)"
     )
 
     # Status & Flags
@@ -294,6 +313,165 @@ class CustomUser(models.Model):
         for role in self.roles.filter(is_active=True):
             all_permissions.update(role.permissions)
         return all_permissions
+
+    def has_nested_permission(self, permission_path):
+        """
+        Check nested permission using dot notation.
+
+        Examples:
+            user.has_nested_permission('dashboard.view')
+            user.has_nested_permission('replenishment.stores.review')
+            user.has_nested_permission('admin.users.create')
+
+        Args:
+            permission_path (str): Dot-separated permission path
+
+        Returns:
+            bool: True if user has the permission
+        """
+        if self.is_superuser:
+            return True
+
+        for role in self.roles.filter(is_active=True):
+            keys = permission_path.split('.')
+            value = role.permissions
+
+            for key in keys:
+                if isinstance(value, dict) and key in value:
+                    value = value[key]
+                else:
+                    break
+            else:
+                # Successfully traversed all keys
+                if value is True:
+                    return True
+
+        return False
+
+    def get_data_scope(self):
+        """
+        Get user's data scope (all, branch, school).
+
+        Returns:
+            str: 'all', 'branch', or 'school'
+        """
+        if self.is_superuser:
+            return 'all'
+
+        try:
+            for role in self.roles.filter(is_active=True):
+                scope_type = role.permissions.get('data_scope', {}).get('type')
+                if scope_type:
+                    return scope_type
+        except Exception:
+            # If there's an error accessing roles, default to 'all'
+            pass
+
+        return 'all'  # Default to no restrictions
+
+    def requires_data_filter(self):
+        """
+        Check if user requires data filtering.
+
+        Returns:
+            bool: True if user needs data filtered by branch/school
+        """
+        scope = self.get_data_scope()
+        return scope in ['branch', 'school']
+
+    def get_assigned_branch_names(self):
+        """
+        Get list of assigned branch names for filtering.
+        Provides backward compatibility with old assigned_branch field.
+
+        Returns:
+            list: List of branch names
+        """
+        try:
+            branches = list(self.assigned_branches.values_list('name', flat=True))
+
+            # Backward compatibility: include legacy assigned_branch if exists
+            if self.assigned_branch and self.assigned_branch.name not in branches:
+                branches.append(self.assigned_branch.name)
+
+            return branches
+        except Exception:
+            # If there's an error (e.g., table doesn't exist during migrations), return empty list
+            return []
+
+    def get_assigned_school_subcategories(self):
+        """
+        Get list of assigned school sub_category values for filtering.
+
+        Returns:
+            list: List of school sub_category values
+        """
+        try:
+            return list(self.assigned_schools.values_list('sub_category', flat=True).distinct())
+        except Exception:
+            # If there's an error (e.g., table doesn't exist during migrations), return empty list
+            return []
+
+    def has_perm(self, perm, obj=None):
+        """
+        Check if user has a specific permission.
+        Required by Django admin interface.
+
+        Args:
+            perm (str): Permission string (e.g., 'app.view_model' or 'dashboard.view')
+            obj: Optional object to check permissions against
+
+        Returns:
+            bool: True if user has permission
+        """
+        # Superusers have all permissions
+        if self.is_superuser:
+            return True
+
+        # Check if it's a hierarchical permission (contains dot)
+        if '.' in perm:
+            # Could be either Django permission (app.codename) or RBAC permission (section.action)
+            # Try RBAC first
+            if self.has_nested_permission(perm):
+                return True
+            # Fall back to checking if it's a Django permission
+            return self.has_permission(perm)
+
+        # Flat permission - use existing has_permission method
+        return self.has_permission(perm)
+
+    def has_module_perms(self, app_label):
+        """
+        Check if user has any permissions for a given app.
+        Required by Django admin interface.
+
+        Args:
+            app_label (str): Django app label (e.g., 'users', 'dashboard')
+
+        Returns:
+            bool: True if user has any permissions for this app
+        """
+        # Superusers have all permissions
+        if self.is_superuser:
+            return True
+
+        # Staff users can access admin
+        if self.is_staff:
+            # Map app labels to RBAC permissions
+            app_permission_map = {
+                'users': 'admin.users.view',
+                'dashboard': 'dashboard.view',
+                'cin7': 'admin.users.view',
+            }
+
+            # Check if user has permission for this app
+            if app_label in app_permission_map:
+                return self.has_nested_permission(app_permission_map[app_label])
+
+            # Default: allow if user is staff
+            return True
+
+        return False
 
     @property
     def is_authenticated(self):

@@ -195,3 +195,145 @@ class RequireAuthenticationMiddleware(MiddlewareMixin):
         except Exception:
             # If we can't redirect, just continue
             return None
+
+
+# ========================================
+# RBAC System Middleware (Added 2026-03-16)
+# ========================================
+
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+class PermissionCheckMiddleware(MiddlewareMixin):
+    """
+    Middleware to log unauthorized access attempts (403 responses).
+
+    This middleware tracks when users attempt to access resources they don't
+    have permission for, helping identify potential security issues or
+    misconfigured permissions.
+
+    Logs include:
+        - Username
+        - Request path
+        - IP address
+        - User agent
+        - HTTP method
+        - Timestamp (automatic)
+
+    Configuration:
+        Add to settings.py MIDDLEWARE:
+        MIDDLEWARE = [
+            ...
+            'users.middleware.PermissionCheckMiddleware',
+        ]
+    """
+
+    def process_response(self, request, response):
+        """
+        Process the response and log 403 errors.
+
+        Args:
+            request: Django request object
+            response: Django response object
+
+        Returns:
+            response: Unmodified response
+        """
+        # Log 403 (Forbidden) responses
+        if response.status_code == 403:
+            self._log_unauthorized_access(request)
+
+        return response
+
+    def _log_unauthorized_access(self, request):
+        """
+        Log details of an unauthorized access attempt.
+
+        Args:
+            request: HttpRequest object
+        """
+        if not isinstance(request.user, AnonymousUser):
+            logger.warning(
+                f"Unauthorized access attempt | "
+                f"User: {request.user.username} | "
+                f"Path: {request.path} | "
+                f"Method: {request.method} | "
+                f"IP: {self._get_client_ip(request)} | "
+                f"User-Agent: {request.META.get('HTTP_USER_AGENT', 'Unknown')[:100]}"
+            )
+        else:
+            logger.warning(
+                f"Unauthorized access attempt (unauthenticated) | "
+                f"Path: {request.path} | "
+                f"Method: {request.method} | "
+                f"IP: {self._get_client_ip(request)} | "
+                f"User-Agent: {request.META.get('HTTP_USER_AGENT', 'Unknown')[:100]}"
+            )
+
+    def _get_client_ip(self, request):
+        """
+        Get client IP address from request.
+
+        Handles X-Forwarded-For header for proxied requests.
+
+        Args:
+            request: HttpRequest object
+
+        Returns:
+            str: Client IP address
+        """
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded_for:
+            ip = x_forwarded_for.split(',')[0]
+        else:
+            ip = request.META.get('REMOTE_ADDR', 'Unknown')
+        return ip
+
+
+class DataScopeMiddleware(MiddlewareMixin):
+    """
+    Middleware to automatically add user data scope to request object.
+
+    This middleware adds data scope information to the request object,
+    making it easily accessible in views without having to call methods
+    repeatedly.
+
+    Adds to request:
+        - request.user_data_scope: 'all', 'branch', or 'school'
+        - request.user_branches: List of assigned branch names
+        - request.user_schools: List of assigned school sub_categories
+
+    Configuration:
+        Add to settings.py MIDDLEWARE:
+        MIDDLEWARE = [
+            ...
+            'users.middleware.DataScopeMiddleware',
+        ]
+
+    Usage in views:
+        def my_view(request):
+            if request.user_data_scope == 'branch':
+                # Filter by request.user_branches
+                queryset = queryset.filter(branch_name__in=request.user_branches)
+    """
+
+    def process_request(self, request):
+        """
+        Add data scope information to request.
+
+        Args:
+            request: Django request object
+        """
+        # Add data scope information to request
+        if not isinstance(request.user, AnonymousUser):
+            request.user_data_scope = request.user.get_data_scope()
+            request.user_branches = request.user.get_assigned_branch_names()
+            request.user_schools = request.user.get_assigned_school_subcategories()
+        else:
+            request.user_data_scope = None
+            request.user_branches = []
+            request.user_schools = []
+
+        return None

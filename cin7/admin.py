@@ -34,28 +34,28 @@ class BranchAdmin(admin.ModelAdmin):
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
     list_display = [
-        'cin7_id', 'style_code', 'name', 'brand', 'category',
-        'status', 'order_type', 'last_synced_at'
+        'cin7_id', 'style_code', 'name', 'brand',
+        'status', 'order_type', 'last_synced'
     ]
     list_filter = [
-        'status', 'order_type', 'brand', 'category', 'created_at'
+        'status', 'order_type', 'brand', 'created_at'
     ]
     search_fields = ['style_code', 'name', 'brand', 'cin7_id', 'tags']
     ordering = ['name']
-    readonly_fields = ['created_at', 'updated_at', 'last_synced_at', 'cin7_created_date', 'cin7_modified_date']
+    readonly_fields = ['created_at', 'updated_at', 'last_synced', 'cin7_created_date', 'cin7_modified_date']
 
     fieldsets = (
         ('Cin7 Information', {
             'fields': ('cin7_id', 'style_code', 'name', 'description', 'tags')
         }),
         ('Status & Dates', {
-            'fields': ('status', 'cin7_created_date', 'cin7_modified_date', 'last_synced_at')
+            'fields': ('status', 'cin7_created_date', 'cin7_modified_date', 'last_synced')
         }),
         ('Classification', {
-            'fields': ('brand', 'category', 'sub_category', 'category_id_array')
+            'fields': ('brand', 'sub_category', 'category_id_array', 'category_id', 'category_name')
         }),
         ('Supplier', {
-            'fields': ('supplier_id', 'supplier_code')
+            'fields': ('supplier_id',)
         }),
         ('Physical Dimensions', {
             'fields': ('weight', 'height', 'width', 'length', 'volume'),
@@ -65,7 +65,7 @@ class ProductAdmin(admin.ModelAdmin):
             'fields': ('stock_control', 'order_type', 'product_type', 'product_subtype')
         }),
         ('Product Options', {
-            'fields': ('option_label_1', 'option_label_2', 'option_label_3'),
+            'fields': ('option_label1', 'option_label2', 'option_label3'),
             'classes': ('collapse',)
         }),
         ('Accounting', {
@@ -96,14 +96,14 @@ class ProductOptionAdmin(admin.ModelAdmin):
     list_filter = ['status', 'created_at']
     search_fields = ['code', 'barcode', 'product__name', 'cin7_id']
     ordering = ['product', 'code']
-    readonly_fields = ['created_at', 'updated_at', 'last_synced_at', 'cin7_created_date', 'cin7_modified_date']
+    readonly_fields = ['created_at', 'updated_at', 'last_synced', 'cin7_created_date', 'cin7_modified_date']
 
     fieldsets = (
         ('Cin7 Information', {
             'fields': ('cin7_id', 'product', 'code', 'barcode', 'supplier_code')
         }),
         ('Status & Dates', {
-            'fields': ('status', 'cin7_created_date', 'cin7_modified_date', 'last_synced_at')
+            'fields': ('status', 'cin7_created_date', 'cin7_modified_date', 'last_synced')
         }),
         ('Variant Attributes', {
             'fields': ('option_1', 'option_2', 'option_3', 'size', 'size_id')
@@ -145,14 +145,14 @@ class ContactAdmin(admin.ModelAdmin):
     ]
     search_fields = ['company', 'first_name', 'last_name', 'email', 'cin7_id']
     ordering = ['company', 'last_name', 'first_name']
-    readonly_fields = ['created_at', 'updated_at', 'last_synced_at', 'cin7_created_date', 'cin7_modified_date', 'balance_owing']
+    readonly_fields = ['created_at', 'updated_at', 'last_synced', 'cin7_created_date', 'cin7_modified_date', 'balance_owing']
 
     fieldsets = (
         ('Cin7 Information', {
             'fields': ('cin7_id', 'type', 'company', 'first_name', 'last_name', 'job_title')
         }),
         ('Status & Dates', {
-            'fields': ('is_active', 'cin7_created_date', 'cin7_modified_date', 'last_synced_at')
+            'fields': ('is_active', 'cin7_created_date', 'cin7_modified_date', 'last_synced')
         }),
         ('Contact Information', {
             'fields': ('email', 'phone', 'mobile', 'fax', 'website')
@@ -210,7 +210,7 @@ class SalesOrderAdmin(admin.ModelAdmin):
     list_filter = ['status', 'stage', 'created_date', 'branch', 'is_void', 'is_approved']
     search_fields = ['reference', 'company', 'email', 'cin7_id']
     ordering = ['-created_date']
-    readonly_fields = ['created_at', 'updated_at', 'last_synced_at', 'created_date', 'modified_date', 'cancellation_date', 'status']
+    readonly_fields = ['created_at', 'updated_at', 'last_synced', 'created_date', 'modified_date', 'cancellation_date', 'status']
 
     fieldsets = (
         ('Cin7 Information', {
@@ -220,7 +220,7 @@ class SalesOrderAdmin(admin.ModelAdmin):
             'fields': ('status', 'stage', 'is_approved', 'is_void', 'created_by', 'processed_by')
         }),
         ('Dates', {
-            'fields': ('created_date', 'modified_date', 'cancellation_date', 'last_synced_at')
+            'fields': ('created_date', 'modified_date', 'cancellation_date', 'last_synced')
         }),
         ('Customer', {
             'fields': ('customer', 'member_id', 'member_email', 'first_name', 'last_name',
@@ -269,7 +269,7 @@ class PurchaseOrderAdmin(admin.ModelAdmin):
     list_filter = ['status', 'stage', 'order_date', 'branch', 'is_void', 'is_approved']
     search_fields = ['reference', 'company', 'email', 'cin7_id']
     ordering = ['-order_date']
-    readonly_fields = ['created_at', 'updated_at', 'last_synced_at', 'created_date', 'modified_date', 'status']
+    readonly_fields = ['created_at', 'updated_at', 'last_synced', 'created_date', 'modified_date', 'status']
 
     fieldsets = (
         ('Cin7 Information', {
@@ -279,7 +279,7 @@ class PurchaseOrderAdmin(admin.ModelAdmin):
             'fields': ('status', 'stage', 'is_approved', 'is_void', 'created_by', 'processed_by')
         }),
         ('Dates', {
-            'fields': ('created_date', 'modified_date', 'order_date', 'expected_date', 'received_date', 'last_synced_at')
+            'fields': ('created_date', 'modified_date', 'order_date', 'expected_date', 'received_date', 'last_synced')
         }),
         ('Supplier', {
             'fields': ('supplier', 'member_id', 'member_email', 'first_name', 'last_name',
@@ -324,12 +324,12 @@ class StockAdmin(admin.ModelAdmin):
     list_display = [
         'code', 'product_name', 'branch_name',
         'available', 'stock_on_hand', 'open_sales', 'incoming',
-        'last_synced_at'
+        'last_synced'
     ]
     list_filter = ['branch', 'created_at']
     search_fields = ['code', 'barcode', 'product_name', 'branch_name', 'style_code']
     ordering = ['product_name', 'code', 'branch_name']
-    readonly_fields = ['created_at', 'updated_at', 'last_synced_at', 'modified_date']
+    readonly_fields = ['created_at', 'updated_at', 'last_synced', 'modified_date']
 
     fieldsets = (
         ('Product Information', {
@@ -337,7 +337,7 @@ class StockAdmin(admin.ModelAdmin):
                       'style_code', 'code', 'barcode', 'product_name')
         }),
         ('Variant Attributes', {
-            'fields': ('option_1', 'option_2', 'option_3', 'size'),
+            'fields': ('option1', 'option2', 'option3', 'size'),
             'classes': ('collapse',)
         }),
         ('Branch', {
@@ -347,7 +347,7 @@ class StockAdmin(admin.ModelAdmin):
             'fields': ('available', 'stock_on_hand', 'open_sales', 'incoming', 'virtual', 'holding')
         }),
         ('Dates', {
-            'fields': ('modified_date', 'last_synced_at')
+            'fields': ('modified_date', 'last_synced')
         }),
         ('Metadata', {
             'fields': ('created_at', 'updated_at'),

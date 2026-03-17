@@ -75,7 +75,7 @@
                                         {% endif %}
 
                                         <!-- Registration Form -->
-                                        <form method="post" action="{% url 'users:register' %}">
+                                        <form method="post" action="{% url 'auth:register' %}">
                                             {% csrf_token %}
 
                                             <!-- Username Field -->
@@ -188,7 +188,7 @@
                                             <button class="btn btn-primary w-100 mb-3" type="submit">Sign Up</button>
 
                                             <div class="text-center">
-                                                <a class="fs-9 fw-bold" href="{% url 'users:login' %}">Sign in to an existing account</a>
+                                                <a class="fs-9 fw-bold" href="{% url 'auth:login' %}">Sign in to an existing account</a>
                                             </div>
                                         </form>
                                     </div>

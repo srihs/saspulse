@@ -7,12 +7,13 @@ Stock Value vs BTS Sales Analysis Dashboard
 from django.shortcuts import render, redirect
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
-from django.contrib.auth.decorators import login_required
+from users.decorators import login_required, permission_required
 from django.db.models import Sum, Count, F, DecimalField, Value
 from django.db.models.functions import Coalesce
 from decimal import Decimal
 from users.auth_backend import CustomAuthBackend
 from cin7.models import SalesOrder, SalesOrderLineItem, Stock, Product
+from dashboard.utils.permissions import apply_branch_filter, apply_school_filter, apply_data_scope
 
 auth_backend = CustomAuthBackend()
 
@@ -947,6 +948,8 @@ def calculate_slow_moving_schools(start_date=None, end_date=None, limit=10):
     return results
 
 
+@login_required()
+@permission_required('dashboard.view')
 @require_http_methods(["GET"])
 def dashboard_home(request):
     """
@@ -956,7 +959,7 @@ def dashboard_home(request):
 
     # Check if user is authenticated
     if not auth_backend.is_authenticated(request):
-        return redirect('users:login')
+        return redirect('auth:login')
 
     # Get date parameters from request or use defaults
     start_date = request.GET.get('start_date', BTS_START_DATE)
@@ -1026,6 +1029,8 @@ def dashboard_home(request):
     return render(request, 'dashboard/home.html', context)
 
 
+@login_required()
+@permission_required('dashboard.view')
 @require_http_methods(["GET"])
 def dashboard_api(request):
     """
@@ -1377,6 +1382,8 @@ def generate_simple_forecast(historical_data):
     }
 
 
+@login_required()
+@permission_required('dashboard.view')
 @require_http_methods(["GET"])
 def bts_forecasting(request):
     """
@@ -1384,7 +1391,7 @@ def bts_forecasting(request):
     Predict next year's BTS sales (Jan-Feb 2027)
     """
     if not auth_backend.is_authenticated(request):
-        return redirect('users:login')
+        return redirect('auth:login')
 
     from django.core.cache import cache
 
@@ -1579,6 +1586,7 @@ def forecasting_filter_options(request):
 
 
 @login_required
+@permission_required('forecasting.view')
 def sales_forecasting(request):
     """
     Main sales forecasting dashboard with AI/ML predictions
@@ -1630,7 +1638,7 @@ def sales_forecasting(request):
         }
 
     # Helper function to aggregate product forecasts by shop
-    def get_shop_forecasts_from_products(start_date, end_date, search_query=None, filters=None):
+    def get_shop_forecasts_from_products(start_date, end_date, search_query=None, filters=None, user_school_subcategories=None):
         """
         Aggregate product-level forecasts by shop category (category_name ending with 'Shop')
 
@@ -1648,6 +1656,7 @@ def sales_forecasting(request):
             end_date: End date for forecast range
             search_query: General search query (legacy)
             filters: Dictionary containing specific filters (school, product, style_code, shop, category)
+            user_school_subcategories: List of school sub_categories for data scope filtering (Sales Team)
 
         Returns:
             list: List of shop forecast dictionaries with aggregated data
@@ -1659,6 +1668,7 @@ def sales_forecasting(request):
         logger.info(f'Date range: {start_date} to {end_date}')
         logger.info(f'Search query: {search_query}')
         logger.info(f'Filters: {filters}')
+        logger.info(f'User school filter: {user_school_subcategories}')
 
         # Build SQL query to fetch product forecasts with shop category
         sql = """
@@ -1681,6 +1691,12 @@ def sales_forecasting(request):
 
         # Base param for shop filter (double %% escapes the % in SQL)
         params = ['%Shop']
+
+        # DATA SCOPE: Filter by user's assigned schools (Sales Team)
+        if user_school_subcategories:
+            placeholders = ', '.join(['%s'] * len(user_school_subcategories))
+            sql += f" AND p.sub_category IN ({placeholders})"
+            params.extend(user_school_subcategories)
 
         # Apply search filter if provided
         if search_query:
@@ -1877,6 +1893,19 @@ def sales_forecasting(request):
     shop_filter = request.GET.get('shop', '').strip()
     category_filter = request.GET.get('category', '').strip()
 
+    # ========== DATA SCOPE FILTERING ==========
+    # Apply school-based filtering for Sales Team users
+    user = request.user
+    data_scope = user.get_data_scope()
+    user_school_subcategories = []
+
+    if data_scope == 'school' and not user.is_superuser:
+        user_school_subcategories = user.get_assigned_school_subcategories()
+        # If user has school scope but no assignments, they see no data
+        if not user_school_subcategories:
+            logger = logging.getLogger(__name__)
+            logger.warning(f'User {user.username} has school scope but no assigned schools')
+
     # Date range parameters (new approach)
     start_date_str = request.GET.get('start_date')
     end_date_str = request.GET.get('end_date')
@@ -2005,6 +2034,12 @@ def sales_forecasting(request):
         # Filter out products without school assignment
         sql += " AND p.sub_category IS NOT NULL AND p.sub_category != ''"
 
+        # DATA SCOPE: Filter by user's assigned schools (Sales Team)
+        if user_school_subcategories:
+            placeholders = ', '.join(['%s'] * len(user_school_subcategories))
+            sql += f" AND p.sub_category IN ({placeholders})"
+            params.extend(user_school_subcategories)
+
         # Add search query if provided
         if search_query:
             sql += " AND (sf.entity_name LIKE %s OR p.name LIKE %s OR p.sub_category LIKE %s OR p.category_name LIKE %s)"
@@ -2053,6 +2088,12 @@ def sales_forecasting(request):
             """
             params = []
 
+            # DATA SCOPE: Filter by user's assigned schools (Sales Team)
+            if user_school_subcategories:
+                placeholders = ', '.join(['%s'] * len(user_school_subcategories))
+                sql += f" AND p.sub_category IN ({placeholders})"
+                params.extend(user_school_subcategories)
+
             # Add school filter if provided
             if school_filter:
                 sql += " AND p.sub_category = %s"
@@ -2100,6 +2141,12 @@ def sales_forecasting(request):
                 """
                 params = [category_filter]
 
+                # DATA SCOPE: Filter by user's assigned schools (Sales Team)
+                if user_school_subcategories:
+                    placeholders = ', '.join(['%s'] * len(user_school_subcategories))
+                    sql += f" AND p.sub_category IN ({placeholders})"
+                    params.extend(user_school_subcategories)
+
                 if search_query:
                     sql += " AND (sf.entity_name LIKE %s OR p.name LIKE %s)"
                     params.extend([f'%{search_query}%', f'%{search_query}%'])
@@ -2128,6 +2175,12 @@ def sales_forecasting(request):
                         WHERE sf.aggregation_level = 'product'
                     """
                     params = []
+
+                    # DATA SCOPE: Filter by user's assigned schools (Sales Team)
+                    if user_school_subcategories:
+                        placeholders = ', '.join(['%s'] * len(user_school_subcategories))
+                        sql += f" AND p.sub_category IN ({placeholders})"
+                        params.extend(user_school_subcategories)
 
                     if product_filter:
                         sql += " AND p.cin7_id = %s"
@@ -2949,6 +3002,7 @@ def sales_forecasting(request):
 
 
 @login_required
+@permission_required('forecasting.view')
 def forecast_product_breakdown(request, school_name):
     """
     Get product-level breakdown for a specific school or shop
@@ -3211,6 +3265,7 @@ def forecast_product_breakdown(request, school_name):
 
 
 @login_required
+@permission_required('replenishment.stores.review')
 def store_manager_replenishment(request):
     """
     Store Manager Replenishment Dashboard
@@ -3499,6 +3554,7 @@ def store_manager_replenishment(request):
 
 
 @login_required
+@permission_required('replenishment.stores.review')
 @require_http_methods(["POST"])
 def approve_replenishment(request, request_id):
     """
@@ -3515,10 +3571,31 @@ def approve_replenishment(request, request_id):
         approved_quantity = data.get('quantity')
         comment = data.get('comment', '')
 
+        # ========== DATA SCOPE FILTERING ==========
+        user = request.user
+        data_scope = user.get_data_scope()
+
+        # Build WHERE clause for branch filtering
+        branch_filter_sql = ""
+        branch_params = []
+
+        if data_scope == 'branch' and not user.is_superuser:
+            user_branch_names = user.get_assigned_branch_names()
+            if not user_branch_names:
+                return JsonResponse({
+                    'success': False,
+                    'error': 'You have no assigned branches'
+                }, status=403)
+
+            # Add branch filtering to SQL
+            placeholders = ', '.join(['%s'] * len(user_branch_names))
+            branch_filter_sql = f" AND branch_id IN (SELECT id FROM cin7_sync_branch WHERE name IN ({placeholders}))"
+            branch_params = user_branch_names
+
         # Update using raw SQL to avoid ORM issues
         with connection.cursor() as cursor:
             if action == 'approve':
-                cursor.execute("""
+                sql = """
                     UPDATE dashboard_replenishmentrequest
                     SET status = 'approved',
                         store_approved_quantity = suggested_quantity,
@@ -3527,10 +3604,12 @@ def approve_replenishment(request, request_id):
                         store_approved_at = NOW(),
                         updated_at = NOW()
                     WHERE id = %s
-                """, [comment, request.user.id, request_id])
+                """ + branch_filter_sql
+                params = [comment, request.user.id, request_id] + branch_params
+                cursor.execute(sql, params)
 
             elif action == 'modify':
-                cursor.execute("""
+                sql = """
                     UPDATE dashboard_replenishmentrequest
                     SET status = 'modified',
                         store_approved_quantity = %s,
@@ -3539,10 +3618,12 @@ def approve_replenishment(request, request_id):
                         store_approved_at = NOW(),
                         updated_at = NOW()
                     WHERE id = %s
-                """, [float(approved_quantity), comment, request.user.id, request_id])
+                """ + branch_filter_sql
+                params = [float(approved_quantity), comment, request.user.id, request_id] + branch_params
+                cursor.execute(sql, params)
 
             elif action == 'reject':
-                cursor.execute("""
+                sql = """
                     UPDATE dashboard_replenishmentrequest
                     SET status = 'rejected',
                         store_approved_quantity = 0,
@@ -3551,7 +3632,9 @@ def approve_replenishment(request, request_id):
                         store_approved_at = NOW(),
                         updated_at = NOW()
                     WHERE id = %s
-                """, [comment, request.user.id, request_id])
+                """ + branch_filter_sql
+                params = [comment, request.user.id, request_id] + branch_params
+                cursor.execute(sql, params)
 
         return JsonResponse({
             'success': True,
@@ -3566,6 +3649,7 @@ def approve_replenishment(request, request_id):
 
 
 @login_required
+@permission_required('replenishment.demand_planning.view')
 def dp_team_replenishment(request):
     """
     Demand Planning Team Dashboard
@@ -3713,6 +3797,7 @@ def dp_team_replenishment(request):
 
 
 @login_required
+@permission_required('replenishment.demand_planning.approve')
 @require_http_methods(["POST"])
 def dp_approve_replenishment(request, request_id):
     """
@@ -3779,11 +3864,17 @@ def dp_approve_replenishment(request, request_id):
 
 
 @login_required
+@permission_required('replenishment.stores.submit_request')
 @require_http_methods(["POST"])
 def submit_store_replenishment_request(request):
     """
     Submit store manager's replenishment request batch
     Creates a batch and items from the cart data
+
+    Note: Data scope filtering is implicit here. Store managers with branch scope
+    can only submit requests for products they saw in the forecasting view,
+    which is already filtered by their assigned branches. The cart data comes from
+    the client-side and represents products they were authorized to view.
     """
     from dashboard.models import StoreReplenishmentRequestBatch, StoreReplenishmentRequestItem
     from django.utils import timezone
@@ -3870,13 +3961,20 @@ def submit_store_replenishment_request(request):
 
 
 @login_required
+@permission_required('replenishment.stores.view')
 def store_replenishment_requests_list(request):
     """
     View all replenishment requests for current user
+
+    Note: Data scope filtering is implicit here because users can only
+    see their own requests (requested_by=request.user). Store managers
+    with branch scope would only have created requests for products they
+    could see in the forecasting view, which is already filtered by branch.
     """
     from dashboard.models import StoreReplenishmentRequestBatch
 
     # Get all requests for this user
+    # DATA SCOPE: Already filtered by requested_by=request.user
     requests = StoreReplenishmentRequestBatch.objects.filter(
         requested_by=request.user
     ).order_by('-request_date')
@@ -3927,6 +4025,7 @@ def store_replenishment_request_detail(request, request_number):
 
 
 @login_required
+@permission_required('replenishment.demand_planning.approve')
 def dp_replenishment_approval(request):
     """
     DP Team view to review and approve/reject store-approved replenishment requests
@@ -3950,6 +4049,7 @@ def dp_replenishment_approval(request):
 
 
 @login_required
+@permission_required('replenishment.demand_planning.approve')
 @require_http_methods(["POST"])
 def dp_approve_request(request, batch_id):
     """
@@ -4002,6 +4102,7 @@ def dp_approve_request(request, batch_id):
 
 
 @login_required
+@permission_required('replenishment.demand_planning.approve')
 @require_http_methods(["POST"])
 def dp_reject_request(request, batch_id):
     """
@@ -4181,6 +4282,7 @@ def dp_replenishment_request_detail(request, request_number):
 
 
 @login_required
+@permission_required('replenishment.demand_planning.view_all_requests')
 def dp_replenishment_requests_list(request):
     """
     DP Team view to see ALL replenishment requests with comprehensive filters
@@ -4276,6 +4378,7 @@ def dp_replenishment_requests_list(request):
 
 
 @login_required
+@permission_required('forecasting.view')
 def forecast_health_dashboard(request):
     """
     Forecast Health Monitoring Dashboard
@@ -4478,6 +4581,7 @@ def past_sales_data(request):
 # ==================== ANALYTICAL REPORTS ====================
 
 @login_required
+@permission_required('dashboard.view')
 def bts_sellthrough_report(request):
     """
     BTS Sell-Through Ratio Report
@@ -4631,6 +4735,7 @@ def bts_sellthrough_report(request):
 
 
 @login_required
+@permission_required('dashboard.view')
 def inventory_health_dashboard(request):
     """
     Inventory Health Score Dashboard
@@ -4869,6 +4974,7 @@ def inventory_health_dashboard(request):
 
 
 @login_required
+@permission_required('dashboard.view')
 def inventory_alignment_matrix(request):
     """
     Sales vs Inventory Alignment Matrix
@@ -5100,6 +5206,8 @@ def inventory_alignment_matrix(request):
 
 # ==================== STOCK MANAGEMENT REPORTS ====================
 
+@login_required()
+@permission_required('dashboard.view')
 def stock_turn_rate_report(request):
     """
     Stock Turn Rate Report (DP-SM-001)
@@ -5247,6 +5355,8 @@ def stock_turn_rate_report(request):
     return render(request, 'dashboard/stock_turn_rate_report.html', context)
 
 
+@login_required()
+@permission_required('dashboard.view')
 def days_of_inventory_report(request):
     """
     Days of Inventory Report (DP-SM-002)
@@ -5399,6 +5509,8 @@ def days_of_inventory_report(request):
     return render(request, 'dashboard/days_of_inventory_report.html', context)
 
 
+@login_required()
+@permission_required('dashboard.view')
 def dead_stock_report(request):
     """
     Dead Stock Report (DP-SM-003)
@@ -5515,6 +5627,8 @@ def dead_stock_report(request):
     return render(request, 'dashboard/dead_stock_report.html', context)
 
 
+@login_required()
+@permission_required('dashboard.view')
 def top_best_sellers_report(request):
     """
     Top 20 Best Sellers Report (DP-SM-004)
@@ -5659,6 +5773,8 @@ def top_best_sellers_report(request):
     return render(request, 'dashboard/top_best_sellers_report.html', context)
 
 
+@login_required()
+@permission_required('dashboard.view')
 def abc_analysis_report(request):
     """
     ABC Analysis Report (DP-ABC-001, DP-ABC-002)
@@ -5830,3 +5946,218 @@ def abc_analysis_report(request):
     }
 
     return render(request, 'dashboard/abc_analysis_report.html', context)
+
+
+@login_required
+@permission_required('replenishment.daily_pick_list.view')
+def store_daily_pick_list(request):
+    """
+    Generate daily pick list for store replenishment based on previous day's sales
+
+    Features:
+    - Shows products sold yesterday
+    - Calculates pick quantity based on sales velocity and current stock
+    - Prioritizes items by urgency (low stock, high sales)
+    - Helps store managers prepare warehouse transfers for shelf replenishment
+    """
+    from datetime import date, timedelta
+    from django.db.models import Sum, F, Q, Count
+    from decimal import Decimal
+    from cin7.models import SalesOrderLineItem, Stock, Branch
+
+    # Get user's branch
+    user = request.user
+    is_admin = user.is_superuser or user.is_staff
+    assigned_branch = getattr(user, 'assigned_branch', None)
+
+    if not is_admin and not assigned_branch:
+        return render(request, 'dashboard/store_daily_pick_list.html', {
+            'error': 'You are not assigned to a branch. Please contact your administrator.',
+            'pick_list': [],
+        })
+
+    # Get target date from request (default: yesterday)
+    target_date_str = request.GET.get('date')
+    if target_date_str:
+        try:
+            target_date = date.fromisoformat(target_date_str)
+        except ValueError:
+            target_date = date.today() - timedelta(days=1)
+    else:
+        target_date = date.today() - timedelta(days=1)
+
+    # Get category filter (optional)
+    category_filter = request.GET.get('category', '')
+
+    # Get minimum quantity threshold (default: 1)
+    try:
+        min_quantity = int(request.GET.get('min_qty', 1))
+    except ValueError:
+        min_quantity = 1
+
+    # Query yesterday's sales for the branch
+    # Use invoice_date for completed sales
+    sales_query = SalesOrderLineItem.objects.filter(
+        sales_order__invoice_date__date=target_date,
+        sales_order__is_void=False
+    )
+
+    # Filter by branch if not admin
+    if not is_admin and assigned_branch:
+        # Need to filter by branch - sales orders don't have direct branch relationship
+        # We'll use the stock table to infer which products are in this branch
+        # Use branch_name (VARCHAR) instead of branch ForeignKey to avoid DB column issues
+        branch_product_ids = Stock.objects.filter(
+            branch_name=assigned_branch.name,
+            stock_on_hand__gt=0
+        ).values_list('cin7_product_id', flat=True)
+
+        sales_query = sales_query.filter(cin7_product_id__in=branch_product_ids)
+
+    # Filter by category if specified
+    if category_filter:
+        sales_query = sales_query.filter(product__category_name__icontains=category_filter)
+
+    # Aggregate sales by product
+    sales_data = sales_query.values(
+        'cin7_product_id',
+        'code',
+        'name',
+        product_category=F('product__category_name')
+    ).annotate(
+        quantity_sold=Sum('qty'),
+        order_count=Count('cin7_sales_order_id', distinct=True)
+    ).filter(
+        quantity_sold__gte=min_quantity
+    ).order_by('-quantity_sold')
+
+    # Build pick list with stock information
+    pick_list = []
+    total_items = 0
+    total_pick_quantity = 0
+    categories = set()
+
+    for sale in sales_data:
+        product_id = sale['cin7_product_id']
+        sku = sale['code']
+        product_name = sale['name']
+        category = sale['product_category'] or 'Uncategorized'
+        qty_sold = float(sale['quantity_sold'])
+        order_count = sale['order_count']
+
+        # Get current stock for this product at the branch
+        # Use code (SKU) to match instead of cin7_product_id since that's more reliable
+        stock_query = Stock.objects.filter(code=sku)
+
+        if not is_admin and assigned_branch:
+            stock_query = stock_query.filter(branch_name=assigned_branch.name)
+
+        stock_record = stock_query.first()
+
+        if stock_record:
+            current_stock = float(stock_record.stock_on_hand or 0)
+            incoming_stock = float(stock_record.incoming or 0)
+            branch_name = stock_record.branch_name
+        else:
+            # Product not in stock table for this branch
+            current_stock = 0
+            incoming_stock = 0
+            branch_name = assigned_branch.name if assigned_branch else 'Unknown'
+
+        # Calculate pick quantity
+        # Strategy: Maintain 2-3 days of stock based on yesterday's sales
+        # Pick Quantity = (Yesterday's Sales * 2.5) - Current Stock
+        daily_demand = qty_sold
+        target_stock = daily_demand * 2.5  # 2.5 days buffer
+        available_stock = current_stock + incoming_stock
+
+        pick_qty = max(0, target_stock - available_stock)
+
+        # Round up to nearest whole number
+        pick_qty = int(pick_qty) if pick_qty > 0 else 0
+
+        # Determine priority based on stock situation
+        # Critical: Less than 1 day of stock
+        # High: 1-2 days of stock
+        # Medium: 2-3 days of stock
+        # Low: More than 3 days of stock
+
+        if daily_demand > 0:
+            days_of_stock = current_stock / daily_demand
+        else:
+            days_of_stock = 999
+
+        if days_of_stock < 1:
+            priority = 'CRITICAL'
+            priority_score = 1
+        elif days_of_stock < 2:
+            priority = 'HIGH'
+            priority_score = 2
+        elif days_of_stock < 3:
+            priority = 'MEDIUM'
+            priority_score = 3
+        else:
+            priority = 'LOW'
+            priority_score = 4
+
+        # Only include items that need picking OR have very low stock
+        if pick_qty > 0 or days_of_stock < 1:
+            pick_list.append({
+                'sku': sku,
+                'product_name': product_name,
+                'category': category,
+                'qty_sold': int(qty_sold),
+                'order_count': order_count,
+                'current_stock': int(current_stock),
+                'incoming_stock': int(incoming_stock),
+                'pick_qty': pick_qty,
+                'target_stock': int(target_stock),
+                'days_of_stock': round(days_of_stock, 1),
+                'priority': priority,
+                'priority_score': priority_score,
+                'branch_name': branch_name,
+            })
+
+            total_items += 1
+            total_pick_quantity += pick_qty
+            categories.add(category)
+
+    # Sort by priority (critical first), then by quantity sold (high to low)
+    pick_list.sort(key=lambda x: (x['priority_score'], -x['qty_sold']))
+
+    # Group by priority for display
+    critical_items = [item for item in pick_list if item['priority'] == 'CRITICAL']
+    high_items = [item for item in pick_list if item['priority'] == 'HIGH']
+    medium_items = [item for item in pick_list if item['priority'] == 'MEDIUM']
+    low_items = [item for item in pick_list if item['priority'] == 'LOW']
+
+    # Get unique categories for filter dropdown
+    all_categories = []
+    if is_admin:
+        from cin7.models import Product
+        all_categories = Product.objects.values_list('category_name', flat=True).distinct().order_by('category_name')
+    elif assigned_branch:
+        # Use branch_name (VARCHAR) instead of branch ForeignKey to avoid DB column issues
+        branch_products = Stock.objects.filter(branch_name=assigned_branch.name).values_list('cin7_product_id', flat=True)
+        from cin7.models import Product
+        all_categories = Product.objects.filter(cin7_id__in=branch_products).values_list('category_name', flat=True).distinct().order_by('category_name')
+
+    context = {
+        'target_date': target_date,
+        'pick_list': pick_list,
+        'critical_items': critical_items,
+        'high_items': high_items,
+        'medium_items': medium_items,
+        'low_items': low_items,
+        'total_items': total_items,
+        'total_pick_quantity': total_pick_quantity,
+        'category_count': len(categories),
+        'branch_name': assigned_branch.name if assigned_branch else 'All Branches',
+        'is_admin': is_admin,
+        'all_categories': all_categories,
+        'selected_category': category_filter,
+        'min_quantity': min_quantity,
+        'today': date.today(),
+    }
+
+    return render(request, 'dashboard/store_daily_pick_list.html', context)
