@@ -12,15 +12,20 @@ from django.urls import reverse
 from .auth_backend import AnonymousUser
 
 
-def login_required(redirect_to='/auth/login/', raise_exception=False):
+def login_required(func=None, redirect_to='/auth/login/', raise_exception=False):
     """
     Decorator to require user authentication for a view.
 
     Args:
+        func: The view function (when used without parentheses)
         redirect_to (str): URL to redirect to if not authenticated
         raise_exception (bool): If True, return 403 instead of redirecting
 
     Usage:
+        @login_required
+        def my_view(request):
+            ...
+
         @login_required()
         def my_view(request):
             ...
@@ -57,6 +62,9 @@ def login_required(redirect_to='/auth/login/', raise_exception=False):
 
         return wrapper
 
+    # Allow usage with or without parentheses
+    if func is not None:
+        return decorator(func)
     return decorator
 
 
