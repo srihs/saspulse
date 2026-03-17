@@ -1561,14 +1561,15 @@ def forecasting_filter_options(request):
         """)
         result['style_codes'] = [{'value': row[0], 'label': row[0]} for row in cursor.fetchall()]
 
-    # Get shops (root categories from ProductCategory table ending with 'Shop')
+    # Get shops (categories ending with 'Shop' or 'Store' from Product table)
     with connection.cursor() as cursor:
         cursor.execute("""
-            SELECT DISTINCT name
-            FROM cin7_productcategory
-            WHERE parent_id IS NULL
-              AND name LIKE '%% Shop'
-            ORDER BY name
+            SELECT DISTINCT category_name
+            FROM cin7_sync_product
+            WHERE category_name LIKE '%% Shop'
+               OR category_name LIKE '%% Store'
+               OR category_name = 'Shop'
+            ORDER BY category_name
         """)
         result['shops'] = [{'value': row[0], 'label': row[0]} for row in cursor.fetchall()]
 
@@ -5178,12 +5179,12 @@ def inventory_alignment_matrix(request):
         customers = [row[0] for row in cursor.fetchall()]
 
         cursor.execute("""
-            SELECT DISTINCT name
-            FROM cin7_productcategory
-            WHERE parent_id IS NULL
-              AND name LIKE %s
-            ORDER BY name
-        """, ['% Shop'])
+            SELECT DISTINCT category_name
+            FROM cin7_sync_product
+            WHERE category_name LIKE %s
+               OR category_name LIKE %s
+            ORDER BY category_name
+        """, ['% Shop', '% Store'])
         categories = [row[0] for row in cursor.fetchall()]
 
     # Calculate summary stats
