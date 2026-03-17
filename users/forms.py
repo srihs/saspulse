@@ -8,22 +8,171 @@ import json
 class RoleForm(forms.ModelForm):
     """
     Form for creating and editing roles.
-    Includes custom validation for the permissions JSON field.
+    Uses individual checkboxes for a user-friendly permissions interface.
     """
-    permissions_json = forms.CharField(
-        widget=forms.Textarea(attrs={
-            'rows': 10,
-            'class': 'form-control',
-            'placeholder': 'Enter permissions as JSON, e.g., {"can_edit": true, "can_delete": false}'
-        }),
+    # Dashboard permissions
+    perm_dashboard_view = forms.BooleanField(
         required=False,
-        label='Permissions (JSON)',
-        help_text='Enter permissions as valid JSON. Example: {"can_view": true, "can_edit": false}'
+        label='View Dashboard',
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'})
+    )
+    perm_dashboard_export = forms.BooleanField(
+        required=False,
+        label='Export Dashboard Data',
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'})
+    )
+
+    # Forecasting permissions
+    perm_forecasting_view = forms.BooleanField(
+        required=False,
+        label='View Forecasts',
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'})
+    )
+    perm_forecasting_edit = forms.BooleanField(
+        required=False,
+        label='Edit Forecasts',
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'})
+    )
+    perm_forecasting_export = forms.BooleanField(
+        required=False,
+        label='Export Forecasts',
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'})
+    )
+
+    # Replenishment - Stores permissions
+    perm_replenishment_stores_view = forms.BooleanField(
+        required=False,
+        label='View Store Requests',
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'})
+    )
+    perm_replenishment_stores_review = forms.BooleanField(
+        required=False,
+        label='Review Store Requests',
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'})
+    )
+    perm_replenishment_stores_create = forms.BooleanField(
+        required=False,
+        label='Create Store Requests',
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'})
+    )
+    perm_replenishment_stores_edit = forms.BooleanField(
+        required=False,
+        label='Edit Store Requests',
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'})
+    )
+    perm_replenishment_stores_submit = forms.BooleanField(
+        required=False,
+        label='Submit Store Requests',
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'})
+    )
+
+    # Replenishment - Demand Planning permissions
+    perm_replenishment_demand_view = forms.BooleanField(
+        required=False,
+        label='View Demand Planning',
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'})
+    )
+    perm_replenishment_demand_approve = forms.BooleanField(
+        required=False,
+        label='Approve Requests',
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'})
+    )
+    perm_replenishment_demand_reject = forms.BooleanField(
+        required=False,
+        label='Reject Requests',
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'})
+    )
+    perm_replenishment_demand_view_all = forms.BooleanField(
+        required=False,
+        label='View All Requests',
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'})
+    )
+
+    # Replenishment - Daily Pick List permissions
+    perm_replenishment_picklist_view = forms.BooleanField(
+        required=False,
+        label='View Daily Pick List',
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'})
+    )
+    perm_replenishment_picklist_export = forms.BooleanField(
+        required=False,
+        label='Export Daily Pick List',
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'})
+    )
+
+    # Admin - Users permissions
+    perm_admin_users_view = forms.BooleanField(
+        required=False,
+        label='View Users',
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'})
+    )
+    perm_admin_users_create = forms.BooleanField(
+        required=False,
+        label='Create Users',
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'})
+    )
+    perm_admin_users_edit = forms.BooleanField(
+        required=False,
+        label='Edit Users',
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'})
+    )
+    perm_admin_users_delete = forms.BooleanField(
+        required=False,
+        label='Delete Users',
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'})
+    )
+
+    # Admin - Roles permissions
+    perm_admin_roles_view = forms.BooleanField(
+        required=False,
+        label='View Roles',
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'})
+    )
+    perm_admin_roles_create = forms.BooleanField(
+        required=False,
+        label='Create Roles',
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'})
+    )
+    perm_admin_roles_edit = forms.BooleanField(
+        required=False,
+        label='Edit Roles',
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'})
+    )
+    perm_admin_roles_delete = forms.BooleanField(
+        required=False,
+        label='Delete Roles',
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'})
+    )
+
+    # Admin - Settings permissions
+    perm_admin_settings_view = forms.BooleanField(
+        required=False,
+        label='View Settings',
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'})
+    )
+    perm_admin_settings_edit = forms.BooleanField(
+        required=False,
+        label='Edit Settings',
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'})
+    )
+
+    # Data Scope
+    data_scope = forms.ChoiceField(
+        required=False,
+        label='Data Access Scope',
+        choices=[
+            ('all', 'All Data (No Restrictions)'),
+            ('branch', 'Branch Level (Store Managers)'),
+            ('school', 'School Level (Sales Team)')
+        ],
+        initial='all',
+        widget=forms.RadioSelect(attrs={'class': 'form-check-input'})
     )
 
     class Meta:
         model = Role
         fields = ['name', 'description', 'is_active']
+        exclude = ['permissions']  # Exclude the model's permissions field
         widgets = {
             'name': forms.TextInput(attrs={
                 'class': 'form-control',
@@ -41,40 +190,123 @@ class RoleForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
         if self.instance and self.instance.pk:
-            # Pre-populate the JSON field with formatted JSON
-            self.fields['permissions_json'].initial = json.dumps(
-                self.instance.permissions,
-                indent=2
-            )
+            # Pre-populate checkboxes from existing permissions JSON
+            perms = self.instance.permissions
 
-    def clean_permissions_json(self):
-        """
-        Validate that the permissions field contains valid JSON.
-        """
-        permissions_str = self.cleaned_data.get('permissions_json', '').strip()
+            # Dashboard
+            self.fields['perm_dashboard_view'].initial = perms.get('dashboard', {}).get('view', False)
+            self.fields['perm_dashboard_export'].initial = perms.get('dashboard', {}).get('export', False)
 
-        if not permissions_str:
-            return {}
+            # Forecasting
+            self.fields['perm_forecasting_view'].initial = perms.get('forecasting', {}).get('view', False)
+            self.fields['perm_forecasting_edit'].initial = perms.get('forecasting', {}).get('edit', False)
+            self.fields['perm_forecasting_export'].initial = perms.get('forecasting', {}).get('export', False)
 
-        try:
-            permissions = json.loads(permissions_str)
-            if not isinstance(permissions, dict):
-                raise forms.ValidationError(
-                    'Permissions must be a JSON object (dictionary).'
-                )
-            return permissions
-        except json.JSONDecodeError as e:
-            raise forms.ValidationError(
-                f'Invalid JSON format: {str(e)}'
-            )
+            # Replenishment - Stores
+            stores = perms.get('replenishment', {}).get('stores', {})
+            self.fields['perm_replenishment_stores_view'].initial = stores.get('view', False)
+            self.fields['perm_replenishment_stores_review'].initial = stores.get('review', False)
+            self.fields['perm_replenishment_stores_create'].initial = stores.get('create_request', False)
+            self.fields['perm_replenishment_stores_edit'].initial = stores.get('edit_request', False)
+            self.fields['perm_replenishment_stores_submit'].initial = stores.get('submit_request', False)
+
+            # Replenishment - Demand Planning
+            demand = perms.get('replenishment', {}).get('demand_planning', {})
+            self.fields['perm_replenishment_demand_view'].initial = demand.get('view', False)
+            self.fields['perm_replenishment_demand_approve'].initial = demand.get('approve', False)
+            self.fields['perm_replenishment_demand_reject'].initial = demand.get('reject', False)
+            self.fields['perm_replenishment_demand_view_all'].initial = demand.get('view_all_requests', False)
+
+            # Replenishment - Pick List
+            picklist = perms.get('replenishment', {}).get('daily_pick_list', {})
+            self.fields['perm_replenishment_picklist_view'].initial = picklist.get('view', False)
+            self.fields['perm_replenishment_picklist_export'].initial = picklist.get('export', False)
+
+            # Admin - Users
+            users = perms.get('admin', {}).get('users', {})
+            self.fields['perm_admin_users_view'].initial = users.get('view', False)
+            self.fields['perm_admin_users_create'].initial = users.get('create', False)
+            self.fields['perm_admin_users_edit'].initial = users.get('edit', False)
+            self.fields['perm_admin_users_delete'].initial = users.get('delete', False)
+
+            # Admin - Roles
+            roles = perms.get('admin', {}).get('roles', {})
+            self.fields['perm_admin_roles_view'].initial = roles.get('view', False)
+            self.fields['perm_admin_roles_create'].initial = roles.get('create', False)
+            self.fields['perm_admin_roles_edit'].initial = roles.get('edit', False)
+            self.fields['perm_admin_roles_delete'].initial = roles.get('delete', False)
+
+            # Admin - Settings
+            settings = perms.get('admin', {}).get('settings', {})
+            self.fields['perm_admin_settings_view'].initial = settings.get('view', False)
+            self.fields['perm_admin_settings_edit'].initial = settings.get('edit', False)
+
+            # Data Scope
+            self.fields['data_scope'].initial = perms.get('data_scope', {}).get('type', 'all')
 
     def save(self, commit=True):
         """
-        Override save to handle the permissions JSON field.
+        Override save to construct permissions JSON from checkbox values.
         """
         instance = super().save(commit=False)
-        instance.permissions = self.cleaned_data.get('permissions_json', {})
+
+        # Build permissions JSON from form fields
+        cd = self.cleaned_data
+
+        instance.permissions = {
+            'dashboard': {
+                'view': cd.get('perm_dashboard_view', False),
+                'export': cd.get('perm_dashboard_export', False)
+            },
+            'forecasting': {
+                'view': cd.get('perm_forecasting_view', False),
+                'edit': cd.get('perm_forecasting_edit', False),
+                'export': cd.get('perm_forecasting_export', False)
+            },
+            'replenishment': {
+                'stores': {
+                    'view': cd.get('perm_replenishment_stores_view', False),
+                    'review': cd.get('perm_replenishment_stores_review', False),
+                    'create_request': cd.get('perm_replenishment_stores_create', False),
+                    'edit_request': cd.get('perm_replenishment_stores_edit', False),
+                    'submit_request': cd.get('perm_replenishment_stores_submit', False)
+                },
+                'demand_planning': {
+                    'view': cd.get('perm_replenishment_demand_view', False),
+                    'approve': cd.get('perm_replenishment_demand_approve', False),
+                    'reject': cd.get('perm_replenishment_demand_reject', False),
+                    'view_all_requests': cd.get('perm_replenishment_demand_view_all', False)
+                },
+                'daily_pick_list': {
+                    'view': cd.get('perm_replenishment_picklist_view', False),
+                    'export': cd.get('perm_replenishment_picklist_export', False)
+                }
+            },
+            'admin': {
+                'users': {
+                    'view': cd.get('perm_admin_users_view', False),
+                    'create': cd.get('perm_admin_users_create', False),
+                    'edit': cd.get('perm_admin_users_edit', False),
+                    'delete': cd.get('perm_admin_users_delete', False)
+                },
+                'roles': {
+                    'view': cd.get('perm_admin_roles_view', False),
+                    'create': cd.get('perm_admin_roles_create', False),
+                    'edit': cd.get('perm_admin_roles_edit', False),
+                    'delete': cd.get('perm_admin_roles_delete', False)
+                },
+                'settings': {
+                    'view': cd.get('perm_admin_settings_view', False),
+                    'edit': cd.get('perm_admin_settings_edit', False)
+                }
+            },
+            'data_scope': {
+                'type': cd.get('data_scope', 'all'),
+                'filter_required': cd.get('data_scope', 'all') != 'all'
+            }
+        }
 
         if commit:
             instance.save()

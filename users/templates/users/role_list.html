@@ -4,10 +4,21 @@
 {% block title %}Roles - SasPulse{% endblock %}
 
 {% block system_content %}
-<div class="mb-9">
-  <div class="row g-3 mb-4">
+<div class="container-fluid px-0">
+  <!-- Page Header -->
+  <div class="row g-3 mb-3 align-items-center">
+    <div class="col">
+      <h2 class="mb-0 text-body-emphasis">
+        <span data-feather="shield" class="me-2" style="width: 28px; height: 28px;"></span>
+        Role Management
+      </h2>
+      <p class="text-muted mb-0">Define roles and permissions for system access control</p>
+    </div>
     <div class="col-auto">
-      <h2 class="mb-0">Roles</h2>
+      <a href="{% url 'users:role_create' %}" class="btn btn-primary">
+        <span data-feather="plus" class="me-2" style="width: 16px; height: 16px;"></span>
+        Create Role
+      </a>
     </div>
   </div>
 
@@ -20,40 +31,55 @@
     </ol>
   </nav>
 
-  <!-- Card -->
-  <div class="card">
-    <div class="card-header border-bottom">
-      <div class="row flex-between-center">
-        <div class="col-sm-auto">
-          <h5 class="mb-2 mb-sm-0">Role Management</h5>
+  <!-- Messages -->
+  {% if messages %}
+    <div class="mb-3">
+      {% for message in messages %}
+        <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+          <div class="d-flex align-items-start">
+            {% if message.tags == 'success' %}
+              <span data-feather="check-circle" class="me-2 mt-1" style="width: 18px; height: 18px;"></span>
+            {% elif message.tags == 'error' or message.tags == 'danger' %}
+              <span data-feather="alert-circle" class="me-2 mt-1" style="width: 18px; height: 18px;"></span>
+            {% else %}
+              <span data-feather="info" class="me-2 mt-1" style="width: 18px; height: 18px;"></span>
+            {% endif %}
+            <div>{{ message }}</div>
+          </div>
+          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
-        <div class="col-sm-auto">
-          <a href="{% url 'users:role_create' %}" class="btn btn-primary">
-            <span data-feather="plus" class="me-2"></span>Create Role
-          </a>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <!-- Roles Table Card -->
+  <div class="card">
+    <div class="card-header bg-body-tertiary border-bottom">
+      <div class="row align-items-center">
+        <div class="col">
+          <h5 class="mb-0">
+            <span data-feather="list" class="me-2" style="width: 18px; height: 18px;"></span>
+            All Roles
+          </h5>
+        </div>
+        <div class="col-auto">
+          <div class="text-muted small">
+            <span data-feather="shield" class="me-1" style="width: 14px; height: 14px;"></span>
+            {{ roles|length }} role{{ roles|length|pluralize }}
+          </div>
         </div>
       </div>
     </div>
     <div class="card-body p-0">
-      {% if messages %}
-        <div class="mx-3 mt-3">
-          {% for message in messages %}
-            <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
-              {{ message }}
-              <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-            </div>
-          {% endfor %}
-        </div>
-      {% endif %}
 
       <div class="table-responsive scrollbar">
-        <table class="table table-hover table-striped overflow-hidden mb-0">
+        <table id="rolesTable" class="table table-hover table-striped overflow-hidden mb-0">
           <thead>
             <tr>
               <th scope="col">Name</th>
               <th scope="col">Description</th>
               <th scope="col" class="text-center">Number of Users</th>
-              <th scope="col" class="text-end">Actions</th>
+              <th scope="col" class="text-end" data-orderable="false">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -89,9 +115,14 @@
             <tr>
               <td colspan="4" class="text-center py-5">
                 <div class="mb-3">
-                  <span data-feather="inbox" style="width: 48px; height: 48px;"></span>
+                  <span data-feather="shield" style="width: 64px; height: 64px; opacity: 0.3;"></span>
                 </div>
-                <p class="text-muted mb-0">No roles found. Create your first role to get started.</p>
+                <h5 class="text-muted mb-2">No Roles Found</h5>
+                <p class="text-muted mb-3">Get started by creating your first role to manage permissions.</p>
+                <a href="{% url 'users:role_create' %}" class="btn btn-primary">
+                  <span data-feather="plus" class="me-2" style="width: 16px; height: 16px;"></span>
+                  Create First Role
+                </a>
               </td>
             </tr>
             {% endfor %}
@@ -103,9 +134,58 @@
 </div>
 
 <script src="https://unpkg.com/feather-icons"></script>
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css">
+<script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js"></script>
+
 <script>
   document.addEventListener('DOMContentLoaded', function() {
     feather.replace();
+
+    // Initialize DataTable
+    const table = $('#rolesTable').DataTable({
+      responsive: true,
+      pageLength: 25,
+      order: [[0, 'asc']], // Sort by role name by default
+      language: {
+        search: "_INPUT_",
+        searchPlaceholder: "Search roles...",
+        lengthMenu: "Show _MENU_ roles per page",
+        info: "Showing _START_ to _END_ of _TOTAL_ roles",
+        infoEmpty: "No roles to show",
+        infoFiltered: "(filtered from _MAX_ total roles)",
+        paginate: {
+          first: "First",
+          last: "Last",
+          next: "Next",
+          previous: "Previous"
+        },
+        emptyTable: "No roles found"
+      },
+      columnDefs: [
+        { orderable: false, targets: -1 } // Disable sorting on Actions column
+      ],
+      drawCallback: function() {
+        feather.replace(); // Re-initialize feather icons after DataTable redraws
+      }
+    });
+
+    // Add hover effect to table rows
+    $('#rolesTable tbody').on('click', 'tr', function(e) {
+      if (!e.target.closest('.btn-reveal-trigger') && !e.target.closest('a') && !$(this).find('td[colspan]').length) {
+        const editLink = $(this).find('a[href*="edit"]').first();
+        if (editLink.length) {
+          window.location.href = editLink.attr('href');
+        }
+      }
+    });
+
+    // Add pointer cursor to rows
+    $('#rolesTable tbody').on('mouseenter', 'tr', function() {
+      if (!$(this).find('td[colspan]').length) {
+        $(this).css('cursor', 'pointer');
+      }
+    });
   });
 </script>
 {% endblock %}

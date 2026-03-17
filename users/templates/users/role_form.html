@@ -4,10 +4,21 @@
 {% block title %}{% if form.instance.pk %}Edit Role{% else %}Create Role{% endif %} - SasPulse{% endblock %}
 
 {% block system_content %}
-<div class="mb-9">
-  <div class="row g-3 mb-4">
+<div class="container-fluid px-0">
+  <!-- Page Header -->
+  <div class="row g-3 mb-3 align-items-center">
+    <div class="col">
+      <h2 class="mb-0 text-body-emphasis">
+        <span data-feather="{% if form.instance.pk %}edit-2{% else %}shield{% endif %}" class="me-2" style="width: 28px; height: 28px;"></span>
+        {% if form.instance.pk %}Edit Role{% else %}Create Role{% endif %}
+      </h2>
+      <p class="text-muted mb-0">{% if form.instance.pk %}Update role information and permissions{% else %}Add a new role to the system{% endif %}</p>
+    </div>
     <div class="col-auto">
-      <h2 class="mb-0">{% if form.instance.pk %}Edit Role{% else %}Create Role{% endif %}</h2>
+      <a href="{% url 'users:role_list' %}" class="btn btn-phoenix-secondary">
+        <span data-feather="arrow-left" class="me-2" style="width: 16px; height: 16px;"></span>
+        Back to Roles
+      </a>
     </div>
   </div>
 
@@ -21,22 +32,38 @@
     </ol>
   </nav>
 
-  <!-- Card -->
+  <!-- Messages -->
+  {% if messages %}
+    <div class="mb-3">
+      {% for message in messages %}
+        <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+          <div class="d-flex align-items-start">
+            {% if message.tags == 'success' %}
+              <span data-feather="check-circle" class="me-2 mt-1" style="width: 18px; height: 18px;"></span>
+            {% elif message.tags == 'error' or message.tags == 'danger' %}
+              <span data-feather="alert-circle" class="me-2 mt-1" style="width: 18px; height: 18px;"></span>
+            {% else %}
+              <span data-feather="info" class="me-2 mt-1" style="width: 18px; height: 18px;"></span>
+            {% endif %}
+            <div>{{ message }}</div>
+          </div>
+          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <!-- Form Layout -->
   <div class="row">
     <div class="col-xl-9">
       <div class="card">
-        <div class="card-header">
-          <h5 class="mb-0">Role Information</h5>
+        <div class="card-header bg-body-tertiary">
+          <h5 class="mb-0">
+            <span data-feather="edit-3" class="me-2" style="width: 18px; height: 18px;"></span>
+            Role Information
+          </h5>
         </div>
         <div class="card-body">
-          {% if messages %}
-            {% for message in messages %}
-              <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
-                {{ message }}
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-              </div>
-            {% endfor %}
-          {% endif %}
 
           <form method="post" novalidate>
             {% csrf_token %}
@@ -69,30 +96,398 @@
               <div class="form-text">Provide a brief description of this role's purpose.</div>
             </div>
 
-            <!-- Permissions Field -->
-            <div class="mb-3">
-              <label class="form-label" for="{{ form.permissions.id_for_label }}">
-                Permissions (JSON)
-              </label>
-              {{ form.permissions }}
-              {% if form.permissions.errors %}
-                <div class="invalid-feedback d-block">
-                  {{ form.permissions.errors.0 }}
+            <!-- Is Active Field -->
+            <div class="mb-4">
+              <div class="form-check form-switch">
+                {{ form.is_active }}
+                <label class="form-check-label" for="{{ form.is_active.id_for_label }}">
+                  Active Role
+                </label>
+              </div>
+              <div class="form-text ms-4">Only active roles can be assigned to users.</div>
+            </div>
+
+            <!-- Permissions Section -->
+            <div class="mb-4">
+              <h5 class="mb-3">
+                <span data-feather="shield" class="me-2" style="width: 20px; height: 20px;"></span>
+                Permissions
+              </h5>
+              <p class="text-muted small mb-3">Select the permissions you want to grant to users with this role.</p>
+
+              <!-- Dashboard Permissions Card -->
+              <div class="card mb-3 border">
+                <div class="card-header bg-light">
+                  <h6 class="mb-0 d-flex align-items-center">
+                    <span data-feather="bar-chart-2" class="me-2 text-primary" style="width: 18px; height: 18px;"></span>
+                    Dashboard Access
+                  </h6>
                 </div>
-              {% endif %}
-              <div class="form-text">
-                Enter permissions in JSON format. Example: <code>{"can_view": true, "can_edit": false}</code>
+                <div class="card-body">
+                  <div class="row">
+                    <div class="col-md-6">
+                      <div class="form-check mb-2">
+                        {{ form.perm_dashboard_view }}
+                        <label class="form-check-label" for="{{ form.perm_dashboard_view.id_for_label }}">
+                          <span data-feather="eye" class="me-1" style="width: 14px; height: 14px;"></span>
+                          {{ form.perm_dashboard_view.label }}
+                        </label>
+                      </div>
+                    </div>
+                    <div class="col-md-6">
+                      <div class="form-check mb-2">
+                        {{ form.perm_dashboard_export }}
+                        <label class="form-check-label" for="{{ form.perm_dashboard_export.id_for_label }}">
+                          <span data-feather="download" class="me-1" style="width: 14px; height: 14px;"></span>
+                          {{ form.perm_dashboard_export.label }}
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Forecasting Permissions Card -->
+              <div class="card mb-3 border">
+                <div class="card-header bg-light">
+                  <h6 class="mb-0 d-flex align-items-center">
+                    <span data-feather="trending-up" class="me-2 text-success" style="width: 18px; height: 18px;"></span>
+                    Sales Forecasting
+                  </h6>
+                </div>
+                <div class="card-body">
+                  <div class="row">
+                    <div class="col-md-4">
+                      <div class="form-check mb-2">
+                        {{ form.perm_forecasting_view }}
+                        <label class="form-check-label" for="{{ form.perm_forecasting_view.id_for_label }}">
+                          <span data-feather="eye" class="me-1" style="width: 14px; height: 14px;"></span>
+                          {{ form.perm_forecasting_view.label }}
+                        </label>
+                      </div>
+                    </div>
+                    <div class="col-md-4">
+                      <div class="form-check mb-2">
+                        {{ form.perm_forecasting_edit }}
+                        <label class="form-check-label" for="{{ form.perm_forecasting_edit.id_for_label }}">
+                          <span data-feather="edit-2" class="me-1" style="width: 14px; height: 14px;"></span>
+                          {{ form.perm_forecasting_edit.label }}
+                        </label>
+                      </div>
+                    </div>
+                    <div class="col-md-4">
+                      <div class="form-check mb-2">
+                        {{ form.perm_forecasting_export }}
+                        <label class="form-check-label" for="{{ form.perm_forecasting_export.id_for_label }}">
+                          <span data-feather="download" class="me-1" style="width: 14px; height: 14px;"></span>
+                          {{ form.perm_forecasting_export.label }}
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Replenishment Permissions Card -->
+              <div class="card mb-3 border">
+                <div class="card-header bg-light">
+                  <h6 class="mb-0 d-flex align-items-center">
+                    <span data-feather="package" class="me-2 text-warning" style="width: 18px; height: 18px;"></span>
+                    Replenishment Management
+                  </h6>
+                </div>
+                <div class="card-body">
+                  <!-- Store Requests Section -->
+                  <div class="mb-3">
+                    <h6 class="text-muted small mb-2">Store Requests</h6>
+                    <div class="row">
+                      <div class="col-md-4">
+                        <div class="form-check mb-2">
+                          {{ form.perm_replenishment_stores_view }}
+                          <label class="form-check-label" for="{{ form.perm_replenishment_stores_view.id_for_label }}">
+                            <span data-feather="eye" class="me-1" style="width: 14px; height: 14px;"></span>
+                            {{ form.perm_replenishment_stores_view.label }}
+                          </label>
+                        </div>
+                      </div>
+                      <div class="col-md-4">
+                        <div class="form-check mb-2">
+                          {{ form.perm_replenishment_stores_review }}
+                          <label class="form-check-label" for="{{ form.perm_replenishment_stores_review.id_for_label }}">
+                            <span data-feather="search" class="me-1" style="width: 14px; height: 14px;"></span>
+                            {{ form.perm_replenishment_stores_review.label }}
+                          </label>
+                        </div>
+                      </div>
+                      <div class="col-md-4">
+                        <div class="form-check mb-2">
+                          {{ form.perm_replenishment_stores_create }}
+                          <label class="form-check-label" for="{{ form.perm_replenishment_stores_create.id_for_label }}">
+                            <span data-feather="plus-circle" class="me-1" style="width: 14px; height: 14px;"></span>
+                            {{ form.perm_replenishment_stores_create.label }}
+                          </label>
+                        </div>
+                      </div>
+                      <div class="col-md-4">
+                        <div class="form-check mb-2">
+                          {{ form.perm_replenishment_stores_edit }}
+                          <label class="form-check-label" for="{{ form.perm_replenishment_stores_edit.id_for_label }}">
+                            <span data-feather="edit-2" class="me-1" style="width: 14px; height: 14px;"></span>
+                            {{ form.perm_replenishment_stores_edit.label }}
+                          </label>
+                        </div>
+                      </div>
+                      <div class="col-md-4">
+                        <div class="form-check mb-2">
+                          {{ form.perm_replenishment_stores_submit }}
+                          <label class="form-check-label" for="{{ form.perm_replenishment_stores_submit.id_for_label }}">
+                            <span data-feather="send" class="me-1" style="width: 14px; height: 14px;"></span>
+                            {{ form.perm_replenishment_stores_submit.label }}
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Demand Planning Section -->
+                  <div class="mb-3">
+                    <h6 class="text-muted small mb-2">Demand Planning</h6>
+                    <div class="row">
+                      <div class="col-md-4">
+                        <div class="form-check mb-2">
+                          {{ form.perm_replenishment_demand_view }}
+                          <label class="form-check-label" for="{{ form.perm_replenishment_demand_view.id_for_label }}">
+                            <span data-feather="eye" class="me-1" style="width: 14px; height: 14px;"></span>
+                            {{ form.perm_replenishment_demand_view.label }}
+                          </label>
+                        </div>
+                      </div>
+                      <div class="col-md-4">
+                        <div class="form-check mb-2">
+                          {{ form.perm_replenishment_demand_approve }}
+                          <label class="form-check-label" for="{{ form.perm_replenishment_demand_approve.id_for_label }}">
+                            <span data-feather="check-circle" class="me-1" style="width: 14px; height: 14px;"></span>
+                            {{ form.perm_replenishment_demand_approve.label }}
+                          </label>
+                        </div>
+                      </div>
+                      <div class="col-md-4">
+                        <div class="form-check mb-2">
+                          {{ form.perm_replenishment_demand_reject }}
+                          <label class="form-check-label" for="{{ form.perm_replenishment_demand_reject.id_for_label }}">
+                            <span data-feather="x-circle" class="me-1" style="width: 14px; height: 14px;"></span>
+                            {{ form.perm_replenishment_demand_reject.label }}
+                          </label>
+                        </div>
+                      </div>
+                      <div class="col-md-4">
+                        <div class="form-check mb-2">
+                          {{ form.perm_replenishment_demand_view_all }}
+                          <label class="form-check-label" for="{{ form.perm_replenishment_demand_view_all.id_for_label }}">
+                            <span data-feather="list" class="me-1" style="width: 14px; height: 14px;"></span>
+                            {{ form.perm_replenishment_demand_view_all.label }}
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Daily Pick List Section -->
+                  <div>
+                    <h6 class="text-muted small mb-2">Daily Pick List</h6>
+                    <div class="row">
+                      <div class="col-md-6">
+                        <div class="form-check mb-2">
+                          {{ form.perm_replenishment_picklist_view }}
+                          <label class="form-check-label" for="{{ form.perm_replenishment_picklist_view.id_for_label }}">
+                            <span data-feather="eye" class="me-1" style="width: 14px; height: 14px;"></span>
+                            {{ form.perm_replenishment_picklist_view.label }}
+                          </label>
+                        </div>
+                      </div>
+                      <div class="col-md-6">
+                        <div class="form-check mb-2">
+                          {{ form.perm_replenishment_picklist_export }}
+                          <label class="form-check-label" for="{{ form.perm_replenishment_picklist_export.id_for_label }}">
+                            <span data-feather="download" class="me-1" style="width: 14px; height: 14px;"></span>
+                            {{ form.perm_replenishment_picklist_export.label }}
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Admin Permissions Card -->
+              <div class="card mb-3 border">
+                <div class="card-header bg-light">
+                  <h6 class="mb-0 d-flex align-items-center">
+                    <span data-feather="settings" class="me-2 text-danger" style="width: 18px; height: 18px;"></span>
+                    System Administration
+                  </h6>
+                </div>
+                <div class="card-body">
+                  <!-- User Management Section -->
+                  <div class="mb-3">
+                    <h6 class="text-muted small mb-2">User Management</h6>
+                    <div class="row">
+                      <div class="col-md-3">
+                        <div class="form-check mb-2">
+                          {{ form.perm_admin_users_view }}
+                          <label class="form-check-label" for="{{ form.perm_admin_users_view.id_for_label }}">
+                            <span data-feather="eye" class="me-1" style="width: 14px; height: 14px;"></span>
+                            {{ form.perm_admin_users_view.label }}
+                          </label>
+                        </div>
+                      </div>
+                      <div class="col-md-3">
+                        <div class="form-check mb-2">
+                          {{ form.perm_admin_users_create }}
+                          <label class="form-check-label" for="{{ form.perm_admin_users_create.id_for_label }}">
+                            <span data-feather="user-plus" class="me-1" style="width: 14px; height: 14px;"></span>
+                            {{ form.perm_admin_users_create.label }}
+                          </label>
+                        </div>
+                      </div>
+                      <div class="col-md-3">
+                        <div class="form-check mb-2">
+                          {{ form.perm_admin_users_edit }}
+                          <label class="form-check-label" for="{{ form.perm_admin_users_edit.id_for_label }}">
+                            <span data-feather="edit-2" class="me-1" style="width: 14px; height: 14px;"></span>
+                            {{ form.perm_admin_users_edit.label }}
+                          </label>
+                        </div>
+                      </div>
+                      <div class="col-md-3">
+                        <div class="form-check mb-2">
+                          {{ form.perm_admin_users_delete }}
+                          <label class="form-check-label" for="{{ form.perm_admin_users_delete.id_for_label }}">
+                            <span data-feather="trash-2" class="me-1" style="width: 14px; height: 14px;"></span>
+                            {{ form.perm_admin_users_delete.label }}
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Role Management Section -->
+                  <div class="mb-3">
+                    <h6 class="text-muted small mb-2">Role Management</h6>
+                    <div class="row">
+                      <div class="col-md-3">
+                        <div class="form-check mb-2">
+                          {{ form.perm_admin_roles_view }}
+                          <label class="form-check-label" for="{{ form.perm_admin_roles_view.id_for_label }}">
+                            <span data-feather="eye" class="me-1" style="width: 14px; height: 14px;"></span>
+                            {{ form.perm_admin_roles_view.label }}
+                          </label>
+                        </div>
+                      </div>
+                      <div class="col-md-3">
+                        <div class="form-check mb-2">
+                          {{ form.perm_admin_roles_create }}
+                          <label class="form-check-label" for="{{ form.perm_admin_roles_create.id_for_label }}">
+                            <span data-feather="plus-circle" class="me-1" style="width: 14px; height: 14px;"></span>
+                            {{ form.perm_admin_roles_create.label }}
+                          </label>
+                        </div>
+                      </div>
+                      <div class="col-md-3">
+                        <div class="form-check mb-2">
+                          {{ form.perm_admin_roles_edit }}
+                          <label class="form-check-label" for="{{ form.perm_admin_roles_edit.id_for_label }}">
+                            <span data-feather="edit-2" class="me-1" style="width: 14px; height: 14px;"></span>
+                            {{ form.perm_admin_roles_edit.label }}
+                          </label>
+                        </div>
+                      </div>
+                      <div class="col-md-3">
+                        <div class="form-check mb-2">
+                          {{ form.perm_admin_roles_delete }}
+                          <label class="form-check-label" for="{{ form.perm_admin_roles_delete.id_for_label }}">
+                            <span data-feather="trash-2" class="me-1" style="width: 14px; height: 14px;"></span>
+                            {{ form.perm_admin_roles_delete.label }}
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Settings Section -->
+                  <div>
+                    <h6 class="text-muted small mb-2">System Settings</h6>
+                    <div class="row">
+                      <div class="col-md-6">
+                        <div class="form-check mb-2">
+                          {{ form.perm_admin_settings_view }}
+                          <label class="form-check-label" for="{{ form.perm_admin_settings_view.id_for_label }}">
+                            <span data-feather="eye" class="me-1" style="width: 14px; height: 14px;"></span>
+                            {{ form.perm_admin_settings_view.label }}
+                          </label>
+                        </div>
+                      </div>
+                      <div class="col-md-6">
+                        <div class="form-check mb-2">
+                          {{ form.perm_admin_settings_edit }}
+                          <label class="form-check-label" for="{{ form.perm_admin_settings_edit.id_for_label }}">
+                            <span data-feather="edit-2" class="me-1" style="width: 14px; height: 14px;"></span>
+                            {{ form.perm_admin_settings_edit.label }}
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Data Access Scope Card -->
+              <div class="card border">
+                <div class="card-header bg-light">
+                  <h6 class="mb-0 d-flex align-items-center">
+                    <span data-feather="filter" class="me-2 text-info" style="width: 18px; height: 18px;"></span>
+                    Data Access Scope
+                  </h6>
+                </div>
+                <div class="card-body">
+                  <p class="text-muted small mb-3">
+                    Determine what data users with this role can access:
+                  </p>
+                  {% for radio in form.data_scope %}
+                    <div class="form-check mb-2">
+                      {{ radio.tag }}
+                      <label class="form-check-label" for="{{ radio.id_for_label }}">
+                        {{ radio.choice_label }}
+                        {% if radio.data.value == 'all' %}
+                          <small class="text-muted d-block ms-4">Users can access all data across all branches and schools</small>
+                        {% elif radio.data.value == 'branch' %}
+                          <small class="text-muted d-block ms-4">Users can only access data for their assigned branches (e.g., Store Managers)</small>
+                        {% elif radio.data.value == 'school' %}
+                          <small class="text-muted d-block ms-4">Users can only access data for their assigned schools (e.g., Sales Team)</small>
+                        {% endif %}
+                      </label>
+                    </div>
+                  {% endfor %}
+                </div>
               </div>
             </div>
 
             <!-- Form Actions -->
-            <div class="d-flex justify-content-end gap-2 mt-4">
-              <a href="{% url 'users:role_list' %}" class="btn btn-phoenix-secondary">
-                <span data-feather="x" class="me-2"></span>Cancel
-              </a>
-              <button type="submit" class="btn btn-primary">
-                <span data-feather="save" class="me-2"></span>Save Role
-              </button>
+            <div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top">
+              <div class="text-muted small">
+                <span data-feather="info" class="me-1" style="width: 14px; height: 14px;"></span>
+                All fields marked with <span class="text-danger">*</span> are required
+              </div>
+              <div class="d-flex gap-2">
+                <a href="{% url 'users:role_list' %}" class="btn btn-phoenix-secondary">
+                  <span data-feather="x" class="me-2" style="width: 16px; height: 16px;"></span>
+                  Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                  <span data-feather="save" class="me-2" style="width: 16px; height: 16px;"></span>
+                  Save Role
+                </button>
+              </div>
             </div>
           </form>
         </div>
@@ -100,23 +495,58 @@
     </div>
 
     <div class="col-xl-3">
-      <div class="card">
-        <div class="card-header">
-          <h6 class="mb-0">Help</h6>
+      <div class="card sticky-sidebar">
+        <div class="card-header bg-body-tertiary">
+          <h6 class="mb-0">
+            <span data-feather="help-circle" class="me-2" style="width: 16px; height: 16px;"></span>
+            Help & Tips
+          </h6>
         </div>
         <div class="card-body">
-          <p class="text-muted fs-10 mb-3">
-            <span data-feather="info" class="me-1"></span>
-            <strong>Role Name:</strong> Choose a descriptive name that clearly identifies the role's purpose.
-          </p>
-          <p class="text-muted fs-10 mb-3">
-            <span data-feather="info" class="me-1"></span>
-            <strong>Description:</strong> Explain what this role is for and what responsibilities it includes.
-          </p>
-          <p class="text-muted fs-10 mb-0">
-            <span data-feather="info" class="me-1"></span>
-            <strong>Permissions:</strong> Define access rights using JSON format. This determines what users with this role can do.
-          </p>
+          <div class="mb-3">
+            <div class="d-flex align-items-start">
+              <span data-feather="tag" class="me-2 mt-1 text-primary" style="width: 16px; height: 16px;"></span>
+              <div>
+                <h6 class="text-body-emphasis mb-1">Role Name</h6>
+                <p class="text-muted small mb-0">
+                  Choose a descriptive name that clearly identifies the role's purpose.
+                </p>
+              </div>
+            </div>
+          </div>
+          <div class="mb-3">
+            <div class="d-flex align-items-start">
+              <span data-feather="file-text" class="me-2 mt-1 text-primary" style="width: 16px; height: 16px;"></span>
+              <div>
+                <h6 class="text-body-emphasis mb-1">Description</h6>
+                <p class="text-muted small mb-0">
+                  Explain what this role is for and what responsibilities it includes.
+                </p>
+              </div>
+            </div>
+          </div>
+          <div class="mb-3">
+            <div class="d-flex align-items-start">
+              <span data-feather="shield" class="me-2 mt-1 text-primary" style="width: 16px; height: 16px;"></span>
+              <div>
+                <h6 class="text-body-emphasis mb-1">Permissions</h6>
+                <p class="text-muted small mb-0">
+                  Check the boxes for permissions you want to grant. Permissions are organized by feature area for easy selection.
+                </p>
+              </div>
+            </div>
+          </div>
+          <div class="mb-0">
+            <div class="d-flex align-items-start">
+              <span data-feather="filter" class="me-2 mt-1 text-primary" style="width: 16px; height: 16px;"></span>
+              <div>
+                <h6 class="text-body-emphasis mb-1">Data Scope</h6>
+                <p class="text-muted small mb-0">
+                  Controls what data users can see. Use "Branch Level" for store managers and "School Level" for sales teams.
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

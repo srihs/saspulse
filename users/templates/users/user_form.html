@@ -4,10 +4,21 @@
 {% block title %}{% if form.instance.pk %}Edit User{% else %}Create User{% endif %} - SasPulse{% endblock %}
 
 {% block system_content %}
-<div class="mb-9">
-  <div class="row g-3 mb-4">
+<div class="container-fluid px-0">
+  <!-- Page Header -->
+  <div class="row g-3 mb-3 align-items-center">
+    <div class="col">
+      <h2 class="mb-0 text-body-emphasis">
+        <span data-feather="{% if form.instance.pk %}edit-2{% else %}user-plus{% endif %}" class="me-2" style="width: 28px; height: 28px;"></span>
+        {% if form.instance.pk %}Edit User{% else %}Create User{% endif %}
+      </h2>
+      <p class="text-muted mb-0">{% if form.instance.pk %}Update user information and permissions{% else %}Add a new user to the system{% endif %}</p>
+    </div>
     <div class="col-auto">
-      <h2 class="mb-0">{% if form.instance.pk %}Edit User{% else %}Create User{% endif %}</h2>
+      <a href="{% url 'users:user_list' %}" class="btn btn-phoenix-secondary">
+        <span data-feather="arrow-left" class="me-2" style="width: 16px; height: 16px;"></span>
+        Back to Users
+      </a>
     </div>
   </div>
 
@@ -21,22 +32,31 @@
     </ol>
   </nav>
 
-  <!-- Card -->
+  <!-- Messages -->
+  {% if messages %}
+    <div class="mb-3">
+      {% for message in messages %}
+        <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+          <div class="d-flex align-items-start">
+            {% if message.tags == 'success' %}
+              <span data-feather="check-circle" class="me-2 mt-1" style="width: 18px; height: 18px;"></span>
+            {% elif message.tags == 'error' or message.tags == 'danger' %}
+              <span data-feather="alert-circle" class="me-2 mt-1" style="width: 18px; height: 18px;"></span>
+            {% else %}
+              <span data-feather="info" class="me-2 mt-1" style="width: 18px; height: 18px;"></span>
+            {% endif %}
+            <div>{{ message }}</div>
+          </div>
+          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <!-- Form Layout -->
   <div class="row">
     <div class="col-xl-9">
       <form method="post" novalidate>
-        {% csrf_token %}
-
-        {% if messages %}
-          <div class="mb-3">
-            {% for message in messages %}
-              <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
-                {{ message }}
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-              </div>
-            {% endfor %}
-          </div>
-        {% endif %}
 
         <!-- Basic Information Card -->
         <div class="card mb-3">
@@ -411,13 +431,25 @@
         </div>
 
         <!-- Form Actions -->
-        <div class="d-flex justify-content-end gap-2">
-          <a href="{% url 'users:user_list' %}" class="btn btn-phoenix-secondary">
-            <span data-feather="x" class="me-2"></span>Cancel
-          </a>
-          <button type="submit" class="btn btn-primary">
-            <span data-feather="save" class="me-2"></span>Save User
-          </button>
+        <div class="card">
+          <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center">
+              <div class="text-muted small">
+                <span data-feather="info" class="me-1" style="width: 14px; height: 14px;"></span>
+                All fields marked with <span class="text-danger">*</span> are required
+              </div>
+              <div class="d-flex gap-2">
+                <a href="{% url 'users:user_list' %}" class="btn btn-phoenix-secondary">
+                  <span data-feather="x" class="me-2" style="width: 16px; height: 16px;"></span>
+                  Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                  <span data-feather="save" class="me-2" style="width: 16px; height: 16px;"></span>
+                  Save User
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </form>
     </div>
@@ -425,61 +457,86 @@
     <!-- Sidebar -->
     <div class="col-xl-3">
       <div class="card sticky-sidebar">
-        <div class="card-header">
+        <div class="card-header bg-body-tertiary">
           <h6 class="mb-0">
-            <span data-feather="help-circle" class="me-2"></span>Help
+            <span data-feather="help-circle" class="me-2" style="width: 16px; height: 16px;"></span>
+            Help & Tips
           </h6>
         </div>
         <div class="card-body">
           <div class="mb-3">
-            <h6 class="text-body-emphasis fs-10 mb-2">Basic Information</h6>
-            <p class="text-muted fs-10 mb-0">
-              Username and email must be unique. First and last names are required for proper identification.
-            </p>
+            <div class="d-flex align-items-start mb-2">
+              <span data-feather="user" class="me-2 mt-1 text-primary" style="width: 16px; height: 16px;"></span>
+              <div>
+                <h6 class="text-body-emphasis mb-1">Basic Information</h6>
+                <p class="text-muted small mb-0">
+                  Username and email must be unique. First and last names are required for proper identification.
+                </p>
+              </div>
+            </div>
           </div>
 
           <div class="mb-3">
-            <h6 class="text-body-emphasis fs-10 mb-2">Role Assignment</h6>
-            <p class="text-muted fs-10 mb-0">
-              Roles define what a user can do. Multiple roles can be assigned to grant combined permissions.
-            </p>
+            <div class="d-flex align-items-start mb-2">
+              <span data-feather="shield" class="me-2 mt-1 text-primary" style="width: 16px; height: 16px;"></span>
+              <div>
+                <h6 class="text-body-emphasis mb-1">Role Assignment</h6>
+                <p class="text-muted small mb-0">
+                  Roles define what a user can do. Multiple roles can be assigned to grant combined permissions.
+                </p>
+              </div>
+            </div>
           </div>
 
           <div class="mb-3">
-            <h6 class="text-body-emphasis fs-10 mb-2">Data Scope</h6>
-            <p class="text-muted fs-10 mb-0">
-              <strong>Branches:</strong> Assign to Store Managers to limit their view to specific locations.
-              <br><br>
-              <strong>Schools:</strong> Assign to Sales Team to limit product visibility by category.
-            </p>
+            <div class="d-flex align-items-start mb-2">
+              <span data-feather="map-pin" class="me-2 mt-1 text-primary" style="width: 16px; height: 16px;"></span>
+              <div>
+                <h6 class="text-body-emphasis mb-1">Data Scope</h6>
+                <p class="text-muted small mb-2">
+                  <strong>Branches:</strong> Assign to Store Managers to limit their view to specific locations.
+                </p>
+                <p class="text-muted small mb-0">
+                  <strong>Schools:</strong> Assign to Sales Team to limit product visibility by category.
+                </p>
+              </div>
+            </div>
           </div>
 
           <div class="mb-0">
-            <h6 class="text-body-emphasis fs-10 mb-2">Permissions</h6>
-            <p class="text-muted fs-10 mb-0">
-              <strong>Active:</strong> Controls login access.
-              <br><br>
-              <strong>Staff:</strong> Admin panel access.
-              <br><br>
-              <strong>Superuser:</strong> Full system access.
-            </p>
+            <div class="d-flex align-items-start mb-2">
+              <span data-feather="lock" class="me-2 mt-1 text-primary" style="width: 16px; height: 16px;"></span>
+              <div>
+                <h6 class="text-body-emphasis mb-1">Permissions</h6>
+                <p class="text-muted small mb-1"><strong>Active:</strong> Controls login access.</p>
+                <p class="text-muted small mb-1"><strong>Staff:</strong> Admin panel access.</p>
+                <p class="text-muted small mb-0"><strong>Superuser:</strong> Full system access.</p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
       {% if form.instance.pk %}
-      <div class="card mt-3">
-        <div class="card-header">
+      <div class="card">
+        <div class="card-header bg-body-tertiary">
           <h6 class="mb-0">
-            <span data-feather="zap" class="me-2"></span>Quick Actions
+            <span data-feather="zap" class="me-2" style="width: 16px; height: 16px;"></span>
+            Quick Actions
           </h6>
         </div>
         <div class="card-body">
+          <a href="{% url 'users:user_roles' form.instance.pk %}" class="btn btn-phoenix-secondary w-100 mb-2">
+            <span data-feather="shield" class="me-2" style="width: 16px; height: 16px;"></span>
+            Manage Roles
+          </a>
           <a href="#" class="btn btn-phoenix-secondary w-100 mb-2">
-            <span data-feather="key" class="me-2"></span>Reset Password
+            <span data-feather="key" class="me-2" style="width: 16px; height: 16px;"></span>
+            Reset Password
           </a>
           <a href="{% url 'users:user_list' %}" class="btn btn-phoenix-secondary w-100">
-            <span data-feather="list" class="me-2"></span>View All Users
+            <span data-feather="list" class="me-2" style="width: 16px; height: 16px;"></span>
+            View All Users
           </a>
         </div>
       </div>

@@ -4,10 +4,21 @@
 {% block title %}Users - SasPulse{% endblock %}
 
 {% block system_content %}
-<div class="mb-9">
-  <div class="row g-3 mb-4">
+<div class="container-fluid px-0">
+  <!-- Page Header -->
+  <div class="row g-3 mb-3 align-items-center">
+    <div class="col">
+      <h2 class="mb-0 text-body-emphasis">
+        <span data-feather="users" class="me-2" style="width: 28px; height: 28px;"></span>
+        User Management
+      </h2>
+      <p class="text-muted mb-0">Manage system users, roles, and permissions</p>
+    </div>
     <div class="col-auto">
-      <h2 class="mb-0">Users</h2>
+      <a href="{% url 'users:user_create' %}" class="btn btn-primary">
+        <span data-feather="plus" class="me-2" style="width: 16px; height: 16px;"></span>
+        Create User
+      </a>
     </div>
   </div>
 
@@ -20,34 +31,48 @@
     </ol>
   </nav>
 
-  <!-- Card -->
-  <div class="card">
-    <div class="card-header border-bottom">
-      <div class="row flex-between-center">
-        <div class="col-sm-auto">
-          <h5 class="mb-2 mb-sm-0">User Management</h5>
+  <!-- Messages -->
+  {% if messages %}
+    <div class="mb-3">
+      {% for message in messages %}
+        <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+          <div class="d-flex align-items-start">
+            {% if message.tags == 'success' %}
+              <span data-feather="check-circle" class="me-2 mt-1" style="width: 18px; height: 18px;"></span>
+            {% elif message.tags == 'error' or message.tags == 'danger' %}
+              <span data-feather="alert-circle" class="me-2 mt-1" style="width: 18px; height: 18px;"></span>
+            {% else %}
+              <span data-feather="info" class="me-2 mt-1" style="width: 18px; height: 18px;"></span>
+            {% endif %}
+            <div>{{ message }}</div>
+          </div>
+          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
-        <div class="col-sm-auto">
-          <a href="{% url 'users:user_create' %}" class="btn btn-primary">
-            <span data-feather="plus" class="me-2"></span>Create User
-          </a>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <!-- Users Table Card -->
+  <div class="card">
+    <div class="card-header bg-body-tertiary border-bottom">
+      <div class="row align-items-center">
+        <div class="col">
+          <h5 class="mb-0">
+            <span data-feather="list" class="me-2" style="width: 18px; height: 18px;"></span>
+            All Users
+          </h5>
+        </div>
+        <div class="col-auto">
+          <div class="text-muted small">
+            <span data-feather="users" class="me-1" style="width: 14px; height: 14px;"></span>
+            {{ users|length }} user{{ users|length|pluralize }}
+          </div>
         </div>
       </div>
     </div>
     <div class="card-body p-0">
-      {% if messages %}
-        <div class="mx-3 mt-3">
-          {% for message in messages %}
-            <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
-              {{ message }}
-              <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-            </div>
-          {% endfor %}
-        </div>
-      {% endif %}
-
       <div class="table-responsive scrollbar">
-        <table class="table table-hover table-striped overflow-hidden mb-0">
+        <table id="usersTable" class="table table-hover table-striped overflow-hidden mb-0">
           <thead>
             <tr>
               <th scope="col">Username</th>
@@ -55,7 +80,7 @@
               <th scope="col">Full Name</th>
               <th scope="col">Roles</th>
               <th scope="col" class="text-center">Status</th>
-              <th scope="col" class="text-end">Actions</th>
+              <th scope="col" class="text-end" data-orderable="false">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -123,9 +148,14 @@
             <tr>
               <td colspan="6" class="text-center py-5">
                 <div class="mb-3">
-                  <span data-feather="users" style="width: 48px; height: 48px;"></span>
+                  <span data-feather="users" style="width: 64px; height: 64px; opacity: 0.3;"></span>
                 </div>
-                <p class="text-muted mb-0">No users found. Create your first user to get started.</p>
+                <h5 class="text-muted mb-2">No Users Found</h5>
+                <p class="text-muted mb-3">Get started by creating your first user account.</p>
+                <a href="{% url 'users:user_create' %}" class="btn btn-primary">
+                  <span data-feather="plus" class="me-2" style="width: 16px; height: 16px;"></span>
+                  Create First User
+                </a>
               </td>
             </tr>
             {% endfor %}
@@ -137,9 +167,59 @@
 </div>
 
 <script src="https://unpkg.com/feather-icons"></script>
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css">
+<script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js"></script>
+
 <script>
   document.addEventListener('DOMContentLoaded', function() {
     feather.replace();
+
+    // Initialize DataTable
+    const table = $('#usersTable').DataTable({
+      responsive: true,
+      pageLength: 25,
+      order: [[0, 'asc']], // Sort by username by default
+      language: {
+        search: "_INPUT_",
+        searchPlaceholder: "Search users...",
+        lengthMenu: "Show _MENU_ users per page",
+        info: "Showing _START_ to _END_ of _TOTAL_ users",
+        infoEmpty: "No users to show",
+        infoFiltered: "(filtered from _MAX_ total users)",
+        paginate: {
+          first: "First",
+          last: "Last",
+          next: "Next",
+          previous: "Previous"
+        },
+        emptyTable: "No users found"
+      },
+      columnDefs: [
+        { orderable: false, targets: -1 } // Disable sorting on Actions column
+      ],
+      drawCallback: function() {
+        feather.replace(); // Re-initialize feather icons after DataTable redraws
+      }
+    });
+
+    // Add hover effect to table rows (excluding empty state)
+    $('#usersTable tbody').on('click', 'tr', function(e) {
+      // Don't trigger if clicking on action buttons or links
+      if (!e.target.closest('.btn-reveal-trigger') && !e.target.closest('a') && !$(this).find('td[colspan]').length) {
+        const editLink = $(this).find('a[href*="edit"]').first();
+        if (editLink.length) {
+          window.location.href = editLink.attr('href');
+        }
+      }
+    });
+
+    // Add pointer cursor to rows
+    $('#usersTable tbody').on('mouseenter', 'tr', function() {
+      if (!$(this).find('td[colspan]').length) {
+        $(this).css('cursor', 'pointer');
+      }
+    });
   });
 </script>
 {% endblock %}

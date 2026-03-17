@@ -2,11 +2,461 @@
 
 {% block extra_css %}
 <style>
+  /* Optimal top padding - enough for header visibility without excess space */
+  .content {
+    padding-top: 2.5rem !important;
+  }
+
+  /* System Section Styling */
   .system-section {
     background-color: #f8f9fa;
     border-left: 4px solid #0d6efd;
-    padding: 1rem;
-    margin-bottom: 1rem;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    border-radius: 0.5rem;
+  }
+
+  /* Consistent card styling */
+  .card {
+    border-radius: 0.75rem;
+    box-shadow: 0 0.125rem 0.5rem rgba(0,0,0,0.08);
+    margin-bottom: 1.5rem;
+  }
+
+  .card-header {
+    border-radius: 0.75rem 0.75rem 0 0 !important;
+    padding: 1.25rem 1.5rem;
+  }
+
+  .card-body {
+    padding: 1.5rem;
+  }
+
+  /* Table improvements */
+  .table-responsive {
+    border-radius: 0 0 0.75rem 0.75rem;
+  }
+
+  .table thead th {
+    background: #f8f9fa;
+    font-weight: 600;
+    font-size: 0.8125rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #6c757d;
+    padding: 0.875rem 1rem;
+    border-bottom: 2px solid #e9ecef;
+    vertical-align: middle;
+  }
+
+  .table tbody td {
+    padding: 0.875rem 1rem;
+    vertical-align: middle;
+  }
+
+  /* Avatar improvements */
+  .avatar-name {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: 1rem;
+  }
+
+  /* Badge improvements */
+  .badge-phoenix {
+    padding: 0.35em 0.75em;
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+
+  /* Sticky sidebar for forms */
+  .sticky-sidebar {
+    position: sticky;
+    top: 1.5rem;
+  }
+
+  /* Form improvements */
+  .form-label {
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 0.5rem;
+  }
+
+  .form-text {
+    font-size: 0.8125rem;
+    color: #6c757d;
+    margin-top: 0.375rem;
+  }
+
+  .form-check-label {
+    font-weight: 500;
+    color: #495057;
+  }
+
+  /* Button improvements */
+  .btn {
+    font-weight: 600;
+    padding: 0.5rem 1.25rem;
+    transition: all 0.2s ease;
+  }
+
+  .btn-lg {
+    padding: 0.75rem 1.5rem;
+    font-size: 1rem;
+  }
+
+  .btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 0.25rem 0.75rem rgba(0,0,0,0.15);
+  }
+
+  /* Alert improvements */
+  .alert {
+    border-radius: 0.5rem;
+    border: none;
+    padding: 1rem 1.25rem;
+  }
+
+  .alert-info {
+    background-color: #e7f3ff;
+    color: #004085;
+  }
+
+  .alert-warning {
+    background-color: #fff8e6;
+    color: #856404;
+  }
+
+  .alert-danger {
+    background-color: #ffe6e6;
+    color: #721c24;
+  }
+
+  /* Breadcrumb improvements */
+  .breadcrumb {
+    background-color: transparent;
+    padding: 0;
+    margin-bottom: 1.5rem;
+  }
+
+  .breadcrumb-item a {
+    color: #6c757d;
+    text-decoration: none;
+    transition: color 0.2s ease;
+  }
+
+  .breadcrumb-item a:hover {
+    color: #0d6efd;
+  }
+
+  /* Responsive improvements */
+  @media (max-width: 1199px) {
+    .sticky-sidebar {
+      position: relative;
+      top: 0;
+      margin-top: 1.5rem;
+    }
+  }
+
+  @media (max-width: 767px) {
+    .card-header {
+      padding: 1rem;
+    }
+
+    .card-body {
+      padding: 1rem;
+    }
+
+    .table thead th,
+    .table tbody td {
+      padding: 0.75rem 0.5rem;
+      font-size: 0.875rem;
+    }
+  }
+
+  /* DataTables custom styling */
+
+  /* CRITICAL: Remove .table-responsive wrapper styling conflicts */
+  .card-body.p-0 .table-responsive {
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    border-radius: 0 !important;
+  }
+
+  /* CRITICAL: DataTables wrapper must have zero margins and controlled padding */
+  .card-body.p-0 .dataTables_wrapper {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+  }
+
+  /* CRITICAL: Remove ALL Bootstrap row negative margins from DataTables rows */
+  .dataTables_wrapper .row {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
+  }
+
+  /* CRITICAL: Remove column padding that causes alignment issues */
+  .dataTables_wrapper .row > div[class*='col-'] {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+
+  /* Top controls row (length selector and search) */
+  .dataTables_wrapper > .row:first-child {
+    padding: 1rem 1.5rem !important;
+    background: #fff;
+    border-bottom: 1px solid #e9ecef;
+  }
+
+  /* Add back padding only to the content inside the columns */
+  .dataTables_wrapper > .row:first-child .dataTables_length {
+    padding-left: 0 !important;
+  }
+
+  .dataTables_wrapper > .row:first-child .dataTables_filter {
+    padding-right: 0 !important;
+  }
+
+  /* Middle row containing the table */
+  .dataTables_wrapper > .row:nth-child(2) {
+    padding: 0 !important;
+  }
+
+  /* Bottom row (info and pagination) */
+  .dataTables_wrapper > .row:last-child {
+    padding: 1rem 1.5rem !important;
+    background: #fff;
+    border-top: 1px solid #e9ecef;
+  }
+
+  .dataTables_wrapper > .row:last-child .dataTables_info {
+    padding-left: 0 !important;
+  }
+
+  .dataTables_wrapper > .row:last-child .dataTables_paginate {
+    padding-right: 0 !important;
+  }
+
+  /* Length selector (Show X entries) - left side */
+  .dataTables_wrapper .dataTables_length {
+    padding: 0;
+    margin: 0;
+    display: flex;
+    align-items: center;
+  }
+
+  .dataTables_wrapper .dataTables_length label {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    font-size: 0.875rem;
+    color: #6c757d;
+    font-weight: 500;
+  }
+
+  .dataTables_wrapper .dataTables_length select {
+    padding: 0.375rem 2rem 0.375rem 0.75rem;
+    border: 1px solid #ced4da;
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    margin: 0 0.5rem;
+    min-width: 70px;
+  }
+
+  /* Search box - right side */
+  .dataTables_wrapper .dataTables_filter {
+    padding: 0;
+    margin: 0;
+    text-align: right;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+  }
+
+  .dataTables_wrapper .dataTables_filter label {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    font-size: 0.875rem;
+    color: #6c757d;
+    font-weight: 500;
+  }
+
+  .dataTables_wrapper .dataTables_filter input {
+    padding: 0.5rem 1rem;
+    border: 1px solid #ced4da;
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    margin-left: 0.5rem;
+    min-width: 200px;
+  }
+
+  .dataTables_wrapper .dataTables_filter input:focus {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.15);
+    outline: 0;
+  }
+
+  /* Table info text - left side bottom */
+  .dataTables_wrapper .dataTables_info {
+    padding: 0;
+    margin: 0;
+    font-size: 0.875rem;
+    color: #6c757d;
+    display: flex;
+    align-items: center;
+  }
+
+  /* Pagination - right side bottom */
+  .dataTables_wrapper .dataTables_paginate {
+    padding: 0;
+    margin: 0;
+    text-align: right;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+  }
+
+  .dataTables_wrapper .dataTables_paginate .paginate_button {
+    padding: 0.375rem 0.75rem;
+    margin: 0 0.125rem;
+    border-radius: 0.375rem;
+    border: 1px solid #dee2e6;
+    background: white;
+    color: #495057;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .dataTables_wrapper .dataTables_paginate .paginate_button:hover {
+    background: #e9ecef;
+    border-color: #dee2e6;
+    color: #495057;
+  }
+
+  .dataTables_wrapper .dataTables_paginate .paginate_button.current {
+    background: #0d6efd;
+    border-color: #0d6efd;
+    color: white !important;
+  }
+
+  .dataTables_wrapper .dataTables_paginate .paginate_button.current:hover {
+    background: #0b5ed7;
+    border-color: #0a58ca;
+  }
+
+  .dataTables_wrapper .dataTables_paginate .paginate_button.disabled,
+  .dataTables_wrapper .dataTables_paginate .paginate_button.disabled:hover {
+    cursor: not-allowed;
+    opacity: 0.5;
+    background: white;
+    border-color: #dee2e6;
+    color: #6c757d;
+  }
+
+  /* Table styling */
+  table.dataTable {
+    margin: 0 !important;
+    border-collapse: collapse;
+    width: 100% !important;
+  }
+
+  /* Add padding to table cells so content doesn't touch card edges */
+  table.dataTable thead th,
+  table.dataTable tbody td {
+    padding-left: 1.5rem !important;
+    padding-right: 1.5rem !important;
+  }
+
+  /* First column - align with controls */
+  table.dataTable thead th:first-child,
+  table.dataTable tbody td:first-child {
+    padding-left: 1.5rem !important;
+  }
+
+  /* Last column - align with controls */
+  table.dataTable thead th:last-child,
+  table.dataTable tbody td:last-child {
+    padding-right: 1.5rem !important;
+  }
+
+  table.dataTable thead th {
+    border-bottom: 2px solid #e9ecef !important;
+  }
+
+  table.dataTable.no-footer {
+    border-bottom: none;
+  }
+
+  table.dataTable tbody tr {
+    transition: background-color 0.15s ease;
+  }
+
+  /* CRITICAL: Ensure table wrapper inside DataTables has no extra spacing */
+  .dataTables_wrapper .table-responsive {
+    margin: 0 !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+  }
+
+  /* CRITICAL: Ensure table scrolling container has proper width */
+  .dataTables_wrapper .dataTables_scroll {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .dataTables_wrapper .dataTables_scrollBody {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Responsive adjustments */
+  @media (max-width: 767px) {
+    .dataTables_wrapper > .row:first-child,
+    .dataTables_wrapper > .row:last-child {
+      padding: 1rem !important;
+    }
+
+    .dataTables_wrapper .dataTables_length,
+    .dataTables_wrapper .dataTables_filter,
+    .dataTables_wrapper .dataTables_info,
+    .dataTables_wrapper .dataTables_paginate {
+      text-align: center;
+      justify-content: center;
+      margin-bottom: 0.75rem;
+    }
+
+    .dataTables_wrapper .dataTables_filter input {
+      min-width: 150px;
+    }
+
+    .dataTables_wrapper .dataTables_length label,
+    .dataTables_wrapper .dataTables_filter label {
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .dataTables_wrapper .dataTables_length select,
+    .dataTables_wrapper .dataTables_filter input {
+      margin: 0;
+    }
+
+    /* Ensure no horizontal scroll on mobile */
+    .card-body.p-0 .table-responsive {
+      overflow-x: auto !important;
+      -webkit-overflow-scrolling: touch;
+    }
   }
 </style>
 {% endblock %}

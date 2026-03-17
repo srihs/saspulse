@@ -4,10 +4,21 @@
 {% block title %}Manage User Roles - {{ user.username }} - SasPulse{% endblock %}
 
 {% block system_content %}
-<div class="mb-9">
-  <div class="row g-3 mb-4">
+<div class="container-fluid px-0">
+  <!-- Page Header -->
+  <div class="row g-3 mb-3 align-items-center">
+    <div class="col">
+      <h2 class="mb-0 text-body-emphasis">
+        <span data-feather="shield" class="me-2" style="width: 28px; height: 28px;"></span>
+        Manage User Roles
+      </h2>
+      <p class="text-muted mb-0">Assign roles and permissions to {{ user.username }}</p>
+    </div>
     <div class="col-auto">
-      <h2 class="mb-0">Manage User Roles</h2>
+      <a href="{% url 'users:user_list' %}" class="btn btn-phoenix-secondary">
+        <span data-feather="arrow-left" class="me-2" style="width: 16px; height: 16px;"></span>
+        Back to Users
+      </a>
     </div>
   </div>
 
@@ -21,31 +32,59 @@
     </ol>
   </nav>
 
-  <!-- Card -->
+  <!-- Messages -->
+  {% if messages %}
+    <div class="mb-3">
+      {% for message in messages %}
+        <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+          <div class="d-flex align-items-start">
+            {% if message.tags == 'success' %}
+              <span data-feather="check-circle" class="me-2 mt-1" style="width: 18px; height: 18px;"></span>
+            {% elif message.tags == 'error' or message.tags == 'danger' %}
+              <span data-feather="alert-circle" class="me-2 mt-1" style="width: 18px; height: 18px;"></span>
+            {% else %}
+              <span data-feather="info" class="me-2 mt-1" style="width: 18px; height: 18px;"></span>
+            {% endif %}
+            <div>{{ message }}</div>
+          </div>
+          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <!-- Form Layout -->
   <div class="row">
     <div class="col-xl-8">
       <div class="card">
-        <div class="card-header">
-          <h5 class="mb-0">Assign Roles to {{ user.username }}</h5>
+        <div class="card-header bg-body-tertiary">
+          <h5 class="mb-0">
+            <span data-feather="user-check" class="me-2" style="width: 18px; height: 18px;"></span>
+            Assign Roles to {{ user.username }}
+          </h5>
         </div>
         <div class="card-body">
-          {% if messages %}
-            {% for message in messages %}
-              <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
-                {{ message }}
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-              </div>
-            {% endfor %}
-          {% endif %}
 
           <!-- User Info -->
           <div class="alert alert-info mb-4">
             <div class="d-flex align-items-start">
-              <span data-feather="user" class="me-2 mt-1"></span>
-              <div>
-                <p class="mb-1"><strong>Username:</strong> {{ user.username }}</p>
-                <p class="mb-1"><strong>Email:</strong> {{ user.email|default:"-" }}</p>
-                <p class="mb-0"><strong>Full Name:</strong> {{ user.get_full_name|default:"-" }}</p>
+              <span data-feather="user" class="me-2 mt-1" style="width: 18px; height: 18px;"></span>
+              <div class="flex-1">
+                <h6 class="mb-3">User Information</h6>
+                <div class="row">
+                  <div class="col-md-4 mb-2">
+                    <small class="text-muted d-block">Username</small>
+                    <strong>{{ user.username }}</strong>
+                  </div>
+                  <div class="col-md-4 mb-2">
+                    <small class="text-muted d-block">Email</small>
+                    <strong>{{ user.email|default:"-" }}</strong>
+                  </div>
+                  <div class="col-md-4 mb-2">
+                    <small class="text-muted d-block">Full Name</small>
+                    <strong>{{ user.get_full_name|default:"-" }}</strong>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -104,15 +143,23 @@
             </div>
 
             <!-- Form Actions -->
-            <div class="d-flex justify-content-end gap-2 mt-4">
-              <a href="{% url 'users:user_list' %}" class="btn btn-phoenix-secondary">
-                <span data-feather="x" class="me-2"></span>Cancel
-              </a>
-              {% if all_roles %}
-                <button type="submit" class="btn btn-primary">
-                  <span data-feather="save" class="me-2"></span>Save Roles
-                </button>
-              {% endif %}
+            <div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top">
+              <div class="text-muted small">
+                <span data-feather="info" class="me-1" style="width: 14px; height: 14px;"></span>
+                Select roles to assign permissions
+              </div>
+              <div class="d-flex gap-2">
+                <a href="{% url 'users:user_list' %}" class="btn btn-phoenix-secondary">
+                  <span data-feather="x" class="me-2" style="width: 16px; height: 16px;"></span>
+                  Cancel
+                </a>
+                {% if all_roles %}
+                  <button type="submit" class="btn btn-primary">
+                    <span data-feather="save" class="me-2" style="width: 16px; height: 16px;"></span>
+                    Save Roles
+                  </button>
+                {% endif %}
+              </div>
             </div>
           </form>
         </div>
@@ -121,13 +168,16 @@
 
     <div class="col-xl-4">
       <!-- Current Roles Summary -->
-      <div class="card">
-        <div class="card-header">
-          <h6 class="mb-0">Current Roles</h6>
+      <div class="card sticky-sidebar">
+        <div class="card-header bg-body-tertiary">
+          <h6 class="mb-0">
+            <span data-feather="check-square" class="me-2" style="width: 16px; height: 16px;"></span>
+            Current Roles
+          </h6>
         </div>
         <div class="card-body">
           {% if user.roles.exists %}
-            <div class="d-flex flex-wrap gap-2">
+            <div class="d-flex flex-wrap gap-2 mb-3">
               {% for role in user.roles.all %}
                 <span class="badge badge-phoenix badge-phoenix-primary">
                   <span data-feather="shield" class="me-1" style="width: 12px; height: 12px;"></span>
@@ -135,47 +185,82 @@
                 </span>
               {% endfor %}
             </div>
+            <div class="text-muted small">
+              <span data-feather="users" class="me-1" style="width: 14px; height: 14px;"></span>
+              {{ user.roles.count }} role{{ user.roles.count|pluralize }} assigned
+            </div>
           {% else %}
-            <p class="text-muted mb-0">
-              <span data-feather="info" class="me-1"></span>
-              This user currently has no roles assigned.
-            </p>
+            <div class="text-center py-3">
+              <span data-feather="alert-circle" style="width: 32px; height: 32px; opacity: 0.3;"></span>
+              <p class="text-muted small mb-0 mt-2">
+                This user currently has no roles assigned.
+              </p>
+            </div>
           {% endif %}
         </div>
       </div>
 
       <!-- Help Card -->
-      <div class="card mt-3">
-        <div class="card-header">
-          <h6 class="mb-0">Help</h6>
+      <div class="card">
+        <div class="card-header bg-body-tertiary">
+          <h6 class="mb-0">
+            <span data-feather="help-circle" class="me-2" style="width: 16px; height: 16px;"></span>
+            Help
+          </h6>
         </div>
         <div class="card-body">
-          <p class="text-muted fs-10 mb-3">
-            <span data-feather="info" class="me-1"></span>
-            <strong>Roles:</strong> Define what a user can do in the system. A user can have multiple roles.
-          </p>
-          <p class="text-muted fs-10 mb-3">
-            <span data-feather="info" class="me-1"></span>
-            <strong>Multiple Roles:</strong> When a user has multiple roles, they get the combined permissions from all assigned roles.
-          </p>
-          <p class="text-muted fs-10 mb-0">
-            <span data-feather="info" class="me-1"></span>
-            <strong>Changes:</strong> Role changes take effect immediately after saving.
-          </p>
+          <div class="mb-3">
+            <div class="d-flex align-items-start">
+              <span data-feather="shield" class="me-2 mt-1 text-primary" style="width: 16px; height: 16px;"></span>
+              <div>
+                <h6 class="text-body-emphasis mb-1">Roles</h6>
+                <p class="text-muted small mb-0">
+                  Define what a user can do in the system. A user can have multiple roles.
+                </p>
+              </div>
+            </div>
+          </div>
+          <div class="mb-3">
+            <div class="d-flex align-items-start">
+              <span data-feather="layers" class="me-2 mt-1 text-primary" style="width: 16px; height: 16px;"></span>
+              <div>
+                <h6 class="text-body-emphasis mb-1">Multiple Roles</h6>
+                <p class="text-muted small mb-0">
+                  When a user has multiple roles, they get the combined permissions from all assigned roles.
+                </p>
+              </div>
+            </div>
+          </div>
+          <div class="mb-0">
+            <div class="d-flex align-items-start">
+              <span data-feather="zap" class="me-2 mt-1 text-primary" style="width: 16px; height: 16px;"></span>
+              <div>
+                <h6 class="text-body-emphasis mb-1">Changes</h6>
+                <p class="text-muted small mb-0">
+                  Role changes take effect immediately after saving.
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
       <!-- Quick Actions -->
-      <div class="card mt-3">
-        <div class="card-header">
-          <h6 class="mb-0">Quick Actions</h6>
+      <div class="card">
+        <div class="card-header bg-body-tertiary">
+          <h6 class="mb-0">
+            <span data-feather="zap" class="me-2" style="width: 16px; height: 16px;"></span>
+            Quick Actions
+          </h6>
         </div>
         <div class="card-body">
           <a href="{% url 'users:user_edit' user.id %}" class="btn btn-phoenix-primary w-100 mb-2">
-            <span data-feather="edit-2" class="me-2"></span>Edit User
+            <span data-feather="edit-2" class="me-2" style="width: 16px; height: 16px;"></span>
+            Edit User
           </a>
           <a href="{% url 'users:role_list' %}" class="btn btn-phoenix-secondary w-100">
-            <span data-feather="shield" class="me-2"></span>Manage Roles
+            <span data-feather="shield" class="me-2" style="width: 16px; height: 16px;"></span>
+            Manage Roles
           </a>
         </div>
       </div>
