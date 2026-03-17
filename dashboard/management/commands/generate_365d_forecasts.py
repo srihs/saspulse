@@ -271,7 +271,8 @@ class Command(BaseCommand):
         FROM cin7_sync_salesorderlineitem li
         JOIN cin7_sync_salesorder so ON so.id = li.sales_order_id
         JOIN cin7_sync_product p ON p.id = li.product_id
-        WHERE p.category_name LIKE '%%Shop'
+        WHERE (p.category_name LIKE '%%Shop' OR p.category_name LIKE '%%Store')
+          AND p.category_name NOT IN ('Shop', 'Store')
           AND so.stage = 'Dispatched'
           AND so.invoice_date IS NOT NULL
           AND so.invoice_date >= DATE_SUB(CURDATE(), INTERVAL 1460 DAY)

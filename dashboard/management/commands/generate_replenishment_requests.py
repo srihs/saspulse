@@ -131,7 +131,8 @@ class Command(BaseCommand):
         FROM cin7_sync_salesorderlineitem li
         JOIN cin7_sync_salesorder so ON so.id = li.sales_order_id
         JOIN cin7_sync_product p ON p.id = li.product_id
-        WHERE p.category_name LIKE '%%Shop'
+        WHERE (p.category_name LIKE '%%Shop' OR p.category_name LIKE '%%Store')
+          AND p.category_name NOT IN ('Shop', 'Store')
           AND so.stage = 'Dispatched'
           AND so.cin7_created_date >= DATE_SUB(CURDATE(), INTERVAL 90 DAY)
         GROUP BY p.name, p.id, p.sub_category
@@ -216,7 +217,8 @@ class Command(BaseCommand):
         FROM cin7_sync_stock s
         JOIN cin7_sync_product p ON p.id = s.product_id
         JOIN cin7_sync_branch b ON b.id = s.branch_id
-        WHERE p.category_name LIKE '%%Shop'
+        WHERE (p.category_name LIKE '%%Shop' OR p.category_name LIKE '%%Store')
+          AND p.category_name NOT IN ('Shop', 'Store')
           AND s.updated_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
         """
 

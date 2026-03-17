@@ -81,7 +81,8 @@ class Command(BaseCommand):
         FROM cin7_sync_salesorderlineitem li
         JOIN cin7_sync_salesorder so ON so.id = li.sales_order_id
         JOIN cin7_sync_product p ON p.id = li.product_id
-        WHERE p.category_name LIKE '%%Shop'
+        WHERE (p.category_name LIKE '%%Shop' OR p.category_name LIKE '%%Store')
+          AND p.category_name NOT IN ('Shop', 'Store')
           AND so.stage = 'Dispatched'
           AND so.invoice_date IS NOT NULL
           AND so.invoice_date >= DATE_SUB(CURDATE(), INTERVAL %s DAY)
@@ -182,7 +183,8 @@ class Command(BaseCommand):
         FROM cin7_sync_product p
         JOIN cin7_sync_salesorderlineitem li ON li.product_id = p.id
         JOIN cin7_sync_salesorder so ON so.id = li.sales_order_id
-        WHERE p.category_name LIKE '%%Shop'
+        WHERE (p.category_name LIKE '%%Shop' OR p.category_name LIKE '%%Store')
+          AND p.category_name NOT IN ('Shop', 'Store')
           AND p.category_name NOT LIKE 'Wholesale%%'
           AND p.sub_category IS NOT NULL
           AND p.sub_category != ''
@@ -283,7 +285,8 @@ class Command(BaseCommand):
         JOIN cin7_sync_salesorder so ON so.id = li.sales_order_id
         JOIN cin7_sync_product p ON p.id = li.product_id
         WHERE li.code = %s
-          AND p.category_name LIKE '%%Shop'
+          AND (p.category_name LIKE '%%Shop' OR p.category_name LIKE '%%Store')
+          AND p.category_name NOT IN ('Shop', 'Store')
           AND so.stage = 'Dispatched'
           AND so.invoice_date IS NOT NULL
           AND so.invoice_date >= DATE_SUB(CURDATE(), INTERVAL %s DAY)
@@ -334,7 +337,8 @@ class Command(BaseCommand):
         JOIN cin7_sync_salesorder so ON so.id = li.sales_order_id
         JOIN cin7_sync_product p ON p.id = li.product_id
         WHERE p.sub_category = %s
-          AND p.category_name LIKE '%%Shop'
+          AND (p.category_name LIKE '%%Shop' OR p.category_name LIKE '%%Store')
+          AND p.category_name NOT IN ('Shop', 'Store')
           AND p.category_name NOT LIKE 'Wholesale%%'
           AND so.stage = 'Dispatched'
           AND so.invoice_date IS NOT NULL
