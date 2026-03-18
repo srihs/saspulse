@@ -1069,3 +1069,53 @@ class ProfileEditForm(forms.ModelForm):
                 raise forms.ValidationError('Phone number must be between 7 and 15 digits.')
 
         return phone
+
+
+class PriorityScoreSettingsForm(forms.ModelForm):
+    """
+    Form for configuring Priority Score calculation parameters.
+    Validates threshold ordering and provides Bootstrap styling.
+    """
+    class Meta:
+        from dashboard.models import PriorityScoreSettings
+
+        model = PriorityScoreSettings
+        fields = [
+            'critical_risk_days', 'critical_risk_score',
+            'high_risk_days', 'high_risk_score',
+            'medium_risk_days', 'medium_risk_score',
+            'low_risk_score',
+            'top_customer_count', 'top_customer_weight',
+            'high_velocity_weight'
+        ]
+        widgets = {
+            'critical_risk_days': forms.NumberInput(attrs={'class': 'form-control', 'min': 1}),
+            'critical_risk_score': forms.NumberInput(attrs={'class': 'form-control', 'min': 0}),
+            'high_risk_days': forms.NumberInput(attrs={'class': 'form-control', 'min': 1}),
+            'high_risk_score': forms.NumberInput(attrs={'class': 'form-control', 'min': 0}),
+            'medium_risk_days': forms.NumberInput(attrs={'class': 'form-control', 'min': 1}),
+            'medium_risk_score': forms.NumberInput(attrs={'class': 'form-control', 'min': 0}),
+            'low_risk_score': forms.NumberInput(attrs={'class': 'form-control', 'min': 0}),
+            'top_customer_count': forms.NumberInput(attrs={'class': 'form-control', 'min': 1}),
+            'top_customer_weight': forms.NumberInput(attrs={'class': 'form-control', 'min': 0}),
+            'high_velocity_weight': forms.NumberInput(attrs={'class': 'form-control', 'min': 0}),
+        }
+
+    def clean(self):
+        """
+        Validate threshold ordering to ensure logical risk levels.
+        Critical < High < Medium in terms of days.
+        """
+        cleaned_data = super().clean()
+        critical_days = cleaned_data.get('critical_risk_days')
+        high_days = cleaned_data.get('high_risk_days')
+        medium_days = cleaned_data.get('medium_risk_days')
+
+        # Validate threshold ordering
+        if critical_days and high_days and critical_days >= high_days:
+            raise forms.ValidationError('Critical risk days must be less than high risk days')
+
+        if high_days and medium_days and high_days >= medium_days:
+            raise forms.ValidationError('High risk days must be less than medium risk days')
+
+        return cleaned_data

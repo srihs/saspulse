@@ -644,3 +644,61 @@ class StoreSchoolMappingView(PermissionRequiredMixin, LoginRequiredMixin, View):
                 messages.warning(request, 'No mappings selected.')
 
         return redirect('users:store_school_mapping')
+
+
+# ==================== Priority Score Settings Views ====================
+
+class PriorityScoreSettingsView(PermissionRequiredMixin, LoginRequiredMixin, View):
+    permission_required = 'admin.settings.view'
+    """
+    View for managing priority score configuration.
+    Allows admin users to configure risk scoring thresholds and priority weights.
+    """
+    template_name = 'users/priority_score_settings.html'
+
+    def get(self, request):
+        """Display priority score settings form."""
+        from dashboard.models import PriorityScoreSettings
+        from .forms import PriorityScoreSettingsForm
+
+        # Load current settings (singleton)
+        settings = PriorityScoreSettings.get_settings()
+        form = PriorityScoreSettingsForm(instance=settings)
+
+        context = {
+            'form': form,
+            'settings': settings,
+        }
+        return render(request, self.template_name, context)
+
+    def post(self, request):
+        """Process priority score settings update."""
+        from dashboard.models import PriorityScoreSettings
+        from .forms import PriorityScoreSettingsForm
+
+        # Load current settings
+        settings = PriorityScoreSettings.get_settings()
+        form = PriorityScoreSettingsForm(request.POST, instance=settings)
+
+        if form.is_valid():
+            # Save settings
+            settings = form.save(commit=False)
+            settings.updated_by = request.user
+            settings.save()
+
+            messages.success(
+                request,
+                'Priority score settings updated successfully! Changes will apply to all future calculations.'
+            )
+            return redirect('users:priority_score_settings')
+        else:
+            messages.error(
+                request,
+                'Please correct the errors below.'
+            )
+
+        context = {
+            'form': form,
+            'settings': settings,
+        }
+        return render(request, self.template_name, context)

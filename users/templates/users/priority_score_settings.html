@@ -1,0 +1,328 @@
+{% extends "users/base_system.html" %}
+{% load static %}
+
+{% block title %}Priority Score Settings - SasPulse{% endblock %}
+
+{% block system_content %}
+<div class="container-fluid px-0">
+  <!-- Page Header -->
+  <div class="row g-3 mb-3 align-items-center">
+    <div class="col">
+      <h2 class="mb-0 text-body-emphasis">
+        <span data-feather="sliders" class="me-2" style="width: 28px; height: 28px;"></span>
+        Priority Score Settings
+      </h2>
+      <p class="text-muted mb-0">Configure risk scoring and priority weighting for demand planning</p>
+    </div>
+  </div>
+
+  <!-- Breadcrumb -->
+  <nav aria-label="breadcrumb">
+    <ol class="breadcrumb mb-4">
+      <li class="breadcrumb-item"><a href="/">Home</a></li>
+      <li class="breadcrumb-item"><a href="#">System</a></li>
+      <li class="breadcrumb-item active" aria-current="page">Priority Score Settings</li>
+    </ol>
+  </nav>
+
+  <form method="post">
+    {% csrf_token %}
+
+    <!-- Display Form Errors -->
+    {% if form.non_field_errors %}
+    <div class="alert alert-danger" role="alert">
+      <span data-feather="alert-circle" class="me-2"></span>
+      <strong>Error:</strong>
+      {% for error in form.non_field_errors %}
+        {{ error }}
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="row g-3">
+      <!-- Risk Score Thresholds Card -->
+      <div class="col-lg-6">
+        <div class="card">
+          <div class="card-header bg-body-tertiary border-bottom">
+            <h5 class="mb-0">
+              <span data-feather="alert-triangle" class="me-2" style="width: 18px; height: 18px;"></span>
+              Risk Score Thresholds
+            </h5>
+            <p class="text-muted small mb-0 mt-2">Based on Days of Coverage (Stock on Hand + Incoming / Daily Demand)</p>
+          </div>
+          <div class="card-body">
+            <!-- Critical Risk -->
+            <div class="mb-4">
+              <div class="d-flex align-items-center mb-2">
+                <span class="badge bg-danger me-2">CRITICAL</span>
+                <strong>Critical Risk</strong>
+              </div>
+              <div class="row g-3">
+                <div class="col-md-6">
+                  <label class="form-label">Days Threshold</label>
+                  <div class="input-group">
+                    {{ form.critical_risk_days }}
+                    <span class="input-group-text">days</span>
+                  </div>
+                  <small class="text-muted">Items with &lt; this many days</small>
+                  {% if form.critical_risk_days.errors %}
+                    <div class="text-danger small mt-1">{{ form.critical_risk_days.errors.0 }}</div>
+                  {% endif %}
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">Risk Score</label>
+                  <div class="input-group">
+                    {{ form.critical_risk_score }}
+                    <span class="input-group-text">points</span>
+                  </div>
+                  <small class="text-muted">Score assigned</small>
+                  {% if form.critical_risk_score.errors %}
+                    <div class="text-danger small mt-1">{{ form.critical_risk_score.errors.0 }}</div>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+
+            <!-- High Risk -->
+            <div class="mb-4">
+              <div class="d-flex align-items-center mb-2">
+                <span class="badge bg-warning me-2">HIGH</span>
+                <strong>High Risk</strong>
+              </div>
+              <div class="row g-3">
+                <div class="col-md-6">
+                  <label class="form-label">Days Threshold</label>
+                  <div class="input-group">
+                    {{ form.high_risk_days }}
+                    <span class="input-group-text">days</span>
+                  </div>
+                  <small class="text-muted">Items with &lt; this many days</small>
+                  {% if form.high_risk_days.errors %}
+                    <div class="text-danger small mt-1">{{ form.high_risk_days.errors.0 }}</div>
+                  {% endif %}
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">Risk Score</label>
+                  <div class="input-group">
+                    {{ form.high_risk_score }}
+                    <span class="input-group-text">points</span>
+                  </div>
+                  <small class="text-muted">Score assigned</small>
+                  {% if form.high_risk_score.errors %}
+                    <div class="text-danger small mt-1">{{ form.high_risk_score.errors.0 }}</div>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+
+            <!-- Medium Risk -->
+            <div class="mb-4">
+              <div class="d-flex align-items-center mb-2">
+                <span class="badge bg-info me-2">MEDIUM</span>
+                <strong>Medium Risk</strong>
+              </div>
+              <div class="row g-3">
+                <div class="col-md-6">
+                  <label class="form-label">Days Threshold</label>
+                  <div class="input-group">
+                    {{ form.medium_risk_days }}
+                    <span class="input-group-text">days</span>
+                  </div>
+                  <small class="text-muted">Items with &lt; this many days</small>
+                  {% if form.medium_risk_days.errors %}
+                    <div class="text-danger small mt-1">{{ form.medium_risk_days.errors.0 }}</div>
+                  {% endif %}
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">Risk Score</label>
+                  <div class="input-group">
+                    {{ form.medium_risk_score }}
+                    <span class="input-group-text">points</span>
+                  </div>
+                  <small class="text-muted">Score assigned</small>
+                  {% if form.medium_risk_score.errors %}
+                    <div class="text-danger small mt-1">{{ form.medium_risk_score.errors.0 }}</div>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+
+            <!-- Low Risk -->
+            <div>
+              <div class="d-flex align-items-center mb-2">
+                <span class="badge bg-success me-2">LOW</span>
+                <strong>Low Risk</strong>
+              </div>
+              <div class="row g-3">
+                <div class="col-md-6">
+                  <label class="form-label">Days Threshold</label>
+                  <input type="text" class="form-control" value="> Medium Risk Days" disabled>
+                  <small class="text-muted">Items with more days</small>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">Risk Score</label>
+                  <div class="input-group">
+                    {{ form.low_risk_score }}
+                    <span class="input-group-text">points</span>
+                  </div>
+                  <small class="text-muted">Score assigned</small>
+                  {% if form.low_risk_score.errors %}
+                    <div class="text-danger small mt-1">{{ form.low_risk_score.errors.0 }}</div>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Priority Weights Card -->
+      <div class="col-lg-6">
+        <div class="card">
+          <div class="card-header bg-body-tertiary border-bottom">
+            <h5 class="mb-0">
+              <span data-feather="trending-up" class="me-2" style="width: 18px; height: 18px;"></span>
+              Priority Weights
+            </h5>
+            <p class="text-muted small mb-0 mt-2">Additional points for important factors</p>
+          </div>
+          <div class="card-body">
+            <!-- Top Customer Priority -->
+            <div class="mb-4">
+              <div class="d-flex align-items-center mb-2">
+                <span data-feather="star" class="me-2 text-warning" style="width: 18px; height: 18px;"></span>
+                <strong>Top Customer Priority</strong>
+              </div>
+              <div class="row g-3">
+                <div class="col-md-6">
+                  <label class="form-label">Top Customer Count</label>
+                  <div class="input-group">
+                    {{ form.top_customer_count }}
+                    <span class="input-group-text">schools</span>
+                  </div>
+                  <small class="text-muted">Number of top schools to prioritize</small>
+                  {% if form.top_customer_count.errors %}
+                    <div class="text-danger small mt-1">{{ form.top_customer_count.errors.0 }}</div>
+                  {% endif %}
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">Priority Weight</label>
+                  <div class="input-group">
+                    {{ form.top_customer_weight }}
+                    <span class="input-group-text">+points</span>
+                  </div>
+                  <small class="text-muted">Bonus for top customers</small>
+                  {% if form.top_customer_weight.errors %}
+                    <div class="text-danger small mt-1">{{ form.top_customer_weight.errors.0 }}</div>
+                  {% endif %}
+                </div>
+              </div>
+              <div class="alert alert-info mt-3 mb-0">
+                <small>
+                  <strong>Note:</strong> Top customers are determined by the "Top Performing Schools" feature.
+                  Schools marked as top performers will receive this priority weight.
+                </small>
+              </div>
+            </div>
+
+            <!-- High Velocity Weight -->
+            <div>
+              <div class="d-flex align-items-center mb-2">
+                <span data-feather="zap" class="me-2 text-primary" style="width: 18px; height: 18px;"></span>
+                <strong>High Velocity Weight</strong>
+              </div>
+              <div class="row g-3">
+                <div class="col-md-12">
+                  <label class="form-label">Velocity Bonus</label>
+                  <div class="input-group">
+                    {{ form.high_velocity_weight }}
+                    <span class="input-group-text">+points</span>
+                  </div>
+                  <small class="text-muted">Bonus for items with sales above category average</small>
+                  {% if form.high_velocity_weight.errors %}
+                    <div class="text-danger small mt-1">{{ form.high_velocity_weight.errors.0 }}</div>
+                  {% endif %}
+                </div>
+              </div>
+              <div class="alert alert-warning mt-3 mb-0">
+                <small>
+                  <strong>Velocity Criteria:</strong> Items with average daily sales higher than their category average will receive this bonus.
+                </small>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Formula Card -->
+        <div class="card mt-3">
+          <div class="card-header bg-primary bg-opacity-10 border-primary">
+            <h5 class="mb-0 text-primary">
+              <span data-feather="cpu" class="me-2" style="width: 18px; height: 18px;"></span>
+              Priority Score Formula
+            </h5>
+          </div>
+          <div class="card-body">
+            <div class="text-center py-3">
+              <code class="fs-5">
+                Priority Score = Risk Score + Customer Weight + Velocity Weight
+              </code>
+            </div>
+            <hr>
+            <div class="row text-center">
+              <div class="col-4">
+                <div class="text-muted small">Maximum Score</div>
+                <div class="fs-4 fw-bold text-primary">{{ settings.get_max_score }}</div>
+                <div class="small">(Current)</div>
+              </div>
+              <div class="col-4">
+                <div class="text-muted small">Min Coverage</div>
+                <div class="fs-4 fw-bold text-danger">{{ settings.critical_risk_days }}</div>
+                <div class="small">days</div>
+              </div>
+              <div class="col-4">
+                <div class="text-muted small">Top Schools</div>
+                <div class="fs-4 fw-bold text-warning">{{ settings.top_customer_count }}</div>
+                <div class="small">schools</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Save Button -->
+    <div class="row mt-4">
+      <div class="col-12">
+        <div class="d-flex justify-content-end gap-3">
+          <a href="{% url 'users:system_settings' %}" class="btn btn-secondary">
+            <span data-feather="x" class="me-2"></span>
+            Cancel
+          </a>
+          <button type="submit" class="btn btn-primary">
+            <span data-feather="save" class="me-2"></span>
+            Save Settings
+          </button>
+        </div>
+      </div>
+    </div>
+  </form>
+
+  <!-- Last Updated Info -->
+  {% if settings.updated_at %}
+  <div class="row mt-3">
+    <div class="col-12">
+      <div class="text-muted small text-end">
+        Last updated: {{ settings.updated_at|date:"F d, Y g:i A" }}
+        {% if settings.updated_by %}by {{ settings.updated_by.get_full_name|default:settings.updated_by.email }}{% endif %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    feather.replace();
+  });
+</script>
+{% endblock %}

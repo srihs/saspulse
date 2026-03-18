@@ -1168,3 +1168,163 @@ class StoreSchoolMapping(models.Model):
     def __str__(self):
         status = "Active" if self.is_active else "Inactive"
         return f"{self.store_name} - {self.school_name} ({status})"
+
+
+class PriorityScoreSettings(models.Model):
+    """
+    Configurable settings for Priority Score calculation.
+    Singleton model - only one instance should exist.
+
+    Priority Score Formula:
+    Priority Score = Risk Score + Customer Priority Weight + Demand Velocity Weight
+
+    Used in demand planning to prioritize replenishment requests based on:
+    - Stock Risk (Days of Coverage)
+    - Customer Importance (Top Performing Schools)
+    - Sales Velocity (High-demand items)
+    """
+    # Risk Score Thresholds (Days of Coverage)
+    critical_risk_days = models.IntegerField(
+        default=15,
+        help_text='Days of coverage threshold for Critical Risk (< X days)'
+    )
+    critical_risk_score = models.IntegerField(
+        default=100,
+        help_text='Score for Critical Risk items'
+    )
+
+    high_risk_days = models.IntegerField(
+        default=30,
+        help_text='Days of coverage threshold for High Risk (< X days)'
+    )
+    high_risk_score = models.IntegerField(
+        default=80,
+        help_text='Score for High Risk items'
+    )
+
+    medium_risk_days = models.IntegerField(
+        default=60,
+        help_text='Days of coverage threshold for Medium Risk (< X days)'
+    )
+    medium_risk_score = models.IntegerField(
+        default=40,
+        help_text='Score for Medium Risk items'
+    )
+
+    low_risk_score = models.IntegerField(
+        default=10,
+        help_text='Score for Low Risk items (> medium_risk_days)'
+    )
+
+    # Customer Priority Weight
+    top_customer_count = models.IntegerField(
+        default=56,
+        help_text='Number of top performing schools/customers to prioritize'
+    )
+    top_customer_weight = models.IntegerField(
+        default=20,
+        help_text='Additional points for top customers'
+    )
+
+    # Demand Velocity Weight
+    high_velocity_weight = models.IntegerField(
+        default=10,
+        help_text='Additional points for high-velocity items (above category average)'
+    )
+
+    # Metadata
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        'users.CustomUser',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text='User who last updated these settings'
+    )
+
+    class Meta:
+        verbose_name = 'Priority Score Settings'
+        verbose_name_plural = 'Priority Score Settings'
+
+    @classmethod
+    def get_settings(cls):
+        """Get or create the singleton settings instance"""
+        settings, created = cls.objects.get_or_create(pk=1)
+        return settings
+
+    def save(self, *args, **kwargs):
+        """Enforce singleton pattern - only one instance allowed"""
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        """Prevent deletion of settings"""
+        pass
+
+    def get_risk_score(self, days_of_coverage):
+        """
+        Calculate risk score based on days of coverage
+
+        Args:
+            days_of_coverage: Number of days until stockout
+
+        Returns:
+            int: Risk score (10-100)
+        """
+        if days_of_coverage < self.critical_risk_days:
+            return self.critical_risk_score
+        elif days_of_coverage < self.high_risk_days:
+            return self.high_risk_score
+        elif days_of_coverage < self.medium_risk_days:
+            return self.medium_risk_score
+        else:
+            return self.low_risk_score
+
+    def get_risk_tag(self, days_of_coverage):
+        """
+        Get risk tag (CRITICAL/HIGH/MEDIUM/LOW) based on days of coverage
+
+        Args:
+            days_of_coverage: Number of days until stockout
+
+        Returns:
+            str: Risk level tag
+        """
+        if days_of_coverage < self.critical_risk_days:
+            return 'CRITICAL'
+        elif days_of_coverage < self.high_risk_days:
+            return 'HIGH'
+        elif days_of_coverage < self.medium_risk_days:
+            return 'MEDIUM'
+        else:
+            return 'LOW'
+
+    def calculate_priority_score(self, days_of_coverage, is_top_customer, is_high_velocity):
+        """
+        Calculate total priority score
+
+        Args:
+            days_of_coverage: Number of days until stockout
+            is_top_customer: Boolean - is this a top customer?
+            is_high_velocity: Boolean - is this a high-velocity item?
+
+        Returns:
+            int: Total priority score
+        """
+        risk_score = self.get_risk_score(days_of_coverage)
+        customer_weight = self.top_customer_weight if is_top_customer else 0
+        velocity_weight = self.high_velocity_weight if is_high_velocity else 0
+
+        return risk_score + customer_weight + velocity_weight
+
+    def get_max_score(self):
+        """
+        Calculate the maximum possible priority score
+
+        Returns:
+            int: Maximum score (critical_risk_score + top_customer_weight + high_velocity_weight)
+        """
+        return self.critical_risk_score + self.top_customer_weight + self.high_velocity_weight
+
+    def __str__(self):
+        return "Priority Score Settings"
