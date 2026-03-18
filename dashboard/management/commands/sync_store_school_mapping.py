@@ -55,7 +55,7 @@ class Command(BaseCommand):
             category_name__istartswith='Wholesale'
         ).values('category_name', 'sub_category').annotate(
             product_count=Count('id')
-        ).distinct()
+        )
 
         total_found = stores.count()
         self.stdout.write(f'Found {total_found} unique store-school combinations')
