@@ -1113,6 +1113,10 @@ class TopPerformingSchool(models.Model):
     last_fy_end = models.DateField(null=True, blank=True, help_text="Financial year end date")
     sales_updated_at = models.DateTimeField(null=True, blank=True, help_text="When sales data was last calculated")
 
+    # Auto-selection tracking
+    auto_selected = models.BooleanField(default=False, db_index=True, help_text="Whether this school was auto-selected as top 52")
+    store_location = models.CharField(max_length=255, null=True, blank=True, help_text="Store/Shop location (extracted from category_name)")
+
     # Metadata
     marked_by = models.ForeignKey('users.CustomUser', on_delete=models.SET_NULL, null=True, blank=True, related_name='marked_top_schools')
     marked_at = models.DateTimeField(null=True, blank=True)

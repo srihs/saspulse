@@ -56,4 +56,5 @@ urlpatterns = [
     # Top Performing Schools
     path('replenishment/dp/top-schools/', views.top_performing_schools, name='top_performing_schools'),
     path('replenishment/dp/top-schools/toggle/<int:school_id>/', views.toggle_top_performing_school, name='toggle_top_performing_school'),
+    path('replenishment/dp/top-schools/auto-select/', views.auto_select_top_52_schools, name='auto_select_top_52_schools'),
 ]

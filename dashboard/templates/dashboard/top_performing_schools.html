@@ -80,9 +80,14 @@
                             <i class="fas fa-school me-2"></i>
                             Schools Performance
                         </h5>
-                        <button class="btn btn-light btn-sm" id="exportBtn">
-                            <i data-feather="download"></i> Export to CSV
-                        </button>
+                        <div>
+                            <button class="btn btn-success btn-sm me-2" id="autoSelectBtn">
+                                <i data-feather="zap"></i> Auto-Select Top 52 Schools
+                            </button>
+                            <button class="btn btn-light btn-sm" id="exportBtn">
+                                <i data-feather="download"></i> Export to CSV
+                            </button>
+                        </div>
                     </div>
                 </div>
                 <div class="card-body">
@@ -97,8 +102,10 @@
                                 <tr>
                                     <th>Rank</th>
                                     <th>School Name</th>
-                                    <th>Category/Store</th>
+                                    <th>Store Location</th>
+                                    <th>Category</th>
                                     <th>Last FY Sales</th>
+                                    <th>Status</th>
                                     <th>Top Performing</th>
                                     <th>Last Updated</th>
                                 </tr>
@@ -113,9 +120,23 @@
                                         <span class="badge bg-success ms-2">Top Performer</span>
                                         {% endif %}
                                     </td>
+                                    <td>
+                                        {% if school.store_location %}
+                                        <span class="badge bg-primary">{{ school.store_location }}</span>
+                                        {% else %}
+                                        <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
                                     <td>{{ school.category_name }}</td>
                                     <td>
                                         <strong>${{ school.last_fy_sales|floatformat:2|intcomma }}</strong>
+                                    </td>
+                                    <td class="text-center">
+                                        {% if school.auto_selected %}
+                                        <span class="badge bg-info" title="Auto-selected by system">AUTO</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary" title="Manually selected">MANUAL</span>
+                                        {% endif %}
                                     </td>
                                     <td class="text-center">
                                         <div class="form-check d-flex justify-content-center">
@@ -159,11 +180,11 @@
 $(document).ready(function() {
     // Initialize DataTables
     const table = $('#schoolsTable').DataTable({
-        order: [[3, 'desc']], // Sort by last FY sales descending
+        order: [[4, 'desc']], // Sort by last FY sales descending (now column 4)
         pageLength: 25,
         dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>rtip',
         columnDefs: [
-            { orderable: false, targets: [4] } // Disable sorting on checkbox column
+            { orderable: false, targets: [6] } // Disable sorting on checkbox column (now column 6)
         ]
     });
 
@@ -243,10 +264,62 @@ $(document).ready(function() {
         });
     });
 
+    // Auto-Select Top 52 Schools functionality
+    $('#autoSelectBtn').on('click', function() {
+        if (confirm('This will automatically select the top 52 schools based on last financial year sales from the 16 store locations. This will CLEAR all current selections and replace them with auto-selected schools. Continue?')) {
+            const btn = $(this);
+            const originalHtml = btn.html();
+
+            // Disable button and show loading
+            btn.prop('disabled', true);
+            btn.html('<span class="spinner-border spinner-border-sm me-2"></span>Selecting...');
+
+            $.ajax({
+                url: '/dashboard/replenishment/dp/top-schools/auto-select/',
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': getCookie('csrftoken')
+                },
+                success: function(response) {
+                    if (response.success) {
+                        showAlert(
+                            response.message || `Successfully selected ${response.count} top schools!`,
+                            'Auto-Selection Complete',
+                            'check-circle'
+                        );
+                        // Reload page to show updated data
+                        setTimeout(function() {
+                            location.reload();
+                        }, 1500);
+                    } else {
+                        showAlert('Error: ' + (response.error || 'Unknown error'), 'Auto-Selection Failed', 'times-circle');
+                        btn.prop('disabled', false);
+                        btn.html(originalHtml);
+                    }
+                },
+                error: function(xhr) {
+                    console.error('Auto-select error:', xhr.status, xhr.responseText);
+                    let errorMsg = 'An error occurred while auto-selecting schools.';
+                    try {
+                        const errorData = JSON.parse(xhr.responseText);
+                        if (errorData.error) {
+                            errorMsg = errorData.error;
+                        }
+                    } catch (e) {
+                        errorMsg = xhr.responseText || errorMsg;
+                    }
+                    showAlert(errorMsg, 'Error', 'times-circle');
+                    btn.prop('disabled', false);
+                    btn.html(originalHtml);
+                }
+            });
+        }
+    });
+
     // Export to CSV functionality
     $('#exportBtn').on('click', function() {
         const csv = [];
-        const headers = ['Rank', 'School Name', 'Category/Store', 'Last FY Sales', 'Top Performing', 'Last Updated'];
+        const headers = ['Rank', 'School Name', 'Store Location', 'Category', 'Last FY Sales', 'Status', 'Top Performing', 'Last Updated'];
         csv.push(headers.join(','));
 
         table.rows({ search: 'applied' }).every(function() {
@@ -256,9 +329,11 @@ $(document).ready(function() {
                 $(cells[0]).text().trim(),
                 $(cells[1]).find('strong').first().text().trim(),
                 $(cells[2]).text().trim(),
-                $(cells[3]).text().trim().replace(/\$/g, ''),
-                $(cells[4]).find('input').is(':checked') ? 'Yes' : 'No',
-                $(cells[5]).text().trim()
+                $(cells[3]).text().trim(),
+                $(cells[4]).text().trim().replace(/\$/g, ''),
+                $(cells[5]).text().trim(),
+                $(cells[6]).find('input').is(':checked') ? 'Yes' : 'No',
+                $(cells[7]).text().trim()
             ];
             csv.push(rowData.map(cell => `"${cell}"`).join(','));
         });

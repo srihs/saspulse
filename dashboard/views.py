@@ -6516,11 +6516,17 @@ def top_performing_schools(request):
                 logger.info(f'    Total Quantity: {total_qty:,.0f}')
 
     # Get or create TopPerformingSchool records
+    # Also extract store location from category_name
     for school_name, school_data in schools_dict.items():
+        category_name = school_data['category_name']
+        # Extract store location by removing 'Shop' or 'Store' suffix
+        store_location = category_name.replace(' Shop', '').replace(' Store', '').strip()
+
         TopPerformingSchool.objects.update_or_create(
             school_name=school_name,
             defaults={
-                'category_name': school_data['category_name'],
+                'category_name': category_name,
+                'store_location': store_location,
                 'last_fy_sales': school_data['last_fy_sales'],
                 'last_fy_start': last_fy_start,
                 'last_fy_end': last_fy_end,
@@ -6580,6 +6586,184 @@ def toggle_top_performing_school(request, school_id):
         })
 
     except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=400)
+
+
+def calculate_school_sales_from_mapping(school_name, category_name, last_fy_start, last_fy_end):
+    """
+    Calculate last financial year sales for a specific school based on store-school mapping
+
+    Args:
+        school_name: School name (from sub_category)
+        category_name: Category name (e.g., 'Mt Albert Shop')
+        last_fy_start: Start date of last financial year
+        last_fy_end: End date of last financial year
+
+    Returns:
+        Decimal: Total sales amount
+    """
+    from cin7.models import Product, SalesOrderLineItem
+    from django.db.models import Sum, F
+    from django.utils import timezone
+    import datetime
+
+    # Convert dates to timezone-aware datetime
+    last_fy_start_dt = timezone.make_aware(datetime.datetime.combine(last_fy_start, datetime.time.min))
+    last_fy_end_dt = timezone.make_aware(datetime.datetime.combine(last_fy_end, datetime.time.max))
+
+    # Get all products for this school and category
+    school_products = Product.objects.filter(
+        category_name=category_name,
+        sub_category=school_name
+    ).values_list('cin7_id', flat=True)
+
+    if not school_products:
+        return 0
+
+    # Calculate sales for these products in the last FY
+    sales = SalesOrderLineItem.objects.filter(
+        cin7_product_id__in=school_products,
+        sales_order__invoice_date__gte=last_fy_start_dt,
+        sales_order__invoice_date__lte=last_fy_end_dt,
+        sales_order__status='APPROVED'
+    ).aggregate(
+        total_sales=Sum(F('qty') * F('unit_price'))
+    )
+
+    return float(sales['total_sales'] or 0)
+
+
+def perform_auto_selection_top_52():
+    """
+    Auto-select top 52 schools based on store-school mapping and sales data
+
+    Algorithm:
+    1. Get all active stores from StoreSchoolMapping
+    2. For each store, get all schools and calculate their last FY sales
+    3. Rank schools by sales within each store
+    4. Select top performers from each store (distributed across 16 stores)
+    5. Sort all candidates by sales and take top 52
+
+    Returns:
+        int: Number of schools selected
+    """
+    from dashboard.models import StoreSchoolMapping, TopPerformingSchool
+    from dashboard.utils.financial_year import get_financial_year_dates
+    from django.utils import timezone
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    # Get last financial year dates
+    last_fy_start, last_fy_end = get_financial_year_dates()
+
+    logger.info(f'Auto-selecting top 52 schools based on FY {last_fy_start} to {last_fy_end}')
+
+    # Step 1: Get all active stores from StoreSchoolMapping
+    stores = StoreSchoolMapping.objects.filter(is_active=True)\
+        .values('store_name').distinct().order_by('store_name')
+
+    logger.info(f'Found {stores.count()} active stores')
+
+    all_school_sales = []
+
+    # Step 2: For each store location
+    for store in stores:
+        store_name = store['store_name']
+
+        # Get all schools for this store
+        store_mappings = StoreSchoolMapping.objects.filter(
+            store_name=store_name,
+            is_active=True
+        )
+
+        logger.info(f'Processing store: {store_name} with {store_mappings.count()} schools')
+
+        # Calculate sales for each school in this store
+        for mapping in store_mappings:
+            school = mapping.school_name
+            category = mapping.category_name
+
+            # Calculate last FY sales for this school
+            sales = calculate_school_sales_from_mapping(school, category, last_fy_start, last_fy_end)
+
+            all_school_sales.append({
+                'school_name': school,
+                'category_name': category,
+                'store_name': store_name,
+                'sales': sales
+            })
+
+    logger.info(f'Calculated sales for {len(all_school_sales)} schools')
+
+    # Step 3: Sort all schools by sales descending
+    all_school_sales.sort(key=lambda x: x['sales'], reverse=True)
+
+    # Step 4: Take top 52 schools
+    top_52_schools = all_school_sales[:52]
+
+    logger.info(f'Selected top {len(top_52_schools)} schools')
+
+    # Step 5: Clear all auto-selections first
+    TopPerformingSchool.objects.all().update(auto_selected=False, is_top_performing=False)
+
+    # Step 6: Update TopPerformingSchool records for top 52
+    selected_count = 0
+    for school_data in top_52_schools:
+        school, created = TopPerformingSchool.objects.update_or_create(
+            school_name=school_data['school_name'],
+            defaults={
+                'category_name': school_data['category_name'],
+                'store_location': school_data['store_name'],
+                'last_fy_sales': school_data['sales'],
+                'last_fy_start': last_fy_start,
+                'last_fy_end': last_fy_end,
+                'sales_updated_at': timezone.now(),
+                'auto_selected': True,
+                'is_top_performing': True,
+            }
+        )
+        selected_count += 1
+
+        if selected_count <= 10:  # Log first 10 for debugging
+            logger.info(f'  #{selected_count}: {school_data["school_name"]} ({school_data["store_name"]}) - ${school_data["sales"]:,.2f}')
+
+    logger.info(f'Auto-selection complete: {selected_count} schools marked as top performing')
+
+    return selected_count
+
+
+@login_required
+@permission_required('replenishment.demand_planning.approve')
+@require_http_methods(["POST"])
+def auto_select_top_52_schools(request):
+    """
+    Auto-select top 52 schools based on store-school mapping and last FY sales
+    """
+    import json
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    try:
+        logger.info('Auto-select top 52 schools triggered by user: ' + request.user.username)
+
+        # Perform auto-selection
+        count = perform_auto_selection_top_52()
+
+        logger.info(f'Auto-selection successful: {count} schools selected')
+
+        return JsonResponse({
+            'success': True,
+            'count': count,
+            'message': f'Successfully selected top {count} schools based on last FY sales from 16 store locations.'
+        })
+
+    except Exception as e:
+        logger.error(f'Auto-selection failed: {str(e)}', exc_info=True)
         return JsonResponse({
             'success': False,
             'error': str(e)
