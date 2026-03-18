@@ -14,6 +14,7 @@ from decimal import Decimal
 from users.auth_backend import CustomAuthBackend
 from cin7.models import SalesOrder, SalesOrderLineItem, Stock, Product
 from dashboard.utils.permissions import apply_branch_filter, apply_school_filter, apply_data_scope
+import logging
 
 auth_backend = CustomAuthBackend()
 
@@ -1900,6 +1901,9 @@ def sales_forecasting(request):
     shop_filter = request.GET.get('shop', '').strip()
     category_filter = request.GET.get('category', '').strip()
 
+    # Initialize logger for debugging
+    logger = logging.getLogger(__name__)
+
     # ========== DATA SCOPE FILTERING ==========
     # Apply school-based filtering for Sales Team users
     user = request.user
@@ -1910,7 +1914,6 @@ def sales_forecasting(request):
         user_school_subcategories = user.get_assigned_school_subcategories()
         # If user has school scope but no assignments, they see no data
         if not user_school_subcategories:
-            logger = logging.getLogger(__name__)
             logger.warning(f'User {user.username} has school scope but no assigned schools')
 
     # Date range parameters (new approach)
@@ -2017,8 +2020,10 @@ def sales_forecasting(request):
     # === DEBUG LOGGING END ===
     
     from django.db.models import Max
-    import logging
     logger = logging.getLogger(__name__)
+
+    # Initialize skip flag for deduplication logic
+    skip_generic_dedup = False
 
     # SPECIAL HANDLING FOR SHOP LEVEL: Show product breakdown
     if level == 'shop':
@@ -2029,6 +2034,9 @@ def sales_forecasting(request):
         logger.info(f'Search query: {search_query}')
         logger.info(f'Shop filter: {shop_filter}')
         logger.info(f'User school subcategories: {user_school_subcategories}')
+
+        # Shop level does its own deduplication, so skip generic dedup
+        skip_generic_dedup = True
 
         # Query product-level forecasts, optionally filtered by shop (category_name)
         sql = """
@@ -2158,15 +2166,56 @@ def sales_forecasting(request):
 
             sql += " ORDER BY p.sub_category, p.name, sf.entity_name, sf.forecast_date DESC"
 
+            # Log the SQL query for debugging
+            logger.info(f'DEBUG: SCHOOL LEVEL - Executing SQL query with {len(params)} parameters')
+            logger.info(f'DEBUG: SQL query: {sql}')
+            logger.info(f'DEBUG: Parameters: {params}')
+
             # Execute raw SQL and convert to model instances
             all_base_forecasts = SalesForecastBase.objects.raw(sql, params)
+
+            # DEBUG: Count total raw results
+            logger.info(f'DEBUG: Converting raw SQL results to list...')
+            all_base_forecasts_list = list(all_base_forecasts)
+            logger.info(f'DEBUG: Raw SQL returned {len(all_base_forecasts_list)} total forecast records')
+
+            if len(all_base_forecasts_list) > 0:
+                sample = all_base_forecasts_list[0]
+                logger.info(f'DEBUG: Sample forecast: entity_name={sample.entity_name}, forecast_date={sample.forecast_date}')
+                logger.info(f'DEBUG: Sample school_name: {getattr(sample, "school_name", None)}')
+                logger.info(f'DEBUG: Sample daily_forecasts type: {type(sample.daily_forecasts)}')
+                logger.info(f'DEBUG: Sample daily_forecasts empty? {not bool(sample.daily_forecasts)}')
+                if sample.daily_forecasts:
+                    dates = list(sample.daily_forecasts.keys())
+                    logger.info(f'DEBUG: Sample has {len(dates)} dates in daily_forecasts')
+                    logger.info(f'DEBUG: First 3 dates: {dates[:3]}')
+                    logger.info(f'DEBUG: Last 3 dates: {dates[-3:]}')
+            else:
+                logger.warning('DEBUG: Raw SQL returned NO records!')
+
+            # Keep only the latest forecast for each entity_name
+            seen_entities = set()
+            base_forecasts = []
+            for f in all_base_forecasts_list:
+                if f.entity_name not in seen_entities:
+                    base_forecasts.append(f)
+                    seen_entities.add(f.entity_name)
+                if len(base_forecasts) >= 2000:  # Limit to 2000 unique entities
+                    break
+
+            logger.info(f'DEBUG: After deduplication, {len(base_forecasts)} unique entities')
 
             # IMPORTANT: Only switch to product rendering if a specific school is selected
             # Otherwise, keep school level for nested school/product view
             if school_filter:
                 level = 'product'  # Show products for specific school
             # else: keep level = 'school' for nested view
+
+            # Skip the generic deduplication below since we already did it for school level
+            skip_generic_dedup = True
         else:
+            skip_generic_dedup = False
+
             # Get all base forecasts for this level (latest forecast for each entity)
             query = SalesForecastBase.objects.filter(aggregation_level=level)
 
@@ -2260,14 +2309,16 @@ def sales_forecasting(request):
                 all_base_forecasts = query.order_by('entity_name', '-forecast_date')
 
         # Keep only the latest forecast for each entity_name
-        seen_entities = set()
-        base_forecasts = []
-        for f in all_base_forecasts:
-            if f.entity_name not in seen_entities:
-                base_forecasts.append(f)
-                seen_entities.add(f.entity_name)
-            if len(base_forecasts) >= 2000:  # Limit to 2000 unique entities (increased from 500)
-                break
+        # BUT skip this for school level since we already did deduplication above
+        if not skip_generic_dedup:
+            seen_entities = set()
+            base_forecasts = []
+            for f in all_base_forecasts:
+                if f.entity_name not in seen_entities:
+                    base_forecasts.append(f)
+                    seen_entities.add(f.entity_name)
+                if len(base_forecasts) >= 2000:  # Limit to 2000 unique entities (increased from 500)
+                    break
 
     # If no base forecasts, fall back to legacy SalesForecast model
     if level != 'shop' and not base_forecasts:
@@ -2494,7 +2545,6 @@ def sales_forecasting(request):
         # SHOP-LEVEL NESTED VIEW: 3-level (location → school → product) or 2-level (school → product)
         from collections import defaultdict
         from cin7.models import ProductOption
-        import logging
 
         logger = logging.getLogger(__name__)
 
@@ -2842,7 +2892,6 @@ def sales_forecasting(request):
         # SIMPLIFIED SCHOOL VIEW: Group variations by school (2-level structure)
         from collections import defaultdict
         from cin7.models import ProductOption
-        import logging
 
         logger = logging.getLogger(__name__)
 
@@ -3190,7 +3239,6 @@ def forecast_product_breakdown(request, school_name):
     from django.db import connection
     from datetime import datetime, timedelta
     import json
-    import logging
 
     logger = logging.getLogger(__name__)
     logger.info('=== FORECAST_PRODUCT_BREAKDOWN START ===')
@@ -3475,7 +3523,6 @@ def store_manager_replenishment(request):
     from datetime import timedelta, date
     from collections import defaultdict
     import json
-    import logging
     import time
 
     logger = logging.getLogger(__name__)
@@ -6387,7 +6434,6 @@ def top_performing_schools(request):
     last_fy_end_dt = timezone.make_aware(datetime.datetime.combine(last_fy_end, datetime.time.max))
 
     # Log financial year calculation
-    import logging
     logger = logging.getLogger(__name__)
     today = date.today()
     logger.info(f'Top Performing Schools - Financial Year Calculation (Configurable System)')
