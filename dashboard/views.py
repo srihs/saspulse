@@ -6434,14 +6434,14 @@ def store_daily_pick_list(request):
     from decimal import Decimal
     from cin7.models import SalesOrderLineItem, Stock, Branch
 
-    # Get user's branch
+    # Get user's assigned stores
     user = request.user
     is_admin = user.is_superuser or user.is_staff
-    assigned_branch = getattr(user, 'assigned_branch', None)
+    has_assigned_stores = user.assigned_stores.exists() if hasattr(user, 'assigned_stores') else False
 
-    if not is_admin and not assigned_branch:
+    if not is_admin and not has_assigned_stores:
         return render(request, 'dashboard/store_daily_pick_list.html', {
-            'error': 'You are not assigned to a branch. Please contact your administrator.',
+            'error': 'You are not assigned to any stores. Please contact your administrator.',
             'pick_list': [],
         })
 
@@ -6464,24 +6464,20 @@ def store_daily_pick_list(request):
     except ValueError:
         min_quantity = 1
 
-    # Query yesterday's sales for the branch
+    # Query yesterday's sales for the user's assigned stores
     # Use invoice_date for completed sales
     sales_query = SalesOrderLineItem.objects.filter(
         sales_order__invoice_date__date=target_date,
         sales_order__is_void=False
     )
 
-    # Filter by branch if not admin
-    if not is_admin and assigned_branch:
-        # Need to filter by branch - sales orders don't have direct branch relationship
-        # We'll use the stock table to infer which products are in this branch
-        # Use branch_name (VARCHAR) instead of branch ForeignKey to avoid DB column issues
-        branch_product_ids = Stock.objects.filter(
-            branch_name=assigned_branch.name,
-            stock_on_hand__gt=0
-        ).values_list('cin7_product_id', flat=True)
-
-        sales_query = sales_query.filter(cin7_product_id__in=branch_product_ids)
+    # Filter by assigned stores if not admin
+    if not is_admin and has_assigned_stores:
+        # Get accessible categories from user's assigned stores
+        accessible_categories = user.get_accessible_categories()
+        if accessible_categories:
+            # Filter sales by products in the user's assigned store categories
+            sales_query = sales_query.filter(product__category_name__in=accessible_categories)
 
     # Filter by category if specified
     if category_filter:
@@ -6514,12 +6510,17 @@ def store_daily_pick_list(request):
         qty_sold = float(sale['quantity_sold'])
         order_count = sale['order_count']
 
-        # Get current stock for this product at the branch
+        # Get current stock for this product at the user's assigned stores
         # Use code (SKU) to match instead of cin7_product_id since that's more reliable
         stock_query = Stock.objects.filter(code=sku)
 
-        if not is_admin and assigned_branch:
-            stock_query = stock_query.filter(branch_name=assigned_branch.name)
+        if not is_admin and has_assigned_stores:
+            # Get store names from accessible categories
+            accessible_categories = user.get_accessible_categories()
+            if accessible_categories:
+                # Filter stock by branch names that match the store categories
+                # Note: Stock.branch_name should match the category_name from stores
+                stock_query = stock_query.filter(branch_name__in=accessible_categories)
 
         stock_record = stock_query.first()
 
@@ -6528,10 +6529,11 @@ def store_daily_pick_list(request):
             incoming_stock = float(stock_record.incoming or 0)
             branch_name = stock_record.branch_name
         else:
-            # Product not in stock table for this branch
+            # Product not in stock table for this store
             current_stock = 0
             incoming_stock = 0
-            branch_name = assigned_branch.name if assigned_branch else 'Unknown'
+            store_categories = user.get_accessible_categories() if has_assigned_stores else []
+            branch_name = store_categories[0] if store_categories else 'Unknown'
 
         # Calculate pick quantity
         # Strategy: Maintain 2-3 days of stock based on yesterday's sales
@@ -6605,11 +6607,16 @@ def store_daily_pick_list(request):
     if is_admin:
         from cin7.models import Product
         all_categories = Product.objects.values_list('category_name', flat=True).distinct().order_by('category_name')
-    elif assigned_branch:
-        # Use branch_name (VARCHAR) instead of branch ForeignKey to avoid DB column issues
-        branch_products = Stock.objects.filter(branch_name=assigned_branch.name).values_list('cin7_product_id', flat=True)
-        from cin7.models import Product
-        all_categories = Product.objects.filter(cin7_id__in=branch_products).values_list('category_name', flat=True).distinct().order_by('category_name')
+    elif has_assigned_stores:
+        # Get categories from user's assigned stores
+        all_categories = user.get_accessible_categories()
+
+    # Get store display name
+    store_name = 'All Stores'
+    if has_assigned_stores:
+        accessible_categories = user.get_accessible_categories()
+        if accessible_categories:
+            store_name = ', '.join(accessible_categories)
 
     context = {
         'target_date': target_date,
@@ -6621,7 +6628,7 @@ def store_daily_pick_list(request):
         'total_items': total_items,
         'total_pick_quantity': total_pick_quantity,
         'category_count': len(categories),
-        'branch_name': assigned_branch.name if assigned_branch else 'All Branches',
+        'branch_name': store_name,
         'is_admin': is_admin,
         'all_categories': all_categories,
         'selected_category': category_filter,
