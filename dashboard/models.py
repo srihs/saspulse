@@ -1132,3 +1132,35 @@ class TopPerformingSchool(models.Model):
     def __str__(self):
         status = "Top Performing" if self.is_top_performing else "Standard"
         return f"{self.school_name} ({self.category_name}) - {status}"
+
+
+class StoreSchoolMapping(models.Model):
+    """
+    Mapping of stores/shops to their schools
+    Extracted from cin7_sync_product table where category_name ends with 'Store' or 'Shop'
+    """
+    # Store and School identifiers
+    store_name = models.CharField(max_length=255, db_index=True, help_text="Store/Shop name (extracted from category_name, e.g., 'Penrose Store')")
+    school_name = models.CharField(max_length=255, db_index=True, help_text="School name (from sub_category)")
+    category_name = models.CharField(max_length=255, help_text="Full category name from products (e.g., 'Penrose Store', 'Mt Albert Shop')")
+
+    # Status and metrics
+    is_active = models.BooleanField(default=True, db_index=True, help_text="Whether this mapping is active")
+    product_count = models.IntegerField(default=0, help_text="Number of products in this store-school combination")
+
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['store_name', 'school_name']
+        indexes = [
+            models.Index(fields=['store_name', 'school_name']),
+            models.Index(fields=['category_name']),
+            models.Index(fields=['is_active']),
+        ]
+        unique_together = [['category_name', 'school_name']]
+
+    def __str__(self):
+        status = "Active" if self.is_active else "Inactive"
+        return f"{self.store_name} - {self.school_name} ({status})"

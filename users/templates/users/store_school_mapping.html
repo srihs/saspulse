@@ -1,0 +1,299 @@
+{% extends "users/base_system.html" %}
+{% load static %}
+
+{% block title %}Store-School Mapping - SasPulse{% endblock %}
+
+{% block system_content %}
+<div class="container-fluid px-0">
+  <!-- Page Header -->
+  <div class="row g-3 mb-3 align-items-center">
+    <div class="col">
+      <h2 class="mb-0 text-body-emphasis">
+        <span data-feather="map" class="me-2" style="width: 28px; height: 28px;"></span>
+        Store-School Mapping
+      </h2>
+      <p class="text-muted mb-0">Manage relationships between stores/shops and their schools</p>
+    </div>
+    <div class="col-auto">
+      <form method="post" style="display: inline;">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="sync">
+        <button type="submit" class="btn btn-primary">
+          <span data-feather="refresh-cw" class="me-2" style="width: 16px; height: 16px;"></span>
+          Sync from Products
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Breadcrumb -->
+  <nav aria-label="breadcrumb">
+    <ol class="breadcrumb mb-4">
+      <li class="breadcrumb-item"><a href="/">Home</a></li>
+      <li class="breadcrumb-item"><a href="#">System</a></li>
+      <li class="breadcrumb-item active" aria-current="page">Store-School Mapping</li>
+    </ol>
+  </nav>
+
+  <!-- Statistics Cards -->
+  <div class="row g-3 mb-4">
+    <div class="col-sm-6 col-md-3">
+      <div class="card h-100">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <h6 class="text-muted mb-1">Total Stores</h6>
+              <h3 class="mb-0">{{ total_stores }}</h3>
+            </div>
+            <div class="text-primary" style="opacity: 0.3;">
+              <span data-feather="shopping-bag" style="width: 48px; height: 48px;"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-sm-6 col-md-3">
+      <div class="card h-100">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <h6 class="text-muted mb-1">Total Schools</h6>
+              <h3 class="mb-0">{{ total_schools }}</h3>
+            </div>
+            <div class="text-success" style="opacity: 0.3;">
+              <span data-feather="home" style="width: 48px; height: 48px;"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-sm-6 col-md-3">
+      <div class="card h-100">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <h6 class="text-muted mb-1">Total Mappings</h6>
+              <h3 class="mb-0">{{ total_mappings }}</h3>
+            </div>
+            <div class="text-info" style="opacity: 0.3;">
+              <span data-feather="layers" style="width: 48px; height: 48px;"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-sm-6 col-md-3">
+      <div class="card h-100">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <h6 class="text-muted mb-1">Active Mappings</h6>
+              <h3 class="mb-0">{{ active_mappings }}</h3>
+            </div>
+            <div class="text-warning" style="opacity: 0.3;">
+              <span data-feather="check-circle" style="width: 48px; height: 48px;"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mappings Table Card -->
+  <div class="card">
+    <div class="card-header bg-body-tertiary border-bottom">
+      <div class="row align-items-center">
+        <div class="col">
+          <h5 class="mb-0">
+            <span data-feather="list" class="me-2" style="width: 18px; height: 18px;"></span>
+            All Store-School Mappings
+          </h5>
+        </div>
+        <div class="col-auto">
+          <div class="btn-group" role="group">
+            <button type="button" class="btn btn-sm btn-outline-success" onclick="bulkAction('bulk_activate')">
+              <span data-feather="check" class="me-1" style="width: 14px; height: 14px;"></span>
+              Activate Selected
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-danger" onclick="bulkAction('bulk_deactivate')">
+              <span data-feather="x" class="me-1" style="width: 14px; height: 14px;"></span>
+              Deactivate Selected
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive scrollbar">
+        <table id="mappingsTable" class="table table-hover table-striped overflow-hidden mb-0">
+          <thead>
+            <tr>
+              <th scope="col" class="text-center" style="width: 40px;">
+                <input type="checkbox" id="selectAll" class="form-check-input">
+              </th>
+              <th scope="col">Store Name</th>
+              <th scope="col">School Name</th>
+              <th scope="col">Category Name</th>
+              <th scope="col" class="text-center">Product Count</th>
+              <th scope="col" class="text-center">Status</th>
+              <th scope="col" class="text-center">Last Updated</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for mapping in mappings %}
+            <tr data-mapping-id="{{ mapping.id }}">
+              <td class="align-middle text-center">
+                <input type="checkbox" class="form-check-input mapping-checkbox" value="{{ mapping.id }}">
+              </td>
+              <td class="align-middle">
+                <span class="fw-semi-bold">{{ mapping.store_name }}</span>
+              </td>
+              <td class="align-middle">
+                <span class="text-body">{{ mapping.school_name }}</span>
+              </td>
+              <td class="align-middle">
+                <span class="text-muted">{{ mapping.category_name }}</span>
+              </td>
+              <td class="align-middle text-center">
+                <span class="badge badge-phoenix badge-phoenix-info">{{ mapping.product_count }}</span>
+              </td>
+              <td class="align-middle text-center">
+                {% if mapping.is_active %}
+                <span class="badge badge-phoenix badge-phoenix-success">
+                  <span data-feather="check-circle" style="width: 12px; height: 12px;"></span>
+                  Active
+                </span>
+                {% else %}
+                <span class="badge badge-phoenix badge-phoenix-secondary">
+                  <span data-feather="circle" style="width: 12px; height: 12px;"></span>
+                  Inactive
+                </span>
+                {% endif %}
+              </td>
+              <td class="align-middle text-center text-muted">
+                <small>{{ mapping.updated_at|date:"Y-m-d H:i" }}</small>
+              </td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="7" class="text-center py-5">
+                <div class="mb-3">
+                  <span data-feather="map" style="width: 64px; height: 64px; opacity: 0.3;"></span>
+                </div>
+                <h5 class="text-muted mb-2">No Mappings Found</h5>
+                <p class="text-muted mb-3">Click "Sync from Products" to extract store-school mappings from the product catalog.</p>
+                <form method="post" style="display: inline;">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="sync">
+                  <button type="submit" class="btn btn-primary">
+                    <span data-feather="refresh-cw" class="me-2" style="width: 16px; height: 16px;"></span>
+                    Sync from Products
+                  </button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/feather-icons"></script>
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css">
+<script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js"></script>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    feather.replace();
+
+    // Initialize DataTable
+    const table = $('#mappingsTable').DataTable({
+      responsive: true,
+      pageLength: 25,
+      order: [[1, 'asc']], // Sort by store name by default
+      language: {
+        search: "_INPUT_",
+        searchPlaceholder: "Search mappings...",
+        lengthMenu: "Show _MENU_ mappings per page",
+        info: "Showing _START_ to _END_ of _TOTAL_ mappings",
+        infoEmpty: "No mappings to show",
+        infoFiltered: "(filtered from _MAX_ total mappings)",
+        paginate: {
+          first: "First",
+          last: "Last",
+          next: "Next",
+          previous: "Previous"
+        },
+        emptyTable: "No mappings found"
+      },
+      columnDefs: [
+        { orderable: false, targets: 0 } // Disable sorting on checkbox column
+      ],
+      drawCallback: function() {
+        feather.replace(); // Re-initialize feather icons after DataTable redraws
+      }
+    });
+
+    // Select all checkboxes
+    $('#selectAll').on('change', function() {
+      const isChecked = $(this).prop('checked');
+      $('.mapping-checkbox:visible').prop('checked', isChecked);
+    });
+
+    // Update select all checkbox when individual checkboxes change
+    $('.mapping-checkbox').on('change', function() {
+      const totalCheckboxes = $('.mapping-checkbox:visible').length;
+      const checkedCheckboxes = $('.mapping-checkbox:visible:checked').length;
+      $('#selectAll').prop('checked', totalCheckboxes === checkedCheckboxes);
+    });
+  });
+
+  // Bulk action handler
+  function bulkAction(action) {
+    const selectedIds = [];
+    $('.mapping-checkbox:checked').each(function() {
+      selectedIds.push($(this).val());
+    });
+
+    if (selectedIds.length === 0) {
+      alert('Please select at least one mapping.');
+      return;
+    }
+
+    // Create form and submit
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = window.location.href;
+
+    // CSRF token
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+    const csrfInput = document.createElement('input');
+    csrfInput.type = 'hidden';
+    csrfInput.name = 'csrfmiddlewaretoken';
+    csrfInput.value = csrfToken;
+    form.appendChild(csrfInput);
+
+    // Action
+    const actionInput = document.createElement('input');
+    actionInput.type = 'hidden';
+    actionInput.name = 'action';
+    actionInput.value = action;
+    form.appendChild(actionInput);
+
+    // Mapping IDs
+    selectedIds.forEach(id => {
+      const idInput = document.createElement('input');
+      idInput.type = 'hidden';
+      idInput.name = 'mapping_ids[]';
+      idInput.value = id;
+      form.appendChild(idInput);
+    });
+
+    document.body.appendChild(form);
+    form.submit();
+  }
+</script>
+{% endblock %}

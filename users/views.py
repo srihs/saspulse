@@ -4,8 +4,9 @@ from django.views.generic import ListView, CreateView, UpdateView, DeleteView, V
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.db.models import Q
+from django.db.models import Q, Count
 from django.core.exceptions import PermissionDenied
+from django.http import JsonResponse
 from datetime import date
 from .models import CustomUser, Role
 from .forms import RoleForm, CustomUserCreateForm, CustomUserUpdateForm, UserRolesForm, ProfileEditForm
@@ -505,3 +506,141 @@ class SystemSettingsView(PermissionRequiredMixin, LoginRequiredMixin, View):
             'days': range(1, 32),
         }
         return render(request, self.template_name, context)
+
+
+# ==================== Store-School Mapping Views ====================
+
+class StoreSchoolMappingView(PermissionRequiredMixin, LoginRequiredMixin, View):
+    permission_required = 'admin.settings.view'
+    """
+    View for managing store-school mappings
+    Displays and allows management of relationships between stores/shops and schools
+    """
+    template_name = 'users/store_school_mapping.html'
+
+    def get(self, request):
+        """Display store-school mapping list."""
+        from dashboard.models import StoreSchoolMapping
+
+        # Get all mappings
+        mappings = StoreSchoolMapping.objects.all()
+
+        # Calculate statistics
+        total_stores = mappings.values('store_name').distinct().count()
+        total_schools = mappings.values('school_name').distinct().count()
+        total_mappings = mappings.count()
+        active_mappings = mappings.filter(is_active=True).count()
+
+        context = {
+            'mappings': mappings,
+            'total_stores': total_stores,
+            'total_schools': total_schools,
+            'total_mappings': total_mappings,
+            'active_mappings': active_mappings,
+        }
+        return render(request, self.template_name, context)
+
+    def post(self, request):
+        """Handle bulk actions and sync operations."""
+        from dashboard.models import StoreSchoolMapping
+        from cin7.models import Product
+
+        action = request.POST.get('action')
+
+        if action == 'sync':
+            # Sync mappings from product table
+            try:
+                # Query products where category_name ends with 'Store' or 'Shop'
+                stores = Product.objects.filter(
+                    Q(category_name__iendswith='Store') | Q(category_name__iendswith='Shop')
+                ).exclude(
+                    category_name__in=['Store', 'Shop']
+                ).exclude(
+                    category_name__istartswith='Wholesale'
+                ).values('category_name', 'sub_category').annotate(
+                    product_count=Count('id')
+                ).distinct()
+
+                # Track statistics
+                created_count = 0
+                updated_count = 0
+
+                for store_data in stores:
+                    category_name = store_data['category_name']
+                    school_name = store_data['sub_category']
+                    product_count = store_data['product_count']
+
+                    # Skip if school_name is empty
+                    if not school_name or school_name.strip() == '':
+                        continue
+
+                    # Extract store name (remove ' Store' or ' Shop' suffix)
+                    store_name = category_name
+                    if store_name.endswith(' Store'):
+                        store_name = store_name[:-6]
+                    elif store_name.endswith(' Shop'):
+                        store_name = store_name[:-5]
+
+                    # Create or update mapping
+                    mapping, created = StoreSchoolMapping.objects.update_or_create(
+                        category_name=category_name,
+                        school_name=school_name,
+                        defaults={
+                            'store_name': store_name,
+                            'product_count': product_count,
+                            'is_active': True,
+                        }
+                    )
+
+                    if created:
+                        created_count += 1
+                    else:
+                        updated_count += 1
+
+                messages.success(
+                    request,
+                    f'Sync completed successfully. Created {created_count} new mappings, updated {updated_count} existing mappings.'
+                )
+            except Exception as e:
+                messages.error(request, f'Error syncing mappings: {str(e)}')
+
+        elif action == 'toggle_active':
+            # Toggle active status for selected mappings
+            mapping_ids = request.POST.getlist('mapping_ids[]')
+            if mapping_ids:
+                try:
+                    mappings = StoreSchoolMapping.objects.filter(id__in=mapping_ids)
+                    for mapping in mappings:
+                        mapping.is_active = not mapping.is_active
+                        mapping.save()
+                    messages.success(request, f'Updated {len(mapping_ids)} mapping(s).')
+                except Exception as e:
+                    messages.error(request, f'Error updating mappings: {str(e)}')
+            else:
+                messages.warning(request, 'No mappings selected.')
+
+        elif action == 'bulk_activate':
+            # Activate selected mappings
+            mapping_ids = request.POST.getlist('mapping_ids[]')
+            if mapping_ids:
+                try:
+                    StoreSchoolMapping.objects.filter(id__in=mapping_ids).update(is_active=True)
+                    messages.success(request, f'Activated {len(mapping_ids)} mapping(s).')
+                except Exception as e:
+                    messages.error(request, f'Error activating mappings: {str(e)}')
+            else:
+                messages.warning(request, 'No mappings selected.')
+
+        elif action == 'bulk_deactivate':
+            # Deactivate selected mappings
+            mapping_ids = request.POST.getlist('mapping_ids[]')
+            if mapping_ids:
+                try:
+                    StoreSchoolMapping.objects.filter(id__in=mapping_ids).update(is_active=False)
+                    messages.success(request, f'Deactivated {len(mapping_ids)} mapping(s).')
+                except Exception as e:
+                    messages.error(request, f'Error deactivating mappings: {str(e)}')
+            else:
+                messages.warning(request, 'No mappings selected.')
+
+        return redirect('users:store_school_mapping')

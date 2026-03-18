@@ -26,4 +26,7 @@ urlpatterns = [
 
     # System Settings (admin only)
     path('settings/', views.SystemSettingsView.as_view(), name='system_settings'),
+
+    # Store-School Mapping (admin only)
+    path('store-school-mapping/', views.StoreSchoolMappingView.as_view(), name='store_school_mapping'),
 ]

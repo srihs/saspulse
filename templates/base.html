@@ -296,6 +296,12 @@
                         </a>
                       </li>
                       {% endif %}
+                      {% if request.user|has_perm:'admin.settings.view' %}
+                      <li class="nav-item"><a class="nav-link" href="{% url 'users:store_school_mapping' %}">
+                          <div class="d-flex align-items-center"><span class="nav-link-text">Store-School Mapping</span></div>
+                        </a>
+                      </li>
+                      {% endif %}
                     </ul>
                   </div>
                 </div>
