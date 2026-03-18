@@ -1919,7 +1919,7 @@ def sales_forecasting(request):
 
     # Get top performing schools for priority scoring
     top_schools = set(
-        TopPerformingSchool.objects.filter(is_top_performer=True)
+        TopPerformingSchool.objects.filter(is_top_performing=True)
         .values_list('school_name', flat=True)
     )
 
