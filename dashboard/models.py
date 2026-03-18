@@ -997,3 +997,138 @@ class StoreReplenishmentRequestItem(models.Model):
     def final_quantity(self):
         """Get the final quantity (approved or requested)"""
         return self.approved_quantity if self.approved_quantity is not None else self.requested_quantity
+
+
+class SystemSettings(models.Model):
+    """
+    Singleton model for system-wide settings
+    Stores configurable parameters like financial year dates
+    """
+    MONTH_CHOICES = [(i, i) for i in range(1, 13)]
+    DAY_CHOICES = [(i, i) for i in range(1, 32)]
+
+    # Financial year configuration
+    fy_start_month = models.IntegerField(
+        default=4,
+        choices=MONTH_CHOICES,
+        help_text="Financial year start month (1=January, 4=April, 7=July, etc.)"
+    )
+    fy_start_day = models.IntegerField(
+        default=1,
+        choices=DAY_CHOICES,
+        help_text="Financial year start day (1-31)"
+    )
+    fy_end_month = models.IntegerField(
+        default=3,
+        choices=MONTH_CHOICES,
+        help_text="Financial year end month (1=January, 3=March, 6=June, etc.)"
+    )
+    fy_end_day = models.IntegerField(
+        default=31,
+        choices=DAY_CHOICES,
+        help_text="Financial year end day (1-31)"
+    )
+
+    # Metadata
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        'users.CustomUser',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='system_settings_updates'
+    )
+
+    class Meta:
+        verbose_name = "System Settings"
+        verbose_name_plural = "System Settings"
+
+    def __str__(self):
+        return f"System Settings (FY: {self.get_fy_start_month_display()}/{self.fy_start_day} to {self.get_fy_end_month_display()}/{self.fy_end_day})"
+
+    def save(self, *args, **kwargs):
+        """Enforce singleton pattern - only one settings record allowed"""
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        """Prevent deletion of settings"""
+        pass
+
+    @classmethod
+    def load(cls):
+        """Load the singleton settings instance, create with defaults if doesn't exist"""
+        obj, created = cls.objects.get_or_create(pk=1)
+        return obj
+
+    def clean(self):
+        """Validate financial year settings"""
+        from django.core.exceptions import ValidationError
+        from datetime import date
+
+        # Validate that days are valid for their months (simplified check)
+        # Check start date
+        try:
+            date(2024, self.fy_start_month, self.fy_start_day)
+        except ValueError:
+            raise ValidationError(f"Invalid start date: {self.fy_start_month}/{self.fy_start_day}")
+
+        # Check end date
+        try:
+            date(2024, self.fy_end_month, self.fy_end_day)
+        except ValueError:
+            raise ValidationError(f"Invalid end date: {self.fy_end_month}/{self.fy_end_day}")
+
+        # Validate that FY is properly ordered
+        # Convert to comparable format (month * 100 + day)
+        start_value = self.fy_start_month * 100 + self.fy_start_day
+        end_value = self.fy_end_month * 100 + self.fy_end_day
+
+        # Financial year should span across year boundary
+        # Start should be after end in calendar terms
+        # Example: April 1 (401) to March 31 (331) is valid
+        # July 1 (701) to June 30 (630) is valid
+        if start_value <= end_value:
+            raise ValidationError(
+                "Financial year must span across calendar year boundary. "
+                "Start date must be later in the year than end date "
+                "(e.g., April 1 to March 31, or July 1 to June 30)."
+            )
+
+
+class TopPerformingSchool(models.Model):
+    """
+    Track schools marked as top performing by Demand Planning team
+    Schools are identified by their sub_category (school name) in products
+    where category ends with 'Shop' or 'Store'
+    """
+    school_name = models.CharField(max_length=255, unique=True, db_index=True, help_text="School name (from sub_category)")
+    category_name = models.CharField(max_length=255, help_text="Category name (e.g., 'Avondale Shop')")
+    is_top_performing = models.BooleanField(default=False, db_index=True, help_text="Mark as top performing school")
+
+    # Financial year sales data (cached for performance)
+    last_fy_sales = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text="Last financial year sales (NZD)")
+    last_fy_start = models.DateField(null=True, blank=True, help_text="Financial year start date")
+    last_fy_end = models.DateField(null=True, blank=True, help_text="Financial year end date")
+    sales_updated_at = models.DateTimeField(null=True, blank=True, help_text="When sales data was last calculated")
+
+    # Metadata
+    marked_by = models.ForeignKey('users.CustomUser', on_delete=models.SET_NULL, null=True, blank=True, related_name='marked_top_schools')
+    marked_at = models.DateTimeField(null=True, blank=True)
+    notes = models.TextField(blank=True, help_text="Notes about this school")
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-last_fy_sales', 'school_name']
+        indexes = [
+            models.Index(fields=['school_name']),
+            models.Index(fields=['is_top_performing']),
+            models.Index(fields=['-last_fy_sales']),
+        ]
+
+    def __str__(self):
+        status = "Top Performing" if self.is_top_performing else "Standard"
+        return f"{self.school_name} ({self.category_name}) - {status}"

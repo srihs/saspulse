@@ -1,0 +1,295 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block title %}Top Performing Schools - Demand Planning{% endblock %}
+
+{% block extra_css %}
+<style>
+    .stats-card {
+        transition: transform 0.2s;
+    }
+    .stats-card:hover {
+        transform: translateY(-5px);
+    }
+    .school-checkbox {
+        width: 24px;
+        height: 24px;
+        cursor: pointer;
+    }
+    .top-performing-row {
+        background-color: #d4edda;
+    }
+    .table-hover tbody tr:hover {
+        background-color: #f8f9fa !important;
+    }
+    .table-hover tbody tr.top-performing-row:hover {
+        background-color: #c3e6cb !important;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="pb-5">
+    <div class="row g-4">
+        <div class="col-12">
+            <div class="mb-8">
+                <h2 class="mb-2">Top Performing Schools</h2>
+                <h5 class="text-body-tertiary fw-semibold">
+                    Manage and track top performing schools based on last financial year sales
+                </h5>
+                <p class="text-muted mt-2">
+                    <i data-feather="calendar"></i>
+                    Financial Year: {{ last_fy_start|date:"M d, Y" }} - {{ last_fy_end|date:"M d, Y" }}
+                </p>
+            </div>
+
+            <!-- Summary Statistics Cards -->
+            <div class="row mb-4">
+                <div class="col-md-4">
+                    <div class="card stats-card border-primary">
+                        <div class="card-body text-center">
+                            <h6 class="text-muted mb-2">Total Schools</h6>
+                            <h3 class="text-primary mb-0">{{ total_schools }}</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card stats-card border-success">
+                        <div class="card-body text-center">
+                            <h6 class="text-muted mb-2">Top Performing Schools</h6>
+                            <h3 class="text-success mb-0">{{ top_performing_count }}</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card stats-card border-info">
+                        <div class="card-body text-center">
+                            <h6 class="text-muted mb-2">Total FY Sales</h6>
+                            <h3 class="text-info mb-0">${{ total_sales|floatformat:0|intcomma }}</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Schools Table -->
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-school me-2"></i>
+                            Schools Performance
+                        </h5>
+                        <button class="btn btn-light btn-sm" id="exportBtn">
+                            <i data-feather="download"></i> Export to CSV
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    {% if schools %}
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Note:</strong> Check the boxes to mark schools as "Top Performing". This helps the DP team prioritize and track high-value schools.
+                    </div>
+                    <div class="table-responsive">
+                        <table id="schoolsTable" class="table table-sm table-striped table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Rank</th>
+                                    <th>School Name</th>
+                                    <th>Category/Store</th>
+                                    <th>Last FY Sales</th>
+                                    <th>Top Performing</th>
+                                    <th>Last Updated</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for school in schools %}
+                                <tr id="school-row-{{ school.id }}" class="{% if school.is_top_performing %}top-performing-row{% endif %}">
+                                    <td><strong>{{ forloop.counter }}</strong></td>
+                                    <td>
+                                        <strong>{{ school.school_name }}</strong>
+                                        {% if school.is_top_performing %}
+                                        <span class="badge bg-success ms-2">Top Performer</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ school.category_name }}</td>
+                                    <td>
+                                        <strong>${{ school.last_fy_sales|floatformat:2|intcomma }}</strong>
+                                    </td>
+                                    <td class="text-center">
+                                        <div class="form-check d-flex justify-content-center">
+                                            <input
+                                                class="form-check-input school-checkbox"
+                                                type="checkbox"
+                                                id="checkbox-{{ school.id }}"
+                                                data-school-id="{{ school.id }}"
+                                                data-school-name="{{ school.school_name }}"
+                                                {% if school.is_top_performing %}checked{% endif %}>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        {% if school.sales_updated_at %}
+                                        {{ school.sales_updated_at|date:"M d, Y H:i" }}
+                                        {% else %}
+                                        <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        No schools found. Schools data will be calculated from products with categories ending in "Shop" or "Store".
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(document).ready(function() {
+    // Initialize DataTables
+    const table = $('#schoolsTable').DataTable({
+        order: [[3, 'desc']], // Sort by last FY sales descending
+        pageLength: 25,
+        dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>rtip',
+        columnDefs: [
+            { orderable: false, targets: [4] } // Disable sorting on checkbox column
+        ]
+    });
+
+    // Initialize Feather icons
+    if (typeof feather !== 'undefined') {
+        feather.replace();
+    }
+
+    // Handle checkbox change
+    $(document).on('change', '.school-checkbox', function() {
+        const checkbox = $(this);
+        const schoolId = checkbox.data('school-id');
+        const schoolName = checkbox.data('school-name');
+        const isChecked = checkbox.is(':checked');
+
+        // Disable checkbox during request
+        checkbox.prop('disabled', true);
+
+        // Make AJAX request
+        $.ajax({
+            url: `/dashboard/replenishment/dp/top-schools/toggle/${schoolId}/`,
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            data: {},
+            success: function(response) {
+                if (response.success) {
+                    // Update row styling
+                    const row = $(`#school-row-${schoolId}`);
+                    if (response.is_top_performing) {
+                        row.addClass('top-performing-row');
+                        // Add badge if not exists
+                        if (row.find('.badge').length === 0) {
+                            row.find('td:eq(1) strong').after(' <span class="badge bg-success ms-2">Top Performer</span>');
+                        }
+                        showAlert(`${schoolName} has been marked as a top performing school.`, 'Success', 'check-circle');
+
+                        // Update statistics
+                        const currentCount = parseInt($('.border-success .text-success').text());
+                        $('.border-success .text-success').text(currentCount + 1);
+                    } else {
+                        row.removeClass('top-performing-row');
+                        row.find('.badge').remove();
+                        showAlert(`${schoolName} has been removed from top performing schools.`, 'Success', 'check-circle');
+
+                        // Update statistics
+                        const currentCount = parseInt($('.border-success .text-success').text());
+                        $('.border-success .text-success').text(currentCount - 1);
+                    }
+                } else {
+                    showAlert('Error: ' + response.error, 'Update Failed', 'times-circle');
+                    // Revert checkbox
+                    checkbox.prop('checked', !isChecked);
+                }
+
+                // Re-enable checkbox
+                checkbox.prop('disabled', false);
+            },
+            error: function(xhr) {
+                console.error('Toggle error:', xhr.status, xhr.responseText);
+                let errorMsg = 'An error occurred while updating the school status.';
+                try {
+                    const errorData = JSON.parse(xhr.responseText);
+                    if (errorData.error) {
+                        errorMsg = errorData.error;
+                    }
+                } catch (e) {
+                    errorMsg = xhr.responseText || errorMsg;
+                }
+                showAlert(errorMsg, 'Error', 'times-circle');
+
+                // Revert checkbox
+                checkbox.prop('checked', !isChecked);
+                checkbox.prop('disabled', false);
+            }
+        });
+    });
+
+    // Export to CSV functionality
+    $('#exportBtn').on('click', function() {
+        const csv = [];
+        const headers = ['Rank', 'School Name', 'Category/Store', 'Last FY Sales', 'Top Performing', 'Last Updated'];
+        csv.push(headers.join(','));
+
+        table.rows({ search: 'applied' }).every(function() {
+            const row = this.node();
+            const cells = $(row).find('td');
+            const rowData = [
+                $(cells[0]).text().trim(),
+                $(cells[1]).find('strong').first().text().trim(),
+                $(cells[2]).text().trim(),
+                $(cells[3]).text().trim().replace(/\$/g, ''),
+                $(cells[4]).find('input').is(':checked') ? 'Yes' : 'No',
+                $(cells[5]).text().trim()
+            ];
+            csv.push(rowData.map(cell => `"${cell}"`).join(','));
+        });
+
+        const csvContent = csv.join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', `top_performing_schools_${new Date().toISOString().split('T')[0]}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    });
+
+    // Helper function to get CSRF token
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+});
+</script>
+{% endblock %}

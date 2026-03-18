@@ -1,0 +1,300 @@
+{% extends "users/base_system.html" %}
+{% load static %}
+
+{% block title %}Edit Profile - SasPulse{% endblock %}
+
+{% block system_content %}
+<div class="container-fluid px-0">
+  <!-- Page Header -->
+  <div class="row g-3 mb-3 align-items-center">
+    <div class="col">
+      <h2 class="mb-0 text-body-emphasis">
+        <span data-feather="edit-2" class="me-2" style="width: 28px; height: 28px;"></span>
+        Edit Profile
+      </h2>
+      <p class="text-muted mb-0">Update your personal information</p>
+    </div>
+    <div class="col-auto">
+      <a href="{% url 'users:profile' %}" class="btn btn-outline-secondary">
+        <span data-feather="x" class="me-2" style="width: 16px; height: 16px;"></span>
+        Cancel
+      </a>
+    </div>
+  </div>
+
+  <!-- Breadcrumb -->
+  <nav aria-label="breadcrumb">
+    <ol class="breadcrumb mb-4">
+      <li class="breadcrumb-item"><a href="/">Home</a></li>
+      <li class="breadcrumb-item"><a href="{% url 'users:profile' %}">Profile</a></li>
+      <li class="breadcrumb-item active" aria-current="page">Edit</li>
+    </ol>
+  </nav>
+
+  <!-- Messages -->
+  {% if messages %}
+    <div class="mb-3">
+      {% for message in messages %}
+        <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+          <div class="d-flex align-items-start">
+            {% if message.tags == 'success' %}
+              <span data-feather="check-circle" class="me-2 mt-1" style="width: 18px; height: 18px;"></span>
+            {% elif message.tags == 'error' or message.tags == 'danger' %}
+              <span data-feather="alert-circle" class="me-2 mt-1" style="width: 18px; height: 18px;"></span>
+            {% else %}
+              <span data-feather="info" class="me-2 mt-1" style="width: 18px; height: 18px;"></span>
+            {% endif %}
+            <div>{{ message }}</div>
+          </div>
+          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <div class="row">
+    <!-- Edit Form -->
+    <div class="col-xl-8">
+      <div class="card">
+        <div class="card-header bg-body-tertiary border-bottom">
+          <h5 class="mb-0">
+            <span data-feather="user" class="me-2" style="width: 18px; height: 18px;"></span>
+            Personal Information
+          </h5>
+        </div>
+        <div class="card-body">
+          <form method="post" action="{% url 'users:profile_edit' %}">
+            {% csrf_token %}
+
+            <!-- Name Fields -->
+            <div class="row mb-3">
+              <div class="col-md-6">
+                <label class="form-label" for="{{ form.first_name.id_for_label }}">
+                  {{ form.first_name.label }}
+                  <span class="text-danger">*</span>
+                </label>
+                {{ form.first_name }}
+                {% if form.first_name.errors %}
+                  <div class="text-danger small mt-1">
+                    {% for error in form.first_name.errors %}
+                      {{ error }}
+                    {% endfor %}
+                  </div>
+                {% endif %}
+              </div>
+              <div class="col-md-6">
+                <label class="form-label" for="{{ form.last_name.id_for_label }}">
+                  {{ form.last_name.label }}
+                  <span class="text-danger">*</span>
+                </label>
+                {{ form.last_name }}
+                {% if form.last_name.errors %}
+                  <div class="text-danger small mt-1">
+                    {% for error in form.last_name.errors %}
+                      {{ error }}
+                    {% endfor %}
+                  </div>
+                {% endif %}
+              </div>
+            </div>
+
+            <!-- Contact Fields -->
+            <div class="row mb-3">
+              <div class="col-md-6">
+                <label class="form-label" for="{{ form.phone_number.id_for_label }}">
+                  <span data-feather="phone" class="me-1" style="width: 14px; height: 14px;"></span>
+                  {{ form.phone_number.label }}
+                </label>
+                {{ form.phone_number }}
+                {% if form.phone_number.errors %}
+                  <div class="text-danger small mt-1">
+                    {% for error in form.phone_number.errors %}
+                      {{ error }}
+                    {% endfor %}
+                  </div>
+                {% endif %}
+                {% if form.phone_number.help_text %}
+                  <div class="form-text">{{ form.phone_number.help_text }}</div>
+                {% endif %}
+              </div>
+              <div class="col-md-6">
+                <label class="form-label" for="{{ form.department.id_for_label }}">
+                  <span data-feather="grid" class="me-1" style="width: 14px; height: 14px;"></span>
+                  {{ form.department.label }}
+                </label>
+                {{ form.department }}
+                {% if form.department.errors %}
+                  <div class="text-danger small mt-1">
+                    {% for error in form.department.errors %}
+                      {{ error }}
+                    {% endfor %}
+                  </div>
+                {% endif %}
+              </div>
+            </div>
+
+            <!-- Job Title -->
+            <div class="mb-3">
+              <label class="form-label" for="{{ form.job_title.id_for_label }}">
+                <span data-feather="briefcase" class="me-1" style="width: 14px; height: 14px;"></span>
+                {{ form.job_title.label }}
+              </label>
+              {{ form.job_title }}
+              {% if form.job_title.errors %}
+                <div class="text-danger small mt-1">
+                  {% for error in form.job_title.errors %}
+                    {{ error }}
+                  {% endfor %}
+                </div>
+              {% endif %}
+            </div>
+
+            <!-- Bio -->
+            <div class="mb-4">
+              <label class="form-label" for="{{ form.bio.id_for_label }}">
+                <span data-feather="file-text" class="me-1" style="width: 14px; height: 14px;"></span>
+                {{ form.bio.label }}
+              </label>
+              {{ form.bio }}
+              {% if form.bio.errors %}
+                <div class="text-danger small mt-1">
+                  {% for error in form.bio.errors %}
+                    {{ error }}
+                  {% endfor %}
+                </div>
+              {% endif %}
+              {% if form.bio.help_text %}
+                <div class="form-text">{{ form.bio.help_text }}</div>
+              {% endif %}
+            </div>
+
+            <!-- Form Actions -->
+            <div class="d-flex justify-content-end gap-2">
+              <a href="{% url 'users:profile' %}" class="btn btn-outline-secondary">
+                <span data-feather="x" class="me-2" style="width: 16px; height: 16px;"></span>
+                Cancel
+              </a>
+              <button type="submit" class="btn btn-primary">
+                <span data-feather="save" class="me-2" style="width: 16px; height: 16px;"></span>
+                Save Changes
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Information Sidebar -->
+    <div class="col-xl-4">
+      <!-- Account Information (Read-only) -->
+      <div class="card mb-3">
+        <div class="card-header bg-body-tertiary border-bottom">
+          <h5 class="mb-0">
+            <span data-feather="info" class="me-2" style="width: 18px; height: 18px;"></span>
+            Account Information
+          </h5>
+        </div>
+        <div class="card-body">
+          <p class="small text-muted mb-3">The following information cannot be changed here:</p>
+
+          <div class="mb-3">
+            <label class="form-label text-muted small mb-1">Username</label>
+            <p class="mb-0 fw-semibold">{{ user.username }}</p>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label text-muted small mb-1">
+              <span data-feather="mail" class="me-1" style="width: 14px; height: 14px;"></span>
+              Email Address
+            </label>
+            <p class="mb-0 fw-semibold">{{ user.email }}</p>
+          </div>
+
+          <div class="mb-0">
+            <label class="form-label text-muted small mb-1">Member Since</label>
+            <p class="mb-0 fw-semibold">{{ user.created_at|date:"F j, Y" }}</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Restricted Fields Notice -->
+      {% if user.roles.exists or user.assigned_branches.exists or user.assigned_schools.exists %}
+      <div class="card mb-3">
+        <div class="card-header bg-body-tertiary border-bottom">
+          <h5 class="mb-0">
+            <span data-feather="shield" class="me-2" style="width: 18px; height: 18px;"></span>
+            Admin-Managed Settings
+          </h5>
+        </div>
+        <div class="card-body">
+          <p class="small text-muted mb-3">The following settings are managed by system administrators:</p>
+
+          {% if user.roles.exists %}
+          <div class="mb-3">
+            <label class="form-label text-muted small mb-1">Roles</label>
+            <div>
+              {% for role in user.roles.all %}
+                <span class="badge badge-phoenix badge-phoenix-primary me-1 mb-1">{{ role.name }}</span>
+              {% endfor %}
+            </div>
+          </div>
+          {% endif %}
+
+          {% if user.assigned_branches.exists %}
+          <div class="mb-3">
+            <label class="form-label text-muted small mb-1">Assigned Branches</label>
+            <div>
+              {% for branch in user.assigned_branches.all %}
+                <span class="badge badge-phoenix badge-phoenix-info me-1 mb-1">{{ branch.name }}</span>
+              {% endfor %}
+            </div>
+          </div>
+          {% endif %}
+
+          {% if user.assigned_schools.exists %}
+          <div class="mb-0">
+            <label class="form-label text-muted small mb-1">Assigned Schools</label>
+            <div>
+              {% for school in user.assigned_schools.all|dictsort:"sub_category" %}
+                {% if school.sub_category %}
+                  <span class="badge badge-phoenix badge-phoenix-warning me-1 mb-1">{{ school.sub_category }}</span>
+                {% endif %}
+              {% endfor %}
+            </div>
+          </div>
+          {% endif %}
+
+          <div class="alert alert-info mt-3 mb-0">
+            <small>
+              <span data-feather="info" class="me-1" style="width: 14px; height: 14px;"></span>
+              Contact your administrator to modify these settings.
+            </small>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Help Card -->
+      <div class="card">
+        <div class="card-header bg-body-tertiary border-bottom">
+          <h5 class="mb-0">
+            <span data-feather="help-circle" class="me-2" style="width: 18px; height: 18px;"></span>
+            Need Help?
+          </h5>
+        </div>
+        <div class="card-body">
+          <p class="small mb-3">You can update your personal information here. Fields marked with <span class="text-danger">*</span> are required.</p>
+          <p class="small mb-0">To change your password, use the <a href="{% url 'users:change_password' %}">Change Password</a> page.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/feather-icons"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    feather.replace();
+  });
+</script>
+{% endblock %}

@@ -6,8 +6,10 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.db.models import Q
 from django.core.exceptions import PermissionDenied
+from datetime import date
 from .models import CustomUser, Role
-from .forms import RoleForm, CustomUserCreateForm, CustomUserUpdateForm, UserRolesForm
+from .forms import RoleForm, CustomUserCreateForm, CustomUserUpdateForm, UserRolesForm, ProfileEditForm
+from .auth_backend import auth_backend
 
 
 # ==================== Permission Mixin ====================
@@ -312,5 +314,194 @@ class RoleDetailView(PermissionRequiredMixin, LoginRequiredMixin, View):
             'role': role,
             'users_with_role': users_with_role,
             'user_count': users_with_role.count()
+        }
+        return render(request, self.template_name, context)
+
+
+# ==================== User Profile Views (Self-Service) ====================
+
+class UserProfileView(LoginRequiredMixin, View):
+    """
+    View for users to see their own profile information.
+    This is a read-only view - users must navigate to profile_edit to make changes.
+    """
+    template_name = 'users/profile.html'
+
+    def get(self, request):
+        """Display user's profile page."""
+        # Get the authenticated user from custom auth backend
+        user = auth_backend.get_user_from_session(request)
+
+        if not user or not user.is_authenticated:
+            messages.error(request, 'Please log in to view your profile.')
+            return redirect('auth:login')
+
+        context = {
+            'user': user,
+        }
+        return render(request, self.template_name, context)
+
+
+class UserProfileEditView(LoginRequiredMixin, View):
+    """
+    View for users to edit their own profile information.
+    Only allows editing personal fields (not roles, branches, schools, or account status).
+    """
+    template_name = 'users/profile_edit.html'
+
+    def get(self, request):
+        """Display profile edit form."""
+        # Get the authenticated user from custom auth backend
+        user = auth_backend.get_user_from_session(request)
+
+        if not user or not user.is_authenticated:
+            messages.error(request, 'Please log in to edit your profile.')
+            return redirect('auth:login')
+
+        form = ProfileEditForm(instance=user)
+
+        context = {
+            'user': user,
+            'form': form,
+        }
+        return render(request, self.template_name, context)
+
+    def post(self, request):
+        """Process profile edit form submission."""
+        # Get the authenticated user from custom auth backend
+        user = auth_backend.get_user_from_session(request)
+
+        if not user or not user.is_authenticated:
+            messages.error(request, 'Please log in to edit your profile.')
+            return redirect('auth:login')
+
+        form = ProfileEditForm(request.POST, instance=user)
+
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'Your profile has been updated successfully.')
+            return redirect('users:profile')
+        else:
+            messages.error(request, 'Please correct the errors below.')
+
+        context = {
+            'user': user,
+            'form': form,
+        }
+        return render(request, self.template_name, context)
+
+
+# ==================== System Settings Views ====================
+
+class SystemSettingsView(PermissionRequiredMixin, LoginRequiredMixin, View):
+    permission_required = 'admin.settings.edit'
+    """
+    View for managing system-wide settings like financial year configuration.
+    """
+    template_name = 'users/system_settings.html'
+
+    def get(self, request):
+        """Display system settings form."""
+        from dashboard.models import SystemSettings
+        from dashboard.utils.financial_year import get_current_financial_year_dates, format_date_range
+
+        # Load current settings
+        settings = SystemSettings.load()
+
+        # Calculate current FY for display
+        try:
+            fy_start, fy_end = get_current_financial_year_dates()
+            current_fy_display = format_date_range(fy_start, fy_end)
+        except Exception as e:
+            current_fy_display = "Unable to calculate (check settings)"
+
+        # Month names for display
+        month_names = {
+            1: 'January', 2: 'February', 3: 'March', 4: 'April',
+            5: 'May', 6: 'June', 7: 'July', 8: 'August',
+            9: 'September', 10: 'October', 11: 'November', 12: 'December'
+        }
+
+        context = {
+            'settings': settings,
+            'current_fy_display': current_fy_display,
+            'month_names': month_names,
+            'days': range(1, 32),
+        }
+        return render(request, self.template_name, context)
+
+    def post(self, request):
+        """Process system settings update."""
+        from dashboard.models import SystemSettings
+        from dashboard.utils.financial_year import get_current_financial_year_dates, format_date_range
+
+        # Load current settings
+        settings = SystemSettings.load()
+
+        # Get form data
+        try:
+            fy_start_month = int(request.POST.get('fy_start_month'))
+            fy_start_day = int(request.POST.get('fy_start_day'))
+            fy_end_month = int(request.POST.get('fy_end_month'))
+            fy_end_day = int(request.POST.get('fy_end_day'))
+
+            # Validate ranges
+            if not (1 <= fy_start_month <= 12):
+                raise ValueError("Start month must be between 1 and 12")
+            if not (1 <= fy_start_day <= 31):
+                raise ValueError("Start day must be between 1 and 31")
+            if not (1 <= fy_end_month <= 12):
+                raise ValueError("End month must be between 1 and 12")
+            if not (1 <= fy_end_day <= 31):
+                raise ValueError("End day must be between 1 and 31")
+
+            # Validate date exists (e.g., no Feb 31)
+            try:
+                date(2024, fy_start_month, fy_start_day)  # 2024 is a leap year
+            except ValueError:
+                raise ValueError(f"Invalid start date: month {fy_start_month} doesn't have {fy_start_day} days")
+
+            try:
+                date(2024, fy_end_month, fy_end_day)
+            except ValueError:
+                raise ValueError(f"Invalid end date: month {fy_end_month} doesn't have {fy_end_day} days")
+
+            # Update settings
+            settings.fy_start_month = fy_start_month
+            settings.fy_start_day = fy_start_day
+            settings.fy_end_month = fy_end_month
+            settings.fy_end_day = fy_end_day
+            settings.updated_by = request.user
+            settings.save()
+
+            messages.success(
+                request,
+                'System settings updated successfully. Financial year changes will apply across all reports.'
+            )
+            return redirect('users:system_settings')
+
+        except ValueError as e:
+            messages.error(request, f'Invalid input: {str(e)}')
+        except Exception as e:
+            messages.error(request, f'Error updating settings: {str(e)}')
+
+        # Re-render form with error
+        try:
+            fy_start, fy_end = get_current_financial_year_dates()
+            current_fy_display = format_date_range(fy_start, fy_end)
+        except Exception:
+            current_fy_display = "Unable to calculate (check settings)"
+
+        month_names = {
+            1: 'January', 2: 'February', 3: 'March', 4: 'April',
+            5: 'May', 6: 'June', 7: 'July', 8: 'August',
+            9: 'September', 10: 'October', 11: 'November', 12: 'December'
+        }
+
+        context = {
+            'settings': settings,
+            'current_fy_display': current_fy_display,
+            'month_names': month_names,
+            'days': range(1, 32),
         }
         return render(request, self.template_name, context)

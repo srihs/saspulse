@@ -154,6 +154,7 @@ SESSION_SAVE_EVERY_REQUEST = True  # Update last_activity on every request
 
 # Auth URLs
 LOGIN_URL = '/auth/login/'
+LOGIN_REDIRECT_URL = '/system/profile/'  # Redirect to profile after login
 LOGOUT_REDIRECT_URL = '/auth/login/'
 
 # Custom Auth Configuration
@@ -168,6 +169,17 @@ MAX_FAILED_LOGIN_ATTEMPTS = 5
 ACCOUNT_LOCKOUT_DURATION = 30  # minutes
 ACTIVATION_TOKEN_EXPIRY = 24  # hours
 RESET_TOKEN_EXPIRY = 1  # hour
+
+# Django Messages Framework
+# Map Django message tags to Bootstrap 5 alert classes
+from django.contrib.messages import constants as messages
+MESSAGE_TAGS = {
+    messages.DEBUG: 'secondary',
+    messages.INFO: 'info',
+    messages.SUCCESS: 'success',
+    messages.WARNING: 'warning',
+    messages.ERROR: 'danger',
+}
 
 # Internationalization
 LANGUAGE_CODE = 'en-us'

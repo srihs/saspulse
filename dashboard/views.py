@@ -1999,6 +1999,23 @@ def sales_forecasting(request):
         return render(request, 'dashboard/sales_forecasting.html', context)
 
     # Try to use new SalesForecastBase model
+    
+    # === DEBUG LOGGING START ===
+    logger.info("=" * 80)
+    logger.info("SALES FORECASTING VIEW - DEBUG")
+    logger.info("=" * 80)
+    logger.info(f"Request parameters:")
+    logger.info(f"  level: {level}")
+    logger.info(f"  start_date_str: {start_date_str}")
+    logger.info(f"  end_date_str: {end_date_str}")
+    logger.info(f"  use_date_range: {use_date_range}")
+    logger.info(f"  num_days: {num_days}")
+    logger.info(f"  user: {user.username}")
+    logger.info(f"  data_scope: {data_scope}")
+    logger.info(f"  user_school_subcategories: {user_school_subcategories}")
+    logger.info("=" * 80)
+    # === DEBUG LOGGING END ===
+    
     from django.db.models import Max
     import logging
     logger = logging.getLogger(__name__)
@@ -2011,6 +2028,7 @@ def sales_forecasting(request):
         logger.info(f'Date range: {start_date_str} to {end_date_str}')
         logger.info(f'Search query: {search_query}')
         logger.info(f'Shop filter: {shop_filter}')
+        logger.info(f'User school subcategories: {user_school_subcategories}')
 
         # Query product-level forecasts, optionally filtered by shop (category_name)
         sql = """
@@ -2055,6 +2073,11 @@ def sales_forecasting(request):
 
         sql += " ORDER BY p.category_name, p.sub_category, p.name, sf.entity_name, sf.forecast_date DESC"
 
+        # Log the SQL query for debugging
+        logger.info(f'DEBUG: Executing SQL query with {len(params)} parameters')
+        logger.info(f'DEBUG: SQL query: {sql}')
+        logger.info(f'DEBUG: Parameters: {params}')
+
         # Execute raw SQL and convert to model instances
         all_base_forecasts = SalesForecastBase.objects.raw(sql, params)
 
@@ -2062,15 +2085,35 @@ def sales_forecasting(request):
         # The template will detect shop_filter and render accordingly
         # level stays as 'shop'
 
+        # DEBUG: Count total raw results
+        logger.info(f'DEBUG: Converting raw SQL results to list...')
+        all_base_forecasts_list = list(all_base_forecasts)
+        logger.info(f'DEBUG: Raw SQL returned {len(all_base_forecasts_list)} total forecast records')
+
+        if len(all_base_forecasts_list) > 0:
+            sample = all_base_forecasts_list[0]
+            logger.info(f'DEBUG: Sample forecast: entity_name={sample.entity_name}, forecast_date={sample.forecast_date}')
+            logger.info(f'DEBUG: Sample daily_forecasts type: {type(sample.daily_forecasts)}')
+            logger.info(f'DEBUG: Sample daily_forecasts empty? {not bool(sample.daily_forecasts)}')
+            if sample.daily_forecasts:
+                dates = list(sample.daily_forecasts.keys())
+                logger.info(f'DEBUG: Sample has {len(dates)} dates in daily_forecasts')
+                logger.info(f'DEBUG: First 3 dates: {dates[:3]}')
+                logger.info(f'DEBUG: Last 3 dates: {dates[-3:]}')
+        else:
+            logger.warning('DEBUG: Raw SQL returned NO records!')
+
         # Keep only the latest forecast for each entity_name
         seen_entities = set()
         base_forecasts = []
-        for f in all_base_forecasts:
+        for f in all_base_forecasts_list:
             if f.entity_name not in seen_entities:
                 base_forecasts.append(f)
                 seen_entities.add(f.entity_name)
             if len(base_forecasts) >= 2000:  # Limit to 2000 unique entities
                 break
+
+        logger.info(f'DEBUG: After deduplication, {len(base_forecasts)} unique entities')
 
     # NORMAL HANDLING FOR OTHER LEVELS (school, product, category)
     elif level != 'shop':
@@ -2319,6 +2362,10 @@ def sales_forecasting(request):
     if level == 'product':
         # Group SKU variations by parent product
         grouped_products = defaultdict(list)
+        logger.info(f'DEBUG: Processing product level with {len(forecasts)} forecast records')
+        processed_count = 0
+        skipped_zero_count = 0
+        skipped_already_requested = 0
 
         for f in forecasts:
             size = extract_size_from_sku(f.entity_name)
@@ -2334,6 +2381,19 @@ def sales_forecasting(request):
             else:
                 # New: extract date range from base forecast
                 date_range_data = f.get_date_range_forecast(start_date, end_date)
+                if processed_count == 0:  # Log details for first product only
+                    logger.info(f'DEBUG: First product (product level) date extraction:')
+                    logger.info(f'  - Entity: {f.entity_name}')
+                    logger.info(f'  - Forecast date: {f.forecast_date}')
+                    logger.info(f'  - Requested range: {start_date} to {end_date}')
+                    logger.info(f'  - Daily forecasts present: {bool(f.daily_forecasts)}')
+                    if f.daily_forecasts:
+                        all_dates = list(f.daily_forecasts.keys())
+                        logger.info(f'  - Daily forecasts date range: {all_dates[0]} to {all_dates[-1]} ({len(all_dates)} days)')
+                    logger.info(f'  - Extracted dates: {len(date_range_data)} days')
+                    if date_range_data:
+                        extracted_dates = list(date_range_data.keys())
+                        logger.info(f'  - Extracted range: {extracted_dates[0]} to {extracted_dates[-1]}')
 
             # Calculate total quantity for this SKU within the date range
             total_qty = sum([day['quantity'] for day in date_range_data.values()])
@@ -2359,7 +2419,11 @@ def sales_forecasting(request):
             stock_gap = (stock_on_hand + incoming_stock) - forecasted_stock
 
             # Filter: Only show products with negative stock gap (shortages)
-            if total_qty == 0 or stock_gap >= 0:
+            # BUT only apply stock gap filter in replenishment view, not in normal forecasting view
+            if total_qty == 0:
+                skipped_zero_count += 1
+                continue
+            if is_replenishment_view and stock_gap >= 0:
                 continue
 
             # Check if this variation has already been requested
@@ -2367,7 +2431,10 @@ def sales_forecasting(request):
 
             # Skip this variation entirely if already requested
             if already_requested:
+                skipped_already_requested += 1
                 continue
+
+            processed_count += 1
 
             variation_data = {
                 'sku_code': f.entity_name,
@@ -2387,6 +2454,12 @@ def sales_forecasting(request):
             }
 
             grouped_products[product_name].append(variation_data)
+
+        logger.info(f'DEBUG: Product level summary:')
+        logger.info(f'  - Processed: {processed_count} products')
+        logger.info(f'  - Skipped (zero quantity): {skipped_zero_count}')
+        logger.info(f'  - Skipped (already requested): {skipped_already_requested}')
+        logger.info(f'  - Grouped into {len(grouped_products)} parent products')
 
         # Create product summaries
         forecast_list = []
@@ -2414,6 +2487,8 @@ def sales_forecasting(request):
 
         # Sort by total quantity descending
         forecast_list = sorted(forecast_list, key=lambda x: x['total_quantity'], reverse=True)[:500]  # Increased limit to 500 products (was 200)
+
+        logger.info(f'DEBUG: Final forecast_list has {len(forecast_list)} products after limit')
 
     elif level == 'shop':
         # SHOP-LEVEL NESTED VIEW: 3-level (location → school → product) or 2-level (school → product)
@@ -2456,9 +2531,14 @@ def sales_forecasting(request):
 
             # Process each school group
             forecast_list = []
+            logger.info(f'DEBUG: Processing {len(school_groups)} school groups')
+            processed_count = 0
+            skipped_zero_count = 0
+
             for school_name, school_forecasts in sorted(school_groups.items()):
                 school_variations = []
                 school_total_quantity = 0
+                logger.info(f'DEBUG: Processing school "{school_name}" with {len(school_forecasts)} forecasts')
 
                 for f in school_forecasts:
                     size = extract_size_from_sku(f.entity_name)
@@ -2472,13 +2552,29 @@ def sales_forecasting(request):
                                 date_range_data[date_str] = forecast_data
                     else:
                         date_range_data = f.get_date_range_forecast(start_date, end_date)
+                        if processed_count == 0:  # Log details for first product only
+                            logger.info(f'DEBUG: First product date extraction:')
+                            logger.info(f'  - Entity: {f.entity_name}')
+                            logger.info(f'  - Forecast date: {f.forecast_date}')
+                            logger.info(f'  - Requested range: {start_date} to {end_date}')
+                            logger.info(f'  - Daily forecasts present: {bool(f.daily_forecasts)}')
+                            if f.daily_forecasts:
+                                all_dates = list(f.daily_forecasts.keys())
+                                logger.info(f'  - Daily forecasts date range: {all_dates[0]} to {all_dates[-1]} ({len(all_dates)} days)')
+                            logger.info(f'  - Extracted dates: {len(date_range_data)} days')
+                            if date_range_data:
+                                extracted_dates = list(date_range_data.keys())
+                                logger.info(f'  - Extracted range: {extracted_dates[0]} to {extracted_dates[-1]}')
 
                     # Calculate total quantity
                     total_qty = sum([day['quantity'] for day in date_range_data.values()])
 
                     # Skip if zero
                     if total_qty == 0:
+                        skipped_zero_count += 1
                         continue
+
+                    processed_count += 1
 
                     # Get first 7 days detail
                     forecast_dates = sorted(date_range_data.keys())[:7]
@@ -2501,7 +2597,8 @@ def sales_forecasting(request):
                     stock_gap = (stock_on_hand + incoming_stock) - forecasted_stock
 
                     # Filter: Only show products with negative stock gap (shortages)
-                    if stock_gap >= 0:
+                    # BUT only apply this filter in replenishment view, not in normal forecasting view
+                    if is_replenishment_view and stock_gap >= 0:
                         continue
 
                     # Check if this variation has already been requested
@@ -2549,12 +2646,18 @@ def sales_forecasting(request):
                         'is_school_grouped': True  # Use same flag as school view
                     })
 
+            logger.info(f'DEBUG: Processed {processed_count} products, skipped {skipped_zero_count} with zero quantity')
+            logger.info(f'DEBUG: Generated {len(forecast_list)} school groups before sorting')
+
             # Sort schools by total quantity descending
             forecast_list = sorted(forecast_list, key=lambda x: x['total_quantity'], reverse=True)[:100]
+
+            logger.info(f'DEBUG: Final forecast_list has {len(forecast_list)} schools after limit')
 
         else:
             # WITHOUT shop_filter: 3-level location/school/product nested view
             logger.info('No shop filter - Using 3-level location/school/product view')
+            logger.info(f'DEBUG: Starting with {len(forecasts)} forecast records')
 
             # Group forecasts by location -> school
             location_groups = defaultdict(lambda: defaultdict(list))
@@ -2562,6 +2665,7 @@ def sales_forecasting(request):
             # Build SKU -> location/school mapping
             sku_to_location = {}
             sku_to_school = {}
+            mapping_failures = 0
             for f in forecasts:
                 location_name = getattr(f, 'location_name', None)
                 school_name = getattr(f, 'school_name', None)
@@ -2578,7 +2682,10 @@ def sales_forecasting(request):
                         sku_to_school[f.entity_name] = school_name
                     except ProductOption.DoesNotExist:
                         logger.warning(f'ProductOption not found for SKU: {f.entity_name}')
+                        mapping_failures += 1
                         continue
+
+            logger.info(f'DEBUG: Mapped {len(sku_to_location)} SKUs to locations, {mapping_failures} failures')
 
             # Group forecasts by location -> school
             for f in forecasts:
@@ -2587,9 +2694,15 @@ def sales_forecasting(request):
                 if location_name and school_name:
                     location_groups[location_name][school_name].append(f)
 
+            logger.info(f'DEBUG: Created {len(location_groups)} location groups')
+
             # Process each location
             forecast_list = []
+            processed_count = 0
+            skipped_zero_count = 0
+
             for location_name, schools in sorted(location_groups.items()):
+                logger.info(f'DEBUG: Processing location "{location_name}" with {len(schools)} schools')
                 location_schools = []
                 location_total_quantity = 0
 
@@ -2610,13 +2723,29 @@ def sales_forecasting(request):
                                     date_range_data[date_str] = forecast_data
                         else:
                             date_range_data = f.get_date_range_forecast(start_date, end_date)
+                            if processed_count == 0:  # Log details for first product only
+                                logger.info(f'DEBUG: First product (3-level view) date extraction:')
+                                logger.info(f'  - Entity: {f.entity_name}')
+                                logger.info(f'  - Forecast date: {f.forecast_date}')
+                                logger.info(f'  - Requested range: {start_date} to {end_date}')
+                                logger.info(f'  - Daily forecasts present: {bool(f.daily_forecasts)}')
+                                if f.daily_forecasts:
+                                    all_dates = list(f.daily_forecasts.keys())
+                                    logger.info(f'  - Daily forecasts date range: {all_dates[0]} to {all_dates[-1]} ({len(all_dates)} days)')
+                                logger.info(f'  - Extracted dates: {len(date_range_data)} days')
+                                if date_range_data:
+                                    extracted_dates = list(date_range_data.keys())
+                                    logger.info(f'  - Extracted range: {extracted_dates[0]} to {extracted_dates[-1]}')
 
                         # Calculate total quantity
                         total_qty = sum([day['quantity'] for day in date_range_data.values()])
 
                         # Skip if zero
                         if total_qty == 0:
+                            skipped_zero_count += 1
                             continue
+
+                        processed_count += 1
 
                         # Get first 7 days detail
                         forecast_dates = sorted(date_range_data.keys())[:7]
@@ -2639,7 +2768,8 @@ def sales_forecasting(request):
                         stock_gap = (stock_on_hand + incoming_stock) - forecasted_stock
 
                         # Filter: Only show products with negative stock gap (shortages)
-                        if stock_gap >= 0:
+                        # BUT only apply this filter in replenishment view, not in normal forecasting view
+                        if is_replenishment_view and stock_gap >= 0:
                             continue
 
                         # Check if this variation has already been requested
@@ -2700,8 +2830,13 @@ def sales_forecasting(request):
                         'is_shop_grouped': True  # NEW FLAG for 3-level view
                     })
 
+            logger.info(f'DEBUG: Processed {processed_count} products, skipped {skipped_zero_count} with zero quantity')
+            logger.info(f'DEBUG: Generated {len(forecast_list)} location groups before sorting')
+
             # Sort locations by total quantity descending
             forecast_list = sorted(forecast_list, key=lambda x: x['total_quantity'], reverse=True)[:50]  # Limit to 50 locations
+
+            logger.info(f'DEBUG: Final forecast_list has {len(forecast_list)} locations after limit')
 
     elif level == 'school':
         # SIMPLIFIED SCHOOL VIEW: Group variations by school (2-level structure)
@@ -2740,10 +2875,15 @@ def sales_forecasting(request):
 
         # Process each school group
         forecast_list = []
+        logger.info(f'DEBUG: Processing school level with {len(school_groups)} school groups')
+        processed_count = 0
+        skipped_zero_count = 0
+
         for school_name, school_forecasts in sorted(school_groups.items()):
             # Direct list of variations (no product grouping)
             school_variations = []
             school_total_quantity = 0
+            logger.info(f'DEBUG: Processing school "{school_name}" with {len(school_forecasts)} forecasts')
 
             for f in school_forecasts:
                 size = extract_size_from_sku(f.entity_name)
@@ -2757,13 +2897,29 @@ def sales_forecasting(request):
                             date_range_data[date_str] = forecast_data
                 else:
                     date_range_data = f.get_date_range_forecast(start_date, end_date)
+                    if processed_count == 0:  # Log details for first product only
+                        logger.info(f'DEBUG: First product (school level) date extraction:')
+                        logger.info(f'  - Entity: {f.entity_name}')
+                        logger.info(f'  - Forecast date: {f.forecast_date}')
+                        logger.info(f'  - Requested range: {start_date} to {end_date}')
+                        logger.info(f'  - Daily forecasts present: {bool(f.daily_forecasts)}')
+                        if f.daily_forecasts:
+                            all_dates = list(f.daily_forecasts.keys())
+                            logger.info(f'  - Daily forecasts date range: {all_dates[0]} to {all_dates[-1]} ({len(all_dates)} days)')
+                        logger.info(f'  - Extracted dates: {len(date_range_data)} days')
+                        if date_range_data:
+                            extracted_dates = list(date_range_data.keys())
+                            logger.info(f'  - Extracted range: {extracted_dates[0]} to {extracted_dates[-1]}')
 
                 # Calculate total quantity for this SKU within the date range
                 total_qty = sum([day['quantity'] for day in date_range_data.values()])
 
                 # Only include if total_qty > 0
                 if total_qty == 0:
+                    skipped_zero_count += 1
                     continue
+
+                processed_count += 1
 
                 # Get first 7 days detail
                 forecast_dates = sorted(date_range_data.keys())[:7]
@@ -2786,7 +2942,8 @@ def sales_forecasting(request):
                 stock_gap = (stock_on_hand + incoming_stock) - forecasted_stock
 
                 # Filter: Only show products with negative stock gap (shortages)
-                if stock_gap >= 0:
+                # BUT only apply this filter in replenishment view, not in normal forecasting view
+                if is_replenishment_view and stock_gap >= 0:
                     continue
 
                 # Check if this variation has already been requested
@@ -2835,8 +2992,15 @@ def sales_forecasting(request):
                     'is_school_grouped': True  # Special flag for school-level grouping
                 })
 
+        logger.info(f'DEBUG: School level summary:')
+        logger.info(f'  - Processed: {processed_count} products')
+        logger.info(f'  - Skipped (zero quantity): {skipped_zero_count}')
+        logger.info(f'  - Generated {len(forecast_list)} school groups')
+
         # Sort schools by total quantity descending
         forecast_list = sorted(forecast_list, key=lambda x: x['total_quantity'], reverse=True)[:100]  # Limit to 100 schools
+
+        logger.info(f'DEBUG: Final forecast_list has {len(forecast_list)} schools after limit')
 
     else:
         # Regular flat view for shop/category
@@ -6172,3 +6336,168 @@ def store_daily_pick_list(request):
     }
 
     return render(request, 'dashboard/store_daily_pick_list.html', context)
+
+
+@login_required
+@permission_required('replenishment.demand_planning.view_all_requests')
+def top_performing_schools(request):
+    """
+    View to display and manage top performing schools
+    Shows schools from categories ending with 'Shop' or 'Store'
+    with their last financial year sales and ability to mark as top performing
+    """
+    from dashboard.models import TopPerformingSchool
+    from cin7.models import Product, SalesOrderLineItem
+    from django.db.models import Q, Sum, F
+    from datetime import date, timedelta
+    from django.utils import timezone
+    from dashboard.utils.financial_year import get_financial_year_dates, get_financial_year_label
+    import json
+
+    # Calculate last financial year dates using configurable system settings
+    # This supports any FY definition (April-March, July-June, etc.)
+    last_fy_start, last_fy_end = get_financial_year_dates()
+
+    # Get all schools from products where category ends with 'Shop' or 'Store'
+    schools_data = Product.objects.filter(
+        Q(category_name__iendswith='Shop') | Q(category_name__iendswith='Store')
+    ).values('category_name', 'sub_category').distinct()
+
+    # Create a dictionary to track schools and their sales
+    schools_dict = {}
+
+    for school in schools_data:
+        school_name = school['sub_category']
+        category_name = school['category_name']
+
+        if not school_name:
+            continue
+
+        # Use school_name as unique key
+        if school_name not in schools_dict:
+            schools_dict[school_name] = {
+                'school_name': school_name,
+                'category_name': category_name,
+                'last_fy_sales': 0,
+            }
+
+    # Convert dates to timezone-aware datetime for proper comparison
+    import datetime
+    last_fy_start_dt = timezone.make_aware(datetime.datetime.combine(last_fy_start, datetime.time.min))
+    last_fy_end_dt = timezone.make_aware(datetime.datetime.combine(last_fy_end, datetime.time.max))
+
+    # Log financial year calculation
+    import logging
+    logger = logging.getLogger(__name__)
+    today = date.today()
+    logger.info(f'Top Performing Schools - Financial Year Calculation (Configurable System)')
+    logger.info(f'  Today: {today}')
+    logger.info(f'  Last Completed FY Start: {last_fy_start} ({last_fy_start_dt})')
+    logger.info(f'  Last Completed FY End: {last_fy_end} ({last_fy_end_dt})')
+    logger.info(f'  FY Label: {get_financial_year_label(last_fy_start, last_fy_end)}')
+    logger.info(f'  Total schools found: {len(schools_dict)}')
+
+    # Calculate sales for each school from SalesOrderLineItem
+    # Get products for each school and calculate their sales
+    for school_name in schools_dict.keys():
+        # Get all products for this school
+        school_products = Product.objects.filter(
+            Q(category_name__iendswith='Shop') | Q(category_name__iendswith='Store'),
+            sub_category=school_name
+        ).values_list('cin7_id', flat=True)
+
+        if school_products:
+            product_count = len(list(school_products))
+
+            # Calculate sales for these products in the last FY
+            # NOTE: Status is 'APPROVED' not 'Invoiced' in the database
+            sales = SalesOrderLineItem.objects.filter(
+                cin7_product_id__in=school_products,
+                sales_order__invoice_date__gte=last_fy_start_dt,
+                sales_order__invoice_date__lte=last_fy_end_dt,
+                sales_order__status='APPROVED'  # Fixed: was 'Invoiced' but database uses 'APPROVED'
+            ).aggregate(
+                total_sales=Sum(F('qty') * F('unit_price')),
+                total_qty=Sum('qty')
+            )
+
+            total_sales = sales['total_sales'] or 0
+            total_qty = sales['total_qty'] or 0
+            schools_dict[school_name]['last_fy_sales'] = float(total_sales)
+
+            # Log sample school data for debugging
+            if school_name in ['Western Springs College', 'McAuley High School', 'Onehunga High school']:
+                logger.info(f'  School: {school_name}')
+                logger.info(f'    Products: {product_count}')
+                logger.info(f'    Total Sales: ${total_sales:,.2f}')
+                logger.info(f'    Total Quantity: {total_qty:,.0f}')
+
+    # Get or create TopPerformingSchool records
+    for school_name, school_data in schools_dict.items():
+        TopPerformingSchool.objects.update_or_create(
+            school_name=school_name,
+            defaults={
+                'category_name': school_data['category_name'],
+                'last_fy_sales': school_data['last_fy_sales'],
+                'last_fy_start': last_fy_start,
+                'last_fy_end': last_fy_end,
+                'sales_updated_at': timezone.now(),
+            }
+        )
+
+    # Get all schools from database, ordered by sales
+    schools = TopPerformingSchool.objects.all().order_by('-last_fy_sales')
+
+    # Calculate statistics
+    total_schools = schools.count()
+    top_performing_count = schools.filter(is_top_performing=True).count()
+    total_sales = schools.aggregate(total=Sum('last_fy_sales'))['total'] or 0
+
+    context = {
+        'schools': schools,
+        'total_schools': total_schools,
+        'top_performing_count': top_performing_count,
+        'total_sales': total_sales,
+        'last_fy_start': last_fy_start,
+        'last_fy_end': last_fy_end,
+    }
+
+    return render(request, 'dashboard/top_performing_schools.html', context)
+
+
+@login_required
+@permission_required('replenishment.demand_planning.approve')
+@require_http_methods(["POST"])
+def toggle_top_performing_school(request, school_id):
+    """
+    Toggle the top performing status of a school
+    """
+    from dashboard.models import TopPerformingSchool
+    from django.shortcuts import get_object_or_404
+    from django.utils import timezone
+    import json
+
+    try:
+        school = get_object_or_404(TopPerformingSchool, id=school_id)
+
+        # Toggle the status
+        school.is_top_performing = not school.is_top_performing
+
+        # Update metadata
+        if school.is_top_performing:
+            school.marked_by = request.user
+            school.marked_at = timezone.now()
+
+        school.save()
+
+        return JsonResponse({
+            'success': True,
+            'is_top_performing': school.is_top_performing,
+            'school_name': school.school_name,
+        })
+
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=400)

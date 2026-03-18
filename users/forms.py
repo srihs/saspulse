@@ -894,3 +894,73 @@ class UserRolesForm(forms.Form):
             profile.roles.set(self.cleaned_data['roles'])
             return profile
         return None
+
+
+class ProfileEditForm(forms.ModelForm):
+    """
+    Form for users to edit their own profile information.
+    Only allows editing of personal fields, not sensitive or admin-managed fields.
+    """
+    class Meta:
+        model = CustomUser
+        fields = ['first_name', 'last_name', 'phone_number', 'department', 'job_title', 'bio']
+        widgets = {
+            'first_name': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Enter first name'
+            }),
+            'last_name': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Enter last name'
+            }),
+            'phone_number': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'e.g., +64 21 123 4567'
+            }),
+            'department': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Enter department'
+            }),
+            'job_title': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Enter job title'
+            }),
+            'bio': forms.Textarea(attrs={
+                'class': 'form-control',
+                'placeholder': 'Brief description about yourself',
+                'rows': 4
+            }),
+        }
+        labels = {
+            'first_name': 'First Name',
+            'last_name': 'Last Name',
+            'phone_number': 'Phone Number',
+            'department': 'Department',
+            'job_title': 'Job Title',
+            'bio': 'Bio'
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Make first and last name required
+        self.fields['first_name'].required = True
+        self.fields['last_name'].required = True
+
+    def clean_phone_number(self):
+        """Basic phone number validation."""
+        phone = self.cleaned_data.get('phone_number')
+
+        if phone:
+            # Remove common formatting characters
+            import re
+            phone_digits = re.sub(r'[\s\-\(\)\+]', '', phone)
+
+            # Check if it contains only digits
+            if not phone_digits.isdigit():
+                raise forms.ValidationError('Phone number can only contain digits and formatting characters.')
+
+            # Check reasonable length (7-15 digits)
+            if len(phone_digits) < 7 or len(phone_digits) > 15:
+                raise forms.ValidationError('Phone number must be between 7 and 15 digits.')
+
+        return phone

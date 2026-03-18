@@ -1047,6 +1047,21 @@ div.dataTables_wrapper div.dataTables_paginate {
     }
 }
 
+/* User Dropdown Menu Icon Spacing Fix */
+.dropdown-profile .nav-link [data-feather],
+.dropdown-profile .nav-link svg {
+    display: inline-block;
+    vertical-align: middle;
+    margin-right: 0.5rem;
+}
+
+.dropdown-profile .btn [data-feather],
+.dropdown-profile .btn svg {
+    display: inline-block;
+    vertical-align: middle;
+    margin-right: 0.5rem;
+}
+
 /* DataTables Row Details Control */
 td.dt-control {
     cursor: pointer;

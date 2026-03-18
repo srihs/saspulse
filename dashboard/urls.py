@@ -52,4 +52,8 @@ urlpatterns = [
     path('stocks/dead-stock/', views.dead_stock_report, name='dead_stock_report'),
     path('stocks/best-sellers/', views.top_best_sellers_report, name='top_best_sellers_report'),
     path('stocks/abc-analysis/', views.abc_analysis_report, name='abc_analysis_report'),
+
+    # Top Performing Schools
+    path('replenishment/dp/top-schools/', views.top_performing_schools, name='top_performing_schools'),
+    path('replenishment/dp/top-schools/toggle/<int:school_id>/', views.toggle_top_performing_school, name='toggle_top_performing_school'),
 ]

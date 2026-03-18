@@ -1,0 +1,317 @@
+{% extends "users/base_system.html" %}
+{% load static %}
+
+{% block title %}System Settings - SasPulse{% endblock %}
+
+{% block system_content %}
+<div class="container-fluid px-0">
+  <!-- Page Header -->
+  <div class="row g-3 mb-3 align-items-center">
+    <div class="col">
+      <h2 class="mb-0 text-body-emphasis">
+        <span data-feather="settings" class="me-2" style="width: 28px; height: 28px;"></span>
+        System Settings
+      </h2>
+      <p class="text-muted mb-0">Configure system-wide settings and parameters</p>
+    </div>
+  </div>
+
+  <!-- Breadcrumb -->
+  <nav aria-label="breadcrumb">
+    <ol class="breadcrumb mb-4">
+      <li class="breadcrumb-item"><a href="/">Home</a></li>
+      <li class="breadcrumb-item"><a href="#">System</a></li>
+      <li class="breadcrumb-item active" aria-current="page">Settings</li>
+    </ol>
+  </nav>
+
+  <!-- Messages -->
+  {% if messages %}
+    <div class="mb-3">
+      {% for message in messages %}
+        <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+          <div class="d-flex align-items-start">
+            {% if message.tags == 'success' %}
+              <span data-feather="check-circle" class="me-2 mt-1" style="width: 18px; height: 18px;"></span>
+            {% elif message.tags == 'error' or message.tags == 'danger' %}
+              <span data-feather="alert-circle" class="me-2 mt-1" style="width: 18px; height: 18px;"></span>
+            {% else %}
+              <span data-feather="info" class="me-2 mt-1" style="width: 18px; height: 18px;"></span>
+            {% endif %}
+            <div>{{ message }}</div>
+          </div>
+          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <div class="row g-3">
+    <!-- Financial Year Settings Card -->
+    <div class="col-lg-8">
+      <div class="card">
+        <div class="card-header bg-body-tertiary border-bottom">
+          <div class="row align-items-center">
+            <div class="col">
+              <h5 class="mb-0">
+                <span data-feather="calendar" class="me-2" style="width: 18px; height: 18px;"></span>
+                Financial Year Configuration
+              </h5>
+            </div>
+          </div>
+        </div>
+        <div class="card-body">
+          <form method="post" id="settingsForm">
+            {% csrf_token %}
+
+            <!-- Current FY Display -->
+            <div class="alert alert-info mb-4">
+              <div class="d-flex align-items-start">
+                <span data-feather="info" class="me-2 mt-1" style="width: 18px; height: 18px;"></span>
+                <div>
+                  <strong>Current Financial Year:</strong><br>
+                  <span id="currentFyDisplay">{{ current_fy_display }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Financial Year Start -->
+            <div class="mb-4">
+              <h6 class="mb-3 text-body-emphasis">
+                <span data-feather="play-circle" class="me-2" style="width: 16px; height: 16px;"></span>
+                Financial Year Start Date
+              </h6>
+              <div class="row g-3">
+                <div class="col-md-6">
+                  <label for="fy_start_month" class="form-label">Start Month</label>
+                  <select class="form-select" id="fy_start_month" name="fy_start_month" required>
+                    {% for month, name in month_names.items %}
+                      <option value="{{ month }}" {% if month == settings.fy_start_month %}selected{% endif %}>
+                        {{ name }}
+                      </option>
+                    {% endfor %}
+                  </select>
+                  <div class="form-text">Month when the financial year begins</div>
+                </div>
+                <div class="col-md-6">
+                  <label for="fy_start_day" class="form-label">Start Day</label>
+                  <select class="form-select" id="fy_start_day" name="fy_start_day" required>
+                    {% for day in days %}
+                      <option value="{{ day }}" {% if day == settings.fy_start_day %}selected{% endif %}>
+                        {{ day }}
+                      </option>
+                    {% endfor %}
+                  </select>
+                  <div class="form-text">Day of the month when FY begins</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Financial Year End -->
+            <div class="mb-4">
+              <h6 class="mb-3 text-body-emphasis">
+                <span data-feather="stop-circle" class="me-2" style="width: 16px; height: 16px;"></span>
+                Financial Year End Date
+              </h6>
+              <div class="row g-3">
+                <div class="col-md-6">
+                  <label for="fy_end_month" class="form-label">End Month</label>
+                  <select class="form-select" id="fy_end_month" name="fy_end_month" required>
+                    {% for month, name in month_names.items %}
+                      <option value="{{ month }}" {% if month == settings.fy_end_month %}selected{% endif %}>
+                        {{ name }}
+                      </option>
+                    {% endfor %}
+                  </select>
+                  <div class="form-text">Month when the financial year ends</div>
+                </div>
+                <div class="col-md-6">
+                  <label for="fy_end_day" class="form-label">End Day</label>
+                  <select class="form-select" id="fy_end_day" name="fy_end_day" required>
+                    {% for day in days %}
+                      <option value="{{ day }}" {% if day == settings.fy_end_day %}selected{% endif %}>
+                        {{ day }}
+                      </option>
+                    {% endfor %}
+                  </select>
+                  <div class="form-text">Day of the month when FY ends</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Form Actions -->
+            <div class="d-flex justify-content-end gap-2 mt-4 pt-3 border-top">
+              <button type="button" class="btn btn-secondary" onclick="window.location.reload();">
+                <span data-feather="rotate-ccw" class="me-2" style="width: 16px; height: 16px;"></span>
+                Reset
+              </button>
+              <button type="submit" class="btn btn-primary">
+                <span data-feather="save" class="me-2" style="width: 16px; height: 16px;"></span>
+                Save Settings
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Help Card -->
+    <div class="col-lg-4">
+      <div class="card">
+        <div class="card-header bg-body-tertiary border-bottom">
+          <h5 class="mb-0">
+            <span data-feather="help-circle" class="me-2" style="width: 18px; height: 18px;"></span>
+            Help & Information
+          </h5>
+        </div>
+        <div class="card-body">
+          <h6 class="text-body-emphasis mb-2">About Financial Year</h6>
+          <p class="text-muted small mb-3">
+            The financial year determines how sales forecasting, top performers, and other time-based reports calculate date ranges.
+          </p>
+
+          <h6 class="text-body-emphasis mb-2">Common Configurations</h6>
+          <div class="mb-3">
+            <div class="d-flex align-items-start mb-2">
+              <span data-feather="check" class="me-2 mt-1 text-success" style="width: 14px; height: 14px;"></span>
+              <div class="small">
+                <strong>April - March:</strong><br>
+                <span class="text-muted">Start: April 1, End: March 31</span>
+              </div>
+            </div>
+            <div class="d-flex align-items-start mb-2">
+              <span data-feather="check" class="me-2 mt-1 text-success" style="width: 14px; height: 14px;"></span>
+              <div class="small">
+                <strong>July - June:</strong><br>
+                <span class="text-muted">Start: July 1, End: June 30</span>
+              </div>
+            </div>
+            <div class="d-flex align-items-start">
+              <span data-feather="check" class="me-2 mt-1 text-success" style="width: 14px; height: 14px;"></span>
+              <div class="small">
+                <strong>Calendar Year:</strong><br>
+                <span class="text-muted">Start: January 1, End: December 31</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="alert alert-warning small mb-0">
+            <div class="d-flex align-items-start">
+              <span data-feather="alert-triangle" class="me-2 mt-1" style="width: 14px; height: 14px;"></span>
+              <div>
+                <strong>Important:</strong> Changes to these settings will immediately affect all reports and calculations across the system.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Audit Info Card -->
+      {% if settings.updated_at %}
+      <div class="card mt-3">
+        <div class="card-header bg-body-tertiary border-bottom">
+          <h5 class="mb-0">
+            <span data-feather="clock" class="me-2" style="width: 18px; height: 18px;"></span>
+            Last Updated
+          </h5>
+        </div>
+        <div class="card-body">
+          <div class="d-flex align-items-start mb-2">
+            <span data-feather="calendar" class="me-2 mt-1 text-muted" style="width: 14px; height: 14px;"></span>
+            <div class="small">
+              <strong>Date:</strong><br>
+              <span class="text-muted">{{ settings.updated_at|date:"F d, Y" }}</span>
+            </div>
+          </div>
+          <div class="d-flex align-items-start mb-2">
+            <span data-feather="clock" class="me-2 mt-1 text-muted" style="width: 14px; height: 14px;"></span>
+            <div class="small">
+              <strong>Time:</strong><br>
+              <span class="text-muted">{{ settings.updated_at|time:"H:i" }}</span>
+            </div>
+          </div>
+          {% if settings.updated_by %}
+          <div class="d-flex align-items-start">
+            <span data-feather="user" class="me-2 mt-1 text-muted" style="width: 14px; height: 14px;"></span>
+            <div class="small">
+              <strong>By:</strong><br>
+              <span class="text-muted">{{ settings.updated_by.get_full_name|default:settings.updated_by.username }}</span>
+            </div>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/feather-icons"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    feather.replace();
+
+    // Add validation to form
+    const form = document.getElementById('settingsForm');
+
+    form.addEventListener('submit', function(e) {
+      const startMonth = parseInt(document.getElementById('fy_start_month').value);
+      const startDay = parseInt(document.getElementById('fy_start_day').value);
+      const endMonth = parseInt(document.getElementById('fy_end_month').value);
+      const endDay = parseInt(document.getElementById('fy_end_day').value);
+
+      // Basic validation - check if dates are valid
+      const daysInMonth = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+      if (startDay > daysInMonth[startMonth - 1]) {
+        e.preventDefault();
+        alert(`Invalid start date: ${getMonthName(startMonth)} doesn't have ${startDay} days`);
+        return false;
+      }
+
+      if (endDay > daysInMonth[endMonth - 1]) {
+        e.preventDefault();
+        alert(`Invalid end date: ${getMonthName(endMonth)} doesn't have ${endDay} days`);
+        return false;
+      }
+    });
+
+    // Helper function to get month name
+    function getMonthName(month) {
+      const months = ['January', 'February', 'March', 'April', 'May', 'June',
+                      'July', 'August', 'September', 'October', 'November', 'December'];
+      return months[month - 1];
+    }
+
+    // Update preview when form values change
+    const selects = form.querySelectorAll('select');
+    selects.forEach(select => {
+      select.addEventListener('change', updatePreview);
+    });
+
+    function updatePreview() {
+      const startMonth = parseInt(document.getElementById('fy_start_month').value);
+      const startDay = parseInt(document.getElementById('fy_start_day').value);
+      const endMonth = parseInt(document.getElementById('fy_end_month').value);
+      const endDay = parseInt(document.getElementById('fy_end_day').value);
+
+      const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+                          'July', 'August', 'September', 'October', 'November', 'December'];
+
+      // Show a preview of what the FY would look like
+      // This is a simple approximation - actual calculation happens on the server
+      const currentYear = new Date().getFullYear();
+      let previewText = `Example: ${monthNames[startMonth - 1]} ${startDay}, ${currentYear} to ${monthNames[endMonth - 1]} ${endDay}, `;
+
+      // If end month is before start month, FY spans calendar years
+      if (endMonth < startMonth || (endMonth === startMonth && endDay < startDay)) {
+        previewText += `${currentYear + 1}`;
+      } else {
+        previewText += `${currentYear}`;
+      }
+
+      document.getElementById('currentFyDisplay').textContent = previewText + ' (preview - save to apply)';
+    }
+  });
+</script>
+{% endblock %}

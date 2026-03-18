@@ -1,0 +1,301 @@
+{% extends "users/base_system.html" %}
+{% load static %}
+
+{% block title %}My Profile - SasPulse{% endblock %}
+
+{% block system_content %}
+<div class="container-fluid px-0">
+  <!-- Page Header -->
+  <div class="row g-3 mb-3 align-items-center">
+    <div class="col">
+      <h2 class="mb-0 text-body-emphasis">
+        <span data-feather="user" class="me-2" style="width: 28px; height: 28px;"></span>
+        My Profile
+      </h2>
+      <p class="text-muted mb-0">View and manage your account information</p>
+    </div>
+    <div class="col-auto">
+      <a href="{% url 'users:profile_edit' %}" class="btn btn-primary">
+        <span data-feather="edit-2" class="me-2" style="width: 16px; height: 16px;"></span>
+        Edit Profile
+      </a>
+    </div>
+  </div>
+
+  <!-- Breadcrumb -->
+  <nav aria-label="breadcrumb">
+    <ol class="breadcrumb mb-4">
+      <li class="breadcrumb-item"><a href="/">Home</a></li>
+      <li class="breadcrumb-item active" aria-current="page">Profile</li>
+    </ol>
+  </nav>
+
+  <!-- Messages -->
+  {% if messages %}
+    <div class="mb-3">
+      {% for message in messages %}
+        <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+          <div class="d-flex align-items-start">
+            {% if message.tags == 'success' %}
+              <span data-feather="check-circle" class="me-2 mt-1" style="width: 18px; height: 18px;"></span>
+            {% elif message.tags == 'error' or message.tags == 'danger' %}
+              <span data-feather="alert-circle" class="me-2 mt-1" style="width: 18px; height: 18px;"></span>
+            {% else %}
+              <span data-feather="info" class="me-2 mt-1" style="width: 18px; height: 18px;"></span>
+            {% endif %}
+            <div>{{ message }}</div>
+          </div>
+          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <div class="row">
+    <!-- Main Profile Card -->
+    <div class="col-xl-8">
+      <div class="card mb-3">
+        <div class="card-header bg-body-tertiary border-bottom">
+          <h5 class="mb-0">
+            <span data-feather="user" class="me-2" style="width: 18px; height: 18px;"></span>
+            Profile Information
+          </h5>
+        </div>
+        <div class="card-body">
+          <!-- User Avatar and Name -->
+          <div class="d-flex align-items-center mb-4 pb-4 border-bottom">
+            <div class="avatar avatar-5xl">
+              <div class="avatar-name rounded-circle" style="width: 80px; height: 80px; font-size: 2rem;">
+                <span>{{ user.username.0|upper }}</span>
+              </div>
+            </div>
+            <div class="ms-4">
+              <h3 class="mb-1">{{ user.get_full_name }}</h3>
+              <p class="text-muted mb-1">{{ user.email }}</p>
+              {% if user.job_title %}
+                <p class="text-muted mb-0">
+                  <span data-feather="briefcase" class="me-1" style="width: 14px; height: 14px;"></span>
+                  {{ user.job_title }}
+                </p>
+              {% endif %}
+            </div>
+          </div>
+
+          <!-- Personal Information -->
+          <div class="row mb-3">
+            <div class="col-md-6 mb-3">
+              <label class="form-label text-muted small mb-1">First Name</label>
+              <p class="mb-0 fw-semibold">{{ user.first_name|default:"Not provided" }}</p>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label text-muted small mb-1">Last Name</label>
+              <p class="mb-0 fw-semibold">{{ user.last_name|default:"Not provided" }}</p>
+            </div>
+          </div>
+
+          <div class="row mb-3">
+            <div class="col-md-6 mb-3">
+              <label class="form-label text-muted small mb-1">
+                <span data-feather="mail" class="me-1" style="width: 14px; height: 14px;"></span>
+                Email Address
+              </label>
+              <p class="mb-0 fw-semibold">{{ user.email }}</p>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label text-muted small mb-1">
+                <span data-feather="phone" class="me-1" style="width: 14px; height: 14px;"></span>
+                Phone Number
+              </label>
+              <p class="mb-0 fw-semibold">{{ user.phone_number|default:"Not provided" }}</p>
+            </div>
+          </div>
+
+          <div class="row mb-3">
+            <div class="col-md-6 mb-3">
+              <label class="form-label text-muted small mb-1">
+                <span data-feather="grid" class="me-1" style="width: 14px; height: 14px;"></span>
+                Department
+              </label>
+              <p class="mb-0 fw-semibold">{{ user.department|default:"Not provided" }}</p>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label text-muted small mb-1">
+                <span data-feather="briefcase" class="me-1" style="width: 14px; height: 14px;"></span>
+                Job Title
+              </label>
+              <p class="mb-0 fw-semibold">{{ user.job_title|default:"Not provided" }}</p>
+            </div>
+          </div>
+
+          {% if user.bio %}
+          <div class="mb-0">
+            <label class="form-label text-muted small mb-1">
+              <span data-feather="file-text" class="me-1" style="width: 14px; height: 14px;"></span>
+              Bio
+            </label>
+            <p class="mb-0 fw-semibold">{{ user.bio }}</p>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Assigned Branches/Schools (if applicable) -->
+      {% if user.assigned_branches.exists or user.assigned_schools.exists %}
+      <div class="card mb-3">
+        <div class="card-header bg-body-tertiary border-bottom">
+          <h5 class="mb-0">
+            <span data-feather="map-pin" class="me-2" style="width: 18px; height: 18px;"></span>
+            Assignments
+          </h5>
+        </div>
+        <div class="card-body">
+          {% if user.assigned_branches.exists %}
+          <div class="mb-3">
+            <label class="form-label text-muted small mb-2">
+              <span data-feather="shopping-bag" class="me-1" style="width: 14px; height: 14px;"></span>
+              Assigned Branches
+            </label>
+            <div>
+              {% for branch in user.assigned_branches.all %}
+                <span class="badge badge-phoenix badge-phoenix-primary me-1 mb-1">{{ branch.name }}</span>
+              {% endfor %}
+            </div>
+          </div>
+          {% endif %}
+
+          {% if user.assigned_schools.exists %}
+          <div class="mb-0">
+            <label class="form-label text-muted small mb-2">
+              <span data-feather="book" class="me-1" style="width: 14px; height: 14px;"></span>
+              Assigned Schools
+            </label>
+            <div>
+              {% for school in user.assigned_schools.all|dictsort:"sub_category" %}
+                {% if school.sub_category %}
+                  <span class="badge badge-phoenix badge-phoenix-info me-1 mb-1">{{ school.sub_category }}</span>
+                {% endif %}
+              {% endfor %}
+            </div>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Sidebar -->
+    <div class="col-xl-4">
+      <!-- Account Status Card -->
+      <div class="card mb-3">
+        <div class="card-header bg-body-tertiary border-bottom">
+          <h5 class="mb-0">
+            <span data-feather="shield" class="me-2" style="width: 18px; height: 18px;"></span>
+            Account Status
+          </h5>
+        </div>
+        <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label text-muted small mb-1">Username</label>
+            <p class="mb-0 fw-semibold">{{ user.username }}</p>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label text-muted small mb-1">Status</label>
+            <div>
+              {% if user.is_active %}
+                <span class="badge badge-phoenix badge-phoenix-success">
+                  <span data-feather="check-circle" class="me-1" style="width: 14px; height: 14px;"></span>
+                  Active
+                </span>
+              {% else %}
+                <span class="badge badge-phoenix badge-phoenix-secondary">
+                  <span data-feather="x-circle" class="me-1" style="width: 14px; height: 14px;"></span>
+                  Inactive
+                </span>
+              {% endif %}
+              {% if user.email_verified %}
+                <span class="badge badge-phoenix badge-phoenix-success">
+                  <span data-feather="mail" class="me-1" style="width: 14px; height: 14px;"></span>
+                  Email Verified
+                </span>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label text-muted small mb-1">Member Since</label>
+            <p class="mb-0 fw-semibold">{{ user.created_at|date:"F j, Y" }}</p>
+          </div>
+
+          {% if user.last_login %}
+          <div class="mb-0">
+            <label class="form-label text-muted small mb-1">Last Login</label>
+            <p class="mb-0 fw-semibold">{{ user.last_login|date:"F j, Y \a\t g:i A" }}</p>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Roles Card -->
+      <div class="card mb-3">
+        <div class="card-header bg-body-tertiary border-bottom">
+          <h5 class="mb-0">
+            <span data-feather="shield" class="me-2" style="width: 18px; height: 18px;"></span>
+            Roles & Permissions
+          </h5>
+        </div>
+        <div class="card-body">
+          {% if user.roles.exists %}
+            <div class="mb-0">
+              {% for role in user.roles.all %}
+                <span class="badge badge-phoenix badge-phoenix-primary mb-2 d-inline-block w-100 text-start">
+                  <span data-feather="shield" class="me-1" style="width: 14px; height: 14px;"></span>
+                  {{ role.name }}
+                </span>
+                {% if role.description %}
+                  <p class="text-muted small mb-2">{{ role.description }}</p>
+                {% endif %}
+              {% endfor %}
+            </div>
+          {% else %}
+            <p class="text-muted mb-0">No roles assigned</p>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Quick Actions Card -->
+      <div class="card">
+        <div class="card-header bg-body-tertiary border-bottom">
+          <h5 class="mb-0">
+            <span data-feather="settings" class="me-2" style="width: 18px; height: 18px;"></span>
+            Quick Actions
+          </h5>
+        </div>
+        <div class="card-body">
+          <div class="d-grid gap-2">
+            <a href="{% url 'users:profile_edit' %}" class="btn btn-outline-primary">
+              <span data-feather="edit-2" class="me-2" style="width: 16px; height: 16px;"></span>
+              Edit Profile
+            </a>
+            <a href="{% url 'users:change_password' %}" class="btn btn-outline-secondary">
+              <span data-feather="lock" class="me-2" style="width: 16px; height: 16px;"></span>
+              Change Password
+            </a>
+            <a href="{% url 'dashboard:home' %}" class="btn btn-outline-info">
+              <span data-feather="home" class="me-2" style="width: 16px; height: 16px;"></span>
+              Go to Dashboard
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/feather-icons"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    feather.replace();
+  });
+</script>
+{% endblock %}
