@@ -6422,16 +6422,17 @@ def abc_analysis_report(request):
 @permission_required('replenishment.daily_pick_list.view')
 def store_daily_pick_list(request):
     """
-    Generate daily pick list for store replenishment based on previous day's sales
+    Generate daily pick list for store replenishment based on weekly sales analysis and forecasting
 
     Features:
-    - Shows products sold yesterday
-    - Calculates pick quantity based on sales velocity and current stock
-    - Prioritizes items by urgency (low stock, high sales)
-    - Helps store managers prepare warehouse transfers for shelf replenishment
+    - Analyzes previous 7 days of sales (proactive vs reactive)
+    - Forecasts next 7 days demand with safety buffers
+    - Calculates pick quantity based on stock gap to forecasted demand
+    - Prioritizes items by days until stockout and sales velocity
+    - Helps store managers prepare warehouse transfers proactively
     """
     from datetime import date, timedelta
-    from django.db.models import Sum, F, Q, Count
+    from django.db.models import Sum, F, Q, Count, Max, Avg
     from decimal import Decimal
     from cin7.models import SalesOrderLineItem, Stock, Branch
 
@@ -6459,16 +6460,31 @@ def store_daily_pick_list(request):
     # Get category filter (optional)
     category_filter = request.GET.get('category', '')
 
-    # Get minimum quantity threshold (default: 1)
+    # Get minimum pick quantity threshold (default: 1)
     try:
-        min_quantity = int(request.GET.get('min_qty', 1))
+        min_pick_qty = int(request.GET.get('min_qty', 1))
     except ValueError:
-        min_quantity = 1
+        min_pick_qty = 1
 
-    # Query yesterday's sales for the user's assigned stores
-    # Use invoice_date for completed sales
+    # Get forecast horizon (default: 7 days)
+    try:
+        forecast_days = int(request.GET.get('forecast_days', 7))
+        if forecast_days not in [3, 7]:
+            forecast_days = 7
+    except ValueError:
+        forecast_days = 7
+
+    # Get safety buffer percentage (default: auto)
+    safety_buffer_option = request.GET.get('safety_buffer', 'auto')
+
+    # Define date range for weekly sales analysis (previous 7 days)
+    end_date = target_date  # Yesterday or selected date
+    start_date = end_date - timedelta(days=6)  # 7 days ago (inclusive)
+
+    # Query weekly sales (past 7 days)
     sales_query = SalesOrderLineItem.objects.filter(
-        sales_order__invoice_date__date=target_date,
+        sales_order__invoice_date__date__gte=start_date,
+        sales_order__invoice_date__date__lte=end_date,
         sales_order__is_void=False
     )
 
@@ -6484,20 +6500,20 @@ def store_daily_pick_list(request):
     if category_filter:
         sales_query = sales_query.filter(product__category_name__icontains=category_filter)
 
-    # Aggregate sales by product
+    # Aggregate weekly sales by product
     sales_data = sales_query.values(
         'cin7_product_id',
         'code',
         'name',
         product_category=F('product__category_name')
     ).annotate(
-        quantity_sold=Sum('qty'),
-        order_count=Count('cin7_sales_order_id', distinct=True)
-    ).filter(
-        quantity_sold__gte=min_quantity
-    ).order_by('-quantity_sold')
+        total_qty_sold=Sum('qty'),
+        days_with_sales=Count('sales_order__invoice_date__date', distinct=True),
+        order_count=Count('cin7_sales_order_id', distinct=True),
+        max_daily_sales=Max('qty')
+    )
 
-    # Build pick list with stock information
+    # Build pick list with stock information and forecasting
     pick_list = []
     total_items = 0
     total_pick_quantity = 0
@@ -6508,11 +6524,38 @@ def store_daily_pick_list(request):
         sku = sale['code']
         product_name = sale['name']
         category = sale['product_category'] or 'Uncategorized'
-        qty_sold = float(sale['quantity_sold'])
+        total_qty_sold = float(sale['total_qty_sold'])
+        days_with_sales = sale['days_with_sales']
         order_count = sale['order_count']
+        max_daily_sales = float(sale['max_daily_sales'] or 0)
+
+        # Calculate average daily sales over the 7-day period
+        avg_daily_sales = total_qty_sold / 7.0
+
+        # Determine safety buffer based on sales consistency
+        if safety_buffer_option == 'auto':
+            if days_with_sales >= 5:  # Sold 5+ days out of 7
+                safety_buffer = 0.10  # 10% - stable demand
+                consistency_label = 'Stable'
+            elif days_with_sales >= 3:
+                safety_buffer = 0.20  # 20% - moderate demand
+                consistency_label = 'Moderate'
+            else:
+                safety_buffer = 0.30  # 30% - uncertain demand
+                consistency_label = 'Volatile'
+        else:
+            # Manual override
+            try:
+                safety_buffer = float(safety_buffer_option) / 100.0
+                consistency_label = f'{int(safety_buffer * 100)}% Buffer'
+            except ValueError:
+                safety_buffer = 0.20
+                consistency_label = '20% Buffer'
+
+        # Forecast demand for the selected horizon
+        forecasted_demand = avg_daily_sales * forecast_days * (1 + safety_buffer)
 
         # Get current stock for this product at the user's assigned stores
-        # Use code (SKU) to match instead of cin7_product_id since that's more reliable
         stock_query = Stock.objects.filter(code=sku)
 
         if not is_admin and has_assigned_stores:
@@ -6520,7 +6563,6 @@ def store_daily_pick_list(request):
             accessible_categories = user.get_accessible_categories()
             if accessible_categories:
                 # Filter stock by branch names that match the store categories
-                # Note: Stock.branch_name should match the category_name from stores
                 stock_query = stock_query.filter(branch_name__in=accessible_categories)
 
         stock_record = stock_query.first()
@@ -6536,55 +6578,55 @@ def store_daily_pick_list(request):
             store_categories = user.get_accessible_categories() if has_assigned_stores else []
             branch_name = store_categories[0] if store_categories else 'Unknown'
 
-        # Calculate pick quantity
-        # Strategy: Maintain 2-3 days of stock based on yesterday's sales
-        # Pick Quantity = (Yesterday's Sales * 2.5) - Current Stock
-        daily_demand = qty_sold
-        target_stock = daily_demand * 2.5  # 2.5 days buffer
+        # Calculate stock gap
         available_stock = current_stock + incoming_stock
+        stock_gap = available_stock - forecasted_demand
 
-        pick_qty = max(0, target_stock - available_stock)
-
-        # Round up to nearest whole number
-        pick_qty = int(pick_qty) if pick_qty > 0 else 0
-
-        # Determine priority based on stock situation
-        # Critical: Less than 1 day of stock
-        # High: 1-2 days of stock
-        # Medium: 2-3 days of stock
-        # Low: More than 3 days of stock
-
-        if daily_demand > 0:
-            days_of_stock = current_stock / daily_demand
+        # If stock gap is negative, we need to pick
+        if stock_gap < 0:
+            pick_qty = abs(stock_gap)
+            pick_qty = int(pick_qty) if pick_qty > 0 else 0
         else:
-            days_of_stock = 999
+            pick_qty = 0
 
-        if days_of_stock < 1:
+        # Calculate days until stockout (urgency metric)
+        if avg_daily_sales > 0:
+            days_until_stockout = current_stock / avg_daily_sales
+        else:
+            days_until_stockout = 999
+
+        # Determine urgency/priority
+        if days_until_stockout < 2:
             priority = 'CRITICAL'
             priority_score = 1
-        elif days_of_stock < 2:
+        elif days_until_stockout < 4:
             priority = 'HIGH'
             priority_score = 2
-        elif days_of_stock < 3:
+        elif days_until_stockout < 7:
             priority = 'MEDIUM'
             priority_score = 3
         else:
             priority = 'LOW'
             priority_score = 4
 
-        # Only include items that need picking OR have very low stock
-        if pick_qty > 0 or days_of_stock < 1:
+        # Only include items that need picking (or critical items with very low stock)
+        if pick_qty >= min_pick_qty or days_until_stockout < 2:
             pick_list.append({
                 'sku': sku,
                 'product_name': product_name,
                 'category': category,
-                'qty_sold': int(qty_sold),
+                'total_qty_sold_7days': int(total_qty_sold),
+                'avg_daily_sales': round(avg_daily_sales, 2),
+                'days_with_sales': days_with_sales,
+                'sales_consistency': consistency_label,
                 'order_count': order_count,
                 'current_stock': int(current_stock),
                 'incoming_stock': int(incoming_stock),
+                'forecasted_demand': round(forecasted_demand, 1),
+                'forecast_days': forecast_days,
+                'safety_buffer_pct': int(safety_buffer * 100),
                 'pick_qty': pick_qty,
-                'target_stock': int(target_stock),
-                'days_of_stock': round(days_of_stock, 1),
+                'days_until_stockout': round(days_until_stockout, 1),
                 'priority': priority,
                 'priority_score': priority_score,
                 'branch_name': branch_name,
@@ -6594,8 +6636,8 @@ def store_daily_pick_list(request):
             total_pick_quantity += pick_qty
             categories.add(category)
 
-    # Sort by priority (critical first), then by quantity sold (high to low)
-    pick_list.sort(key=lambda x: (x['priority_score'], -x['qty_sold']))
+    # Sort by priority (most urgent first), then by average daily sales (high demand first)
+    pick_list.sort(key=lambda x: (x['priority_score'], -x['avg_daily_sales']))
 
     # Group by priority for display
     critical_items = [item for item in pick_list if item['priority'] == 'CRITICAL']
@@ -6621,6 +6663,8 @@ def store_daily_pick_list(request):
 
     context = {
         'target_date': target_date,
+        'start_date': start_date,
+        'end_date': end_date,
         'pick_list': pick_list,
         'critical_items': critical_items,
         'high_items': high_items,
@@ -6633,7 +6677,9 @@ def store_daily_pick_list(request):
         'is_admin': is_admin,
         'all_categories': all_categories,
         'selected_category': category_filter,
-        'min_quantity': min_quantity,
+        'min_pick_qty': min_pick_qty,
+        'forecast_days': forecast_days,
+        'safety_buffer_option': safety_buffer_option,
         'today': date.today(),
     }
 

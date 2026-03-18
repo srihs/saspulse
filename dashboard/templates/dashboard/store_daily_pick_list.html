@@ -45,9 +45,9 @@
         <div class="col-12">
             <!-- Header -->
             <div class="mb-4">
-                <h2 class="mb-2">Daily Pick List</h2>
+                <h2 class="mb-2">Daily Pick List (Weekly Forecast)</h2>
                 <h5 class="text-body-tertiary fw-semibold">
-                    Warehouse replenishment based on {{ target_date|date:"l, F d, Y" }} sales
+                    Based on 7-day sales analysis ({{ start_date|date:"M d" }} - {{ end_date|date:"M d, Y" }})
                 </h5>
             </div>
 
@@ -73,18 +73,36 @@
                     <form method="GET" id="filterForm">
                         <div class="row g-3">
                             <div class="col-md-3">
-                                <label class="form-label">Sales Date</label>
+                                <label class="form-label">End Date (Analysis)</label>
                                 <input type="date"
                                        name="date"
                                        class="form-control"
                                        value="{{ target_date|date:'Y-m-d' }}"
                                        max="{{ today|date:'Y-m-d' }}">
-                                <small class="text-muted">Pick list based on this date's sales</small>
+                                <small class="text-muted">7-day analysis ending on this date</small>
                             </div>
-                            <div class="col-md-3">
-                                <label class="form-label">Category Filter</label>
+                            <div class="col-md-2">
+                                <label class="form-label">Forecast Horizon</label>
+                                <select name="forecast_days" class="form-select">
+                                    <option value="3" {% if forecast_days == 3 %}selected{% endif %}>Next 3 Days</option>
+                                    <option value="7" {% if forecast_days == 7 %}selected{% endif %}>Next 7 Days</option>
+                                </select>
+                                <small class="text-muted">Demand forecast period</small>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">Safety Buffer</label>
+                                <select name="safety_buffer" class="form-select">
+                                    <option value="auto" {% if safety_buffer_option == 'auto' %}selected{% endif %}>Auto (10-30%)</option>
+                                    <option value="10" {% if safety_buffer_option == '10' %}selected{% endif %}>10% Fixed</option>
+                                    <option value="20" {% if safety_buffer_option == '20' %}selected{% endif %}>20% Fixed</option>
+                                    <option value="30" {% if safety_buffer_option == '30' %}selected{% endif %}>30% Fixed</option>
+                                </select>
+                                <small class="text-muted">Forecast buffer</small>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">Category</label>
                                 <select name="category" class="form-select">
-                                    <option value="">All Categories</option>
+                                    <option value="">All</option>
                                     {% for cat in all_categories %}
                                         <option value="{{ cat }}" {% if cat == selected_category %}selected{% endif %}>
                                             {{ cat }}
@@ -92,23 +110,22 @@
                                     {% endfor %}
                                 </select>
                             </div>
-                            <div class="col-md-3">
-                                <label class="form-label">Min. Qty Sold</label>
+                            <div class="col-md-1">
+                                <label class="form-label">Min Pick</label>
                                 <input type="number"
                                        name="min_qty"
                                        class="form-control"
-                                       value="{{ min_quantity }}"
+                                       value="{{ min_pick_qty }}"
                                        min="1">
-                                <small class="text-muted">Show items with at least this quantity sold</small>
                             </div>
-                            <div class="col-md-3">
+                            <div class="col-md-2">
                                 <label class="form-label">&nbsp;</label>
                                 <div class="d-grid gap-2">
                                     <button type="submit" class="btn btn-primary">
-                                        <i class="fas fa-sync-alt me-2"></i>Refresh List
+                                        <i class="fas fa-sync-alt me-2"></i>Refresh
                                     </button>
-                                    <button type="button" class="btn btn-outline-secondary" onclick="window.print()">
-                                        <i class="fas fa-print me-2"></i>Print Pick List
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="window.print()">
+                                        <i class="fas fa-print me-2"></i>Print
                                     </button>
                                 </div>
                             </div>
@@ -162,7 +179,7 @@
                     <h5 class="mb-0">
                         <i class="fas fa-exclamation-triangle me-2"></i>
                         CRITICAL Priority ({{ critical_items|length }} items)
-                        <small class="ms-3">Less than 1 day of stock remaining</small>
+                        <small class="ms-3">Less than 2 days until stockout</small>
                     </h5>
                 </div>
                 <div class="card-body p-0">
@@ -176,11 +193,12 @@
                                     <th>SKU</th>
                                     <th>Product</th>
                                     <th>Category</th>
-                                    <th class="text-center">Qty Sold</th>
-                                    <th class="text-center">Current Stock</th>
-                                    <th class="text-center">Days Left</th>
+                                    <th class="text-center" title="Average daily sales over past 7 days">Avg Daily</th>
+                                    <th class="text-center" title="Sales consistency">Pattern</th>
+                                    <th class="text-center">Stock</th>
+                                    <th class="text-center" title="Forecasted demand for selected horizon">Forecast</th>
+                                    <th class="text-center" title="Days until stockout at current rate">Days Left</th>
                                     <th class="text-center">Pick Qty</th>
-                                    <th class="text-center">Target Stock</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -192,11 +210,16 @@
                                     <td><code>{{ item.sku }}</code></td>
                                     <td><strong>{{ item.product_name }}</strong></td>
                                     <td><small class="text-muted">{{ item.category }}</small></td>
-                                    <td class="text-center"><span class="badge bg-primary">{{ item.qty_sold }}</span></td>
+                                    <td class="text-center"><span class="badge bg-primary">{{ item.avg_daily_sales }}</span></td>
+                                    <td class="text-center">
+                                        <small class="{% if item.sales_consistency == 'Stable' %}text-success{% elif item.sales_consistency == 'Moderate' %}text-warning{% else %}text-danger{% endif %}">
+                                            {{ item.sales_consistency }}
+                                        </small>
+                                    </td>
                                     <td class="text-center">{{ item.current_stock }}</td>
-                                    <td class="text-center days-critical">{{ item.days_of_stock }}</td>
+                                    <td class="text-center text-muted">{{ item.forecasted_demand }}</td>
+                                    <td class="text-center days-critical">{{ item.days_until_stockout }}</td>
                                     <td class="text-center"><strong class="text-danger">{{ item.pick_qty }}</strong></td>
-                                    <td class="text-center text-muted">{{ item.target_stock }}</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -213,7 +236,7 @@
                     <h5 class="mb-0">
                         <i class="fas fa-exclamation-circle me-2"></i>
                         HIGH Priority ({{ high_items|length }} items)
-                        <small class="ms-3">1-2 days of stock remaining</small>
+                        <small class="ms-3">2-4 days until stockout</small>
                     </h5>
                 </div>
                 <div class="card-body p-0">
@@ -227,11 +250,12 @@
                                     <th>SKU</th>
                                     <th>Product</th>
                                     <th>Category</th>
-                                    <th class="text-center">Qty Sold</th>
-                                    <th class="text-center">Current Stock</th>
-                                    <th class="text-center">Days Left</th>
+                                    <th class="text-center" title="Average daily sales over past 7 days">Avg Daily</th>
+                                    <th class="text-center" title="Sales consistency">Pattern</th>
+                                    <th class="text-center">Stock</th>
+                                    <th class="text-center" title="Forecasted demand for selected horizon">Forecast</th>
+                                    <th class="text-center" title="Days until stockout at current rate">Days Left</th>
                                     <th class="text-center">Pick Qty</th>
-                                    <th class="text-center">Target Stock</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -243,11 +267,16 @@
                                     <td><code>{{ item.sku }}</code></td>
                                     <td>{{ item.product_name }}</td>
                                     <td><small class="text-muted">{{ item.category }}</small></td>
-                                    <td class="text-center"><span class="badge bg-primary">{{ item.qty_sold }}</span></td>
+                                    <td class="text-center"><span class="badge bg-primary">{{ item.avg_daily_sales }}</span></td>
+                                    <td class="text-center">
+                                        <small class="{% if item.sales_consistency == 'Stable' %}text-success{% elif item.sales_consistency == 'Moderate' %}text-warning{% else %}text-danger{% endif %}">
+                                            {{ item.sales_consistency }}
+                                        </small>
+                                    </td>
                                     <td class="text-center">{{ item.current_stock }}</td>
-                                    <td class="text-center days-high">{{ item.days_of_stock }}</td>
+                                    <td class="text-center text-muted">{{ item.forecasted_demand }}</td>
+                                    <td class="text-center days-high">{{ item.days_until_stockout }}</td>
                                     <td class="text-center"><strong class="text-warning">{{ item.pick_qty }}</strong></td>
-                                    <td class="text-center text-muted">{{ item.target_stock }}</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -264,7 +293,7 @@
                     <h5 class="mb-0">
                         <i class="fas fa-info-circle me-2"></i>
                         MEDIUM Priority ({{ medium_items|length }} items)
-                        <small class="ms-3">2-3 days of stock remaining</small>
+                        <small class="ms-3">4-7 days until stockout</small>
                     </h5>
                 </div>
                 <div class="card-body p-0">
@@ -278,11 +307,12 @@
                                     <th>SKU</th>
                                     <th>Product</th>
                                     <th>Category</th>
-                                    <th class="text-center">Qty Sold</th>
-                                    <th class="text-center">Current Stock</th>
-                                    <th class="text-center">Days Left</th>
+                                    <th class="text-center" title="Average daily sales over past 7 days">Avg Daily</th>
+                                    <th class="text-center" title="Sales consistency">Pattern</th>
+                                    <th class="text-center">Stock</th>
+                                    <th class="text-center" title="Forecasted demand for selected horizon">Forecast</th>
+                                    <th class="text-center" title="Days until stockout at current rate">Days Left</th>
                                     <th class="text-center">Pick Qty</th>
-                                    <th class="text-center">Target Stock</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -294,11 +324,16 @@
                                     <td><code>{{ item.sku }}</code></td>
                                     <td>{{ item.product_name }}</td>
                                     <td><small class="text-muted">{{ item.category }}</small></td>
-                                    <td class="text-center"><span class="badge bg-primary">{{ item.qty_sold }}</span></td>
+                                    <td class="text-center"><span class="badge bg-primary">{{ item.avg_daily_sales }}</span></td>
+                                    <td class="text-center">
+                                        <small class="{% if item.sales_consistency == 'Stable' %}text-success{% elif item.sales_consistency == 'Moderate' %}text-warning{% else %}text-danger{% endif %}">
+                                            {{ item.sales_consistency }}
+                                        </small>
+                                    </td>
                                     <td class="text-center">{{ item.current_stock }}</td>
-                                    <td class="text-center days-medium">{{ item.days_of_stock }}</td>
+                                    <td class="text-center text-muted">{{ item.forecasted_demand }}</td>
+                                    <td class="text-center days-medium">{{ item.days_until_stockout }}</td>
                                     <td class="text-center"><strong class="text-info">{{ item.pick_qty }}</strong></td>
-                                    <td class="text-center text-muted">{{ item.target_stock }}</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -315,7 +350,7 @@
                     <h5 class="mb-0">
                         <i class="fas fa-check-circle me-2"></i>
                         LOW Priority ({{ low_items|length }} items)
-                        <small class="ms-3">More than 3 days of stock</small>
+                        <small class="ms-3">More than 7 days until stockout</small>
                     </h5>
                 </div>
                 <div class="card-body p-0">
@@ -329,11 +364,12 @@
                                     <th>SKU</th>
                                     <th>Product</th>
                                     <th>Category</th>
-                                    <th class="text-center">Qty Sold</th>
-                                    <th class="text-center">Current Stock</th>
-                                    <th class="text-center">Days Left</th>
+                                    <th class="text-center" title="Average daily sales over past 7 days">Avg Daily</th>
+                                    <th class="text-center" title="Sales consistency">Pattern</th>
+                                    <th class="text-center">Stock</th>
+                                    <th class="text-center" title="Forecasted demand for selected horizon">Forecast</th>
+                                    <th class="text-center" title="Days until stockout at current rate">Days Left</th>
                                     <th class="text-center">Pick Qty</th>
-                                    <th class="text-center">Target Stock</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -345,11 +381,16 @@
                                     <td><code>{{ item.sku }}</code></td>
                                     <td>{{ item.product_name }}</td>
                                     <td><small class="text-muted">{{ item.category }}</small></td>
-                                    <td class="text-center"><span class="badge bg-primary">{{ item.qty_sold }}</span></td>
+                                    <td class="text-center"><span class="badge bg-primary">{{ item.avg_daily_sales }}</span></td>
+                                    <td class="text-center">
+                                        <small class="{% if item.sales_consistency == 'Stable' %}text-success{% elif item.sales_consistency == 'Moderate' %}text-warning{% else %}text-danger{% endif %}">
+                                            {{ item.sales_consistency }}
+                                        </small>
+                                    </td>
                                     <td class="text-center">{{ item.current_stock }}</td>
-                                    <td class="text-center days-low">{{ item.days_of_stock }}</td>
+                                    <td class="text-center text-muted">{{ item.forecasted_demand }}</td>
+                                    <td class="text-center days-low">{{ item.days_until_stockout }}</td>
                                     <td class="text-center"><strong class="text-success">{{ item.pick_qty }}</strong></td>
-                                    <td class="text-center text-muted">{{ item.target_stock }}</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -364,26 +405,35 @@
                 <div class="card-header bg-light">
                     <h6 class="mb-0">
                         <i class="fas fa-question-circle me-2"></i>
-                        How the Pick List Works
+                        How the Forecasting Works
                     </h6>
                 </div>
                 <div class="card-body">
                     <div class="row">
-                        <div class="col-md-6">
-                            <h6>Calculation Logic:</h6>
+                        <div class="col-md-4">
+                            <h6>Forecasting Logic:</h6>
                             <ul class="mb-0">
-                                <li><strong>Target Stock:</strong> Yesterday's Sales × 2.5 days</li>
-                                <li><strong>Pick Quantity:</strong> Target Stock - (Current Stock + Incoming)</li>
-                                <li><strong>Days of Stock:</strong> Current Stock ÷ Yesterday's Sales</li>
+                                <li><strong>Analysis Period:</strong> Past 7 days of sales</li>
+                                <li><strong>Avg Daily Sales:</strong> Total sold ÷ 7 days</li>
+                                <li><strong>Forecast:</strong> Avg Daily × Days × (1 + Safety Buffer)</li>
+                                <li><strong>Pick Qty:</strong> Forecast - Current Stock</li>
                             </ul>
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-4">
+                            <h6>Safety Buffers (Auto Mode):</h6>
+                            <ul class="mb-0">
+                                <li><strong class="text-success">Stable (10%):</strong> Sold 5-7 days/week</li>
+                                <li><strong class="text-warning">Moderate (20%):</strong> Sold 3-4 days/week</li>
+                                <li><strong class="text-danger">Volatile (30%):</strong> Sold 1-2 days/week</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-4">
                             <h6>Priority Levels:</h6>
                             <ul class="mb-0">
-                                <li><strong class="text-danger">Critical:</strong> Less than 1 day of stock</li>
-                                <li><strong class="text-warning">High:</strong> 1-2 days of stock</li>
-                                <li><strong class="text-info">Medium:</strong> 2-3 days of stock</li>
-                                <li><strong class="text-success">Low:</strong> More than 3 days of stock</li>
+                                <li><strong class="text-danger">Critical:</strong> Less than 2 days until stockout</li>
+                                <li><strong class="text-warning">High:</strong> 2-4 days until stockout</li>
+                                <li><strong class="text-info">Medium:</strong> 4-7 days until stockout</li>
+                                <li><strong class="text-success">Low:</strong> More than 7 days until stockout</li>
                             </ul>
                         </div>
                     </div>
@@ -393,7 +443,7 @@
             {% else %}
             <div class="alert alert-info">
                 <i class="fas fa-info-circle me-2"></i>
-                No items to pick for {{ target_date|date:"F d, Y" }}. Either no sales were made, or all products have sufficient stock.
+                No items need picking based on 7-day sales analysis ({{ start_date|date:"M d" }} - {{ end_date|date:"M d, Y" }}). All products have sufficient stock for the selected forecast period.
             </div>
             {% endif %}
 
