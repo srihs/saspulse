@@ -58,7 +58,7 @@ def calculate_summary_metrics(start_date=None, end_date=None):
               AND p.sub_category IS NOT NULL
               AND p.sub_category <> ''
               AND p.sub_category NOT LIKE %s
-        """, [start, end, '% Shop', '%Shop%'])
+        """, [start, end, '% Shop', '%%Shop%'])
 
         result = cursor.fetchone()
         total_bts_sales = float(result[0] or 0)
@@ -75,7 +75,7 @@ def calculate_summary_metrics(start_date=None, end_date=None):
               AND p.sub_category IS NOT NULL
               AND p.sub_category <> ''
               AND p.sub_category NOT LIKE %s
-        """, ['% Shop', '%Shop%'])
+        """, ['% Shop', '%%Shop%'])
 
         result = cursor.fetchone()
         total_stock_value = float(result[0] or 0)
@@ -122,7 +122,7 @@ def calculate_summary_metrics(start_date=None, end_date=None):
             LEFT JOIN bts_sales bs ON ss.school = bs.school
             WHERE COALESCE(bs.sales_total, 0) > 0
               AND (ss.stock_value / bs.sales_total) > %s
-        """, ['% Shop', '%Shop%', '% Shop', start, end, '%Shop%', RISK_THRESHOLD])
+        """, ['% Shop', '%%Shop%', '% Shop', start, end, '%%Shop%', RISK_THRESHOLD])
 
         result = cursor.fetchone()
         customers_at_risk = result[0] if result else 0
@@ -170,7 +170,7 @@ def calculate_customer_rankings(start_date=None, end_date=None):
                   AND p.category_name NOT IN ('Shop', 'Store')
                   AND p.sub_category IS NOT NULL
                   AND p.sub_category <> ''
-                  AND p.sub_category NOT LIKE '%Shop%%'
+                  AND p.sub_category NOT LIKE '%%Shop%%'
                 GROUP BY p.sub_category
             ),
             bts_sales AS (
@@ -186,7 +186,7 @@ def calculate_customer_rankings(start_date=None, end_date=None):
                   AND so.invoice_date <= %s
                   AND p.sub_category IS NOT NULL
                   AND p.sub_category <> ''
-                  AND p.sub_category NOT LIKE '%Shop%%'
+                  AND p.sub_category NOT LIKE '%%Shop%%'
                 GROUP BY p.sub_category
             )
             SELECT
@@ -371,7 +371,7 @@ def calculate_product_rankings(start_date=None, end_date=None):
               AND bs.sales_total > 0
 
             ORDER BY ratio DESC, school ASC
-        """, ['% Shop', '%Shop%', '% Shop', start, end, '%Shop%'])
+        """, ['% Shop', '%%Shop%', '% Shop', start, end, '%%Shop%'])
 
         rows = cursor.fetchall()
 
@@ -457,7 +457,7 @@ def calculate_product_rankings(start_date=None, end_date=None):
                 WHERE p.category_name LIKE %s
                   AND p.sub_category = %s
                   AND p.sub_category NOT LIKE %s
-            """, ['% Shop', top_critical_school, '%Shop%'])
+            """, ['% Shop', top_critical_school, '%%Shop%'])
 
             result = cursor.fetchone()
             if result and result[0]:
@@ -575,7 +575,7 @@ def calculate_heatmap_data(start_date=None, end_date=None, top_n_products=10):
             HAVING total_stock_value > 0
             ORDER BY total_stock_value DESC
             LIMIT %s
-        """, ['% Shop', '%Shop%', top_n_products])
+        """, ['% Shop', '%%Shop%', top_n_products])
 
         top_products = cursor.fetchall()
 
@@ -596,7 +596,7 @@ def calculate_heatmap_data(start_date=None, end_date=None, top_n_products=10):
               AND p.sub_category <> ''
               AND p.sub_category NOT LIKE %s
             ORDER BY school
-        """, ['% Shop', '%Shop%'])
+        """, ['% Shop', '%%Shop%'])
 
         schools = [row[0] for row in cursor.fetchall()]
 
@@ -638,7 +638,7 @@ def calculate_heatmap_data(start_date=None, end_date=None, top_n_products=10):
               AND p.sub_category <> ''
               AND p.sub_category NOT LIKE %s
             GROUP BY p.sub_category, p.cin7_id
-        """, ['% Shop', '%Shop%', '% Shop', start, end, '%Shop%'])
+        """, ['% Shop', '%%Shop%', '% Shop', start, end, '%%Shop%'])
 
         results = cursor.fetchall()
 
@@ -857,13 +857,13 @@ def calculate_top_performing_schools(start_date=None, end_date=None, limit=10):
             ORDER BY current_year_sales DESC
             LIMIT %s
         """, [
-            '% Shop', '%Shop%',  # all_schools
-            '% Shop', current_year_start, current_year_end, '%Shop%',  # current_year_sales
-            '% Shop', last_year_start, last_year_end, '%Shop%',  # last_year_sales
-            '% Shop', year_before_start, year_before_end, '%Shop%',  # year_before_sales
-            '% Shop', current_year_start, current_year_end, '%Shop%',  # top_product_current_year
-            '% Shop', last_year_start, last_year_end, '%Shop%',  # top_product_last_year
-            '% Shop', year_before_start, year_before_end, '%Shop%',  # top_product_year_before
+            '% Shop', '%%Shop%',  # all_schools
+            '% Shop', current_year_start, current_year_end, '%%Shop%',  # current_year_sales
+            '% Shop', last_year_start, last_year_end, '%%Shop%',  # last_year_sales
+            '% Shop', year_before_start, year_before_end, '%%Shop%',  # year_before_sales
+            '% Shop', current_year_start, current_year_end, '%%Shop%',  # top_product_current_year
+            '% Shop', last_year_start, last_year_end, '%%Shop%',  # top_product_last_year
+            '% Shop', year_before_start, year_before_end, '%%Shop%',  # top_product_year_before
             limit
         ])
 
@@ -937,7 +937,7 @@ def calculate_slow_moving_schools(start_date=None, end_date=None, limit=10):
             LEFT JOIN school_sales ss ON a.school = ss.school
             ORDER BY COALESCE(ss.total_sales, 0) ASC, ss.last_sale_date ASC
             LIMIT %s
-        """, ['% Shop', '%Shop%', '% Shop', start, end, '%Shop%', limit])
+        """, ['% Shop', '%%Shop%', '% Shop', start, end, '%%Shop%', limit])
 
         rows = cursor.fetchall()
 
@@ -1088,7 +1088,7 @@ def calculate_bts_historical_data():
               AND p.sub_category NOT LIKE %s
             GROUP BY DATE_FORMAT(so.invoice_date, '%%Y-%%m'), YEAR(so.invoice_date), MONTH(so.invoice_date)
             ORDER BY so.invoice_date
-        """, ['% Shop', '%Shop%'])
+        """, ['% Shop', '%%Shop%'])
 
         rows = cursor.fetchall()
 
@@ -1130,7 +1130,7 @@ def calculate_school_forecasts():
               AND MONTH(so.invoice_date) IN (1, 2)
             GROUP BY p.sub_category, YEAR(so.invoice_date), MONTH(so.invoice_date)
             ORDER BY p.sub_category, YEAR(so.invoice_date), MONTH(so.invoice_date)
-        """, ['% Shop', '%Shop%'])
+        """, ['% Shop', '%%Shop%'])
 
         rows = cursor.fetchall()
 
@@ -1177,7 +1177,7 @@ def calculate_customer_lifetime_value():
               AND YEAR(so.invoice_date) >= 2022
             GROUP BY p.sub_category, YEAR(so.invoice_date), MONTH(so.invoice_date)
             ORDER BY p.sub_category, year DESC, month_num DESC
-        """, ['% Shop', '%Shop%'])
+        """, ['% Shop', '%%Shop%'])
 
         rows = cursor.fetchall()
 
@@ -1312,7 +1312,7 @@ def calculate_product_forecasts():
               AND MONTH(so.invoice_date) IN (1, 2)
             GROUP BY p.name, YEAR(so.invoice_date), MONTH(so.invoice_date)
             ORDER BY total_sales DESC
-        """, ['% Shop', '%Shop%'])
+        """, ['% Shop', '%%Shop%'])
 
         rows = cursor.fetchall()
 
@@ -1533,9 +1533,9 @@ def forecasting_filter_options(request):
         cursor.execute("""
             SELECT DISTINCT sub_category
             FROM cin7_sync_product
-            WHERE (category_name LIKE '%Shop' OR category_name LIKE '%Store')
+            WHERE (category_name LIKE '%%Shop' OR category_name LIKE '%%Store')
               AND category_name NOT IN ('Shop', 'Store')
-              AND category_name NOT LIKE 'Wholesale%'
+              AND category_name NOT LIKE 'Wholesale%%'
               AND sub_category IS NOT NULL
               AND sub_category != ''
             ORDER BY sub_category
@@ -1547,9 +1547,9 @@ def forecasting_filter_options(request):
         cursor.execute("""
             SELECT DISTINCT p.name, p.cin7_id
             FROM cin7_sync_product p
-            WHERE (p.category_name LIKE '%Shop' OR p.category_name LIKE '%Store')
+            WHERE (p.category_name LIKE '%%Shop' OR p.category_name LIKE '%%Store')
               AND p.category_name NOT IN ('Shop', 'Store')
-              AND p.category_name NOT LIKE 'Wholesale%'
+              AND p.category_name NOT LIKE 'Wholesale%%'
               AND p.name IS NOT NULL
             ORDER BY p.name
         """)
@@ -1698,7 +1698,7 @@ def sales_forecasting(request):
         """
 
         # Base params for shop/store filter (includes both Shop and Store suffixes)
-        params = ['%Shop', '%Store']
+        params = ['%%Shop', '%%Store']
 
         # DATA SCOPE: Filter by user's assigned schools (Sales Team)
         if user_school_subcategories:
@@ -2059,11 +2059,11 @@ def sales_forecasting(request):
             params.append(shop_filter)
         else:
             # Show all shop/store products
-            sql += " AND (p.category_name LIKE '%Shop' OR p.category_name LIKE '%Store')"
+            sql += " AND (p.category_name LIKE '%%Shop' OR p.category_name LIKE '%%Store')"
             sql += " AND p.category_name NOT IN ('Shop', 'Store')"
 
         # Exclude Wholesale categories
-        sql += " AND p.category_name NOT LIKE 'Wholesale%'"
+        sql += " AND p.category_name NOT LIKE 'Wholesale%%'"
 
         # Filter out products without school assignment
         sql += " AND p.sub_category IS NOT NULL AND p.sub_category != ''"
@@ -2140,9 +2140,9 @@ def sales_forecasting(request):
                 LEFT JOIN cin7_sync_productoption po ON po.code = sf.entity_name
                 LEFT JOIN cin7_sync_product p ON p.id = po.product_id
                 WHERE sf.aggregation_level = 'product'
-                  AND (p.category_name LIKE '%Shop' OR p.category_name LIKE '%Store')
+                  AND (p.category_name LIKE '%%Shop' OR p.category_name LIKE '%%Store')
                   AND p.category_name NOT IN ('Shop', 'Store')
-                  AND p.category_name NOT LIKE 'Wholesale%'
+                  AND p.category_name NOT LIKE 'Wholesale%%'
                   AND p.sub_category IS NOT NULL
                   AND p.sub_category != ''
             """
@@ -3339,7 +3339,7 @@ def forecast_product_breakdown(request, school_name):
                     COALESCE(po.option1, SUBSTRING_INDEX(sf.entity_name, '-', -1)) as size
                 FROM dashboard_salesforecastbase sf
                 LEFT JOIN cin7_sync_productoption po ON po.code = sf.entity_name
-                LEFT JOIN cin7_sync_product p ON p.id = po.product_id AND p.sub_category = %s AND (p.category_name LIKE '%Shop' OR p.category_name LIKE '%Store') AND p.category_name NOT IN ('Shop', 'Store')
+                LEFT JOIN cin7_sync_product p ON p.id = po.product_id AND p.sub_category = %s AND (p.category_name LIKE '%%Shop' OR p.category_name LIKE '%%Store') AND p.category_name NOT IN ('Shop', 'Store')
                 LEFT JOIN cin7_sync_stock st ON st.code = sf.entity_name AND st.product_name IS NOT NULL AND st.product_name != ''
                 WHERE sf.aggregation_level = 'product'
                 ORDER BY product_name, size
@@ -3600,9 +3600,9 @@ def store_manager_replenishment(request):
               FROM dashboard_salesforecastbase
               WHERE aggregation_level = 'product'
           )
-          AND (p.category_name LIKE '%Shop' OR p.category_name LIKE '%Store')
+          AND (p.category_name LIKE '%%Shop' OR p.category_name LIKE '%%Store')
           AND p.category_name NOT IN ('Shop', 'Store')
-          AND p.category_name NOT LIKE 'Wholesale%'
+          AND p.category_name NOT LIKE 'Wholesale%%'
           AND p.sub_category IS NOT NULL
           AND p.sub_category != ''
           AND sfb.monthly_demand_30 IS NOT NULL
@@ -4886,7 +4886,7 @@ def bts_sellthrough_report(request):
                 AND bs.style_code = sa.style_code
                 AND bs.sku = sa.sku
             ORDER BY sellthrough_ratio DESC, bs.customer, bs.product_name
-        """, [bts_start, bts_end, '% Shop', '%Shop%', '% Shop', '%Shop%'])
+        """, [bts_start, bts_end, '% Shop', '%%Shop%', '% Shop', '%%Shop%'])
 
         rows = cursor.fetchall()
 
@@ -5304,7 +5304,7 @@ def inventory_alignment_matrix(request):
             bts_start, bts_end,  # BTS period
             two_years_ago, one_year_ago,  # previous year
             one_year_ago,  # current year start
-            '% Shop', '%Shop%'
+            '% Shop', '%%Shop%'
         ]
 
         # Add filters if provided
@@ -5394,7 +5394,7 @@ def inventory_alignment_matrix(request):
               AND p.sub_category <> ''
               AND p.sub_category NOT LIKE %s
             ORDER BY p.sub_category
-        """, ['% Shop', '%Shop%'])
+        """, ['% Shop', '%%Shop%'])
         customers = [row[0] for row in cursor.fetchall()]
 
         cursor.execute("""
@@ -5506,7 +5506,7 @@ def stock_turn_rate_report(request):
             LEFT JOIN avg_inventory ai ON ast.product_id = ai.product_id AND ast.sku = ai.sku
             WHERE ast.total_sales_qty > 0 OR COALESCE(ai.avg_stock, 0) > 0
             ORDER BY turn_rate DESC
-        """, [date_from, date_to, '% Shop', '%Shop%', '% Shop', '%Shop%'])
+        """, [date_from, date_to, '% Shop', '%%Shop%', '% Shop', '%%Shop%'])
 
         rows = cursor.fetchall()
 
@@ -5658,7 +5658,7 @@ def days_of_inventory_report(request):
             LEFT JOIN current_stock cs ON sd.product_id = cs.product_id AND sd.sku = cs.sku
             WHERE COALESCE(cs.current_stock, 0) > 0
             ORDER BY days_of_inventory ASC
-        """, [days_in_period, date_from, date_to, '% Shop', '%Shop%', '% Shop', '%Shop%'])
+        """, [days_in_period, date_from, date_to, '% Shop', '%%Shop%', '% Shop', '%%Shop%'])
 
         rows = cursor.fetchall()
 
@@ -5798,7 +5798,7 @@ def dead_stock_report(request):
             WHERE COALESCE(ls.last_sale_date, '1900-01-01') < %s
                OR ls.last_sale_date IS NULL
             ORDER BY cs.carrying_cost DESC
-        """, ['% Shop', '%Shop%', '% Shop', '%Shop%', cutoff_date])
+        """, ['% Shop', '%%Shop%', '% Shop', '%%Shop%', cutoff_date])
 
         rows = cursor.fetchall()
 
@@ -5935,7 +5935,7 @@ def top_best_sellers_report(request):
             LEFT JOIN avg_inventory ai ON pi.product_id = ai.product_id AND sd.sku = ai.sku
             ORDER BY sd.total_revenue DESC
             LIMIT 20
-        """, [date_from, date_to, '% Shop', '%Shop%', '% Shop', '%Shop%', '% Shop', '%Shop%'])
+        """, [date_from, date_to, '% Shop', '%%Shop%', '% Shop', '%%Shop%', '% Shop', '%%Shop%'])
 
         rows = cursor.fetchall()
 
@@ -6079,7 +6079,7 @@ def abc_analysis_report(request):
                 END as abc_category
             FROM ranked_products
             ORDER BY rank_num
-        """, [date_from, date_to, '% Shop', '%Shop%'])
+        """, [date_from, date_to, '% Shop', '%%Shop%'])
 
         rows = cursor.fetchall()
 
