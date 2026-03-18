@@ -121,6 +121,9 @@ class SalesForecastBase(models.Model):
     # Model configuration
     model_params = models.JSONField(default=dict)  # Model hyperparameters
 
+    # Forecast validity tracking
+    forecast_valid_until = models.DateField(null=True, blank=True, db_index=True, help_text="Date when this forecast expires (24 months from forecast_date)")
+
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -137,6 +140,35 @@ class SalesForecastBase(models.Model):
 
     def __str__(self):
         return f"{self.entity_name} - 365d Base ({self.forecast_date})"
+
+    def is_forecast_valid(self):
+        """
+        Check if forecast is still valid
+
+        Returns:
+            bool: True if forecast is still valid, False otherwise
+        """
+        from datetime import date
+
+        if not self.forecast_valid_until:
+            # If no expiry date set, consider invalid
+            return False
+
+        return date.today() <= self.forecast_valid_until
+
+    def get_monthly_forecast(self, year, month):
+        """
+        Retrieve forecast for a specific month
+
+        Args:
+            year (int): Year (e.g., 2027)
+            month (int): Month (1-12)
+
+        Returns:
+            dict: Monthly forecast data or None if not found
+        """
+        month_key = f"{year}-{month:02d}"
+        return self.monthly_breakdown.get(month_key)
 
     def get_date_range_forecast(self, start_date, end_date):
         """

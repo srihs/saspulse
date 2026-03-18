@@ -15,6 +15,7 @@ This approach works better for seasonal school uniform sales than complex ML mod
 
 import statistics
 from datetime import datetime, date, timedelta
+from dateutil.relativedelta import relativedelta
 from collections import defaultdict
 from decimal import Decimal
 
@@ -127,6 +128,9 @@ class Command(BaseCommand):
                 # Save forecast
                 forecast_id = f"simple-product-{product_code}-{date.today().isoformat()}"
 
+                # Calculate forecast_valid_until (24 months from today)
+                forecast_valid_until = date.today() + relativedelta(months=24)
+
                 SalesForecastBase.objects.update_or_create(
                     entity_name=product_code,
                     aggregation_level='product',
@@ -139,9 +143,11 @@ class Command(BaseCommand):
                         'growth_metrics': growth_metrics,
                         'training_data_start': date.today() - timedelta(days=365 * years),
                         'training_data_end': date.today(),
+                        'forecast_valid_until': forecast_valid_until,  # NEW: 24-month validity
                         'model_params': {
-                            'method': 'simple_monthly_average',
+                            'method': 'simple_monthly_average_24month',  # Updated method name
                             'years_used': years,
+                            'forecast_horizon_months': 24,  # NEW: Track forecast horizon
                             'generated_at': datetime.now().isoformat()
                         }
                     }
@@ -228,6 +234,9 @@ class Command(BaseCommand):
                 # Save forecast
                 forecast_id = f"simple-school-{school}-{date.today().isoformat()}"
 
+                # Calculate forecast_valid_until (24 months from today)
+                forecast_valid_until = date.today() + relativedelta(months=24)
+
                 SalesForecastBase.objects.update_or_create(
                     entity_name=school,
                     aggregation_level='school',
@@ -240,9 +249,11 @@ class Command(BaseCommand):
                         'growth_metrics': growth_metrics,
                         'training_data_start': date.today() - timedelta(days=365 * years),
                         'training_data_end': date.today(),
+                        'forecast_valid_until': forecast_valid_until,  # NEW: 24-month validity
                         'model_params': {
-                            'method': 'simple_monthly_average',
+                            'method': 'simple_monthly_average_24month',  # Updated method name
                             'years_used': years,
+                            'forecast_horizon_months': 24,  # NEW: Track forecast horizon
                             'generated_at': datetime.now().isoformat()
                         }
                     }
@@ -359,6 +370,183 @@ class Command(BaseCommand):
 
     def calculate_monthly_breakdown(self, sales_data, years):
         """
+        Calculate forecast for each month using simple averaging
+
+        UPDATED FOR 2-YEAR ROLLING FORECAST:
+        - Generates forecasts for 24 months ahead (not just 12)
+        - Uses forecasted values as baseline when actual sales don't exist
+        - Applies seasonal patterns and growth trends
+
+        Returns:
+            {
+                '2027-01': {
+                    'quantity': 59,
+                    'avg_last_3_years': 51.7,
+                    'min': 45,
+                    'max': 58,
+                    'confidence': 'high',
+                    'historical_sales': [45, 52, 58],
+                    'baseline_source': 'actual'
+                },
+                ...
+            }
+        """
+        monthly_breakdown = {}
+        current_year = date.today().year
+        current_month = date.today().month
+
+        # Generate forecasts for 24 months ahead (current month + 24 months)
+        for month_offset in range(1, 25):  # Changed from 12 to 24 months
+            target_date = date.today() + relativedelta(months=month_offset)
+            target_year = target_date.year
+            target_month = target_date.month
+            month_key = f"{target_year}-{target_month:02d}"
+
+            # Try to get baseline data (actual or forecasted)
+            baseline_qty, baseline_source = self.get_baseline_for_month(
+                sales_data, target_year, target_month, years
+            )
+
+            if baseline_qty == 0:
+                # No historical sales in this month - likely off-season
+                monthly_breakdown[month_key] = {
+                    'quantity': 0,
+                    'avg_last_3_years': 0,
+                    'min': 0,
+                    'max': 0,
+                    'confidence': 'high',  # High confidence it's off-season
+                    'historical_sales': [],
+                    'is_peak_month': False,
+                    'baseline_source': baseline_source
+                }
+                continue
+
+            # Get historical sales for this month across all years
+            month_sales = []
+            for year in range(current_year - years, current_year):
+                quantity = sales_data.get((year, target_month), 0)
+                if quantity > 0:
+                    month_sales.append(quantity)
+
+            if not month_sales:
+                # Use baseline directly if no historical pattern
+                monthly_breakdown[month_key] = {
+                    'quantity': round(baseline_qty, 1),
+                    'avg_last_3_years': round(baseline_qty, 1),
+                    'min': round(baseline_qty, 1),
+                    'max': round(baseline_qty, 1),
+                    'confidence': 'medium',
+                    'historical_sales': [],
+                    'is_peak_month': False,
+                    'baseline_source': baseline_source
+                }
+            else:
+                # Calculate average and apply to baseline
+                avg = statistics.mean(month_sales)
+                min_val = min(month_sales)
+                max_val = max(month_sales)
+
+                # Apply growth adjustment if we have multiple years
+                if len(month_sales) > 1:
+                    growth_rate = (month_sales[-1] - month_sales[0]) / (month_sales[0] if month_sales[0] > 0 else 1)
+
+                    # For future years, compound the growth
+                    years_ahead = target_year - current_year
+                    growth_multiplier = (1 + (growth_rate / (len(month_sales) - 1))) ** years_ahead
+
+                    # Apply growth to baseline
+                    adjusted = baseline_qty * growth_multiplier
+                else:
+                    adjusted = baseline_qty
+
+                # Calculate confidence based on variance and baseline source
+                confidence = self.calculate_confidence_with_source(month_sales, baseline_source, month_offset)
+
+                monthly_breakdown[month_key] = {
+                    'quantity': round(adjusted, 1),
+                    'avg_last_3_years': round(avg, 1),
+                    'min': round(min_val, 1),
+                    'max': round(max_val, 1),
+                    'confidence': confidence,
+                    'historical_sales': [round(s, 1) for s in month_sales],
+                    'is_peak_month': False,  # Will be set by seasonal profile
+                    'baseline_source': baseline_source,
+                    'baseline_value': round(baseline_qty, 1)
+                }
+
+        return monthly_breakdown
+
+    def get_baseline_for_month(self, sales_data, target_year, target_month, years):
+        """
+        Get baseline sales for a month - uses actual if available, otherwise forecasted
+
+        Args:
+            sales_data: Historical sales data dict {(year, month): quantity}
+            target_year: Year to forecast
+            target_month: Month to forecast (1-12)
+            years: Number of historical years
+
+        Returns:
+            Tuple of (baseline_quantity, source) where source is 'actual', 'forecast', or 'historical'
+        """
+        # Try to get actual sales for this year/month
+        actual_sales = sales_data.get((target_year, target_month), 0)
+        if actual_sales > 0:
+            return actual_sales, 'actual'
+
+        # No actual sales - try previous year's forecast
+        # For now, use same month from previous year as proxy
+        # (In future, this could query the monthly_breakdown from last year's forecast)
+        previous_year_sales = sales_data.get((target_year - 1, target_month), 0)
+        if previous_year_sales > 0:
+            return previous_year_sales, 'forecast_proxy'
+
+        # No previous year - get average from all available years for this month
+        month_sales = []
+        current_year = date.today().year
+        for year in range(current_year - years, current_year):
+            quantity = sales_data.get((year, target_month), 0)
+            if quantity > 0:
+                month_sales.append(quantity)
+
+        if month_sales:
+            return statistics.mean(month_sales), 'historical'
+
+        return 0.0, 'none'
+
+    def calculate_confidence_with_source(self, values, baseline_source, months_ahead):
+        """
+        Calculate confidence level based on variance and baseline source
+
+        Args:
+            values: Historical values list
+            baseline_source: Source of baseline ('actual', 'forecast', 'historical', etc.)
+            months_ahead: Number of months into the future
+
+        Returns: 'high', 'medium', or 'low'
+        """
+        if baseline_source == 'actual':
+            base_confidence = 'high'
+        elif baseline_source == 'forecast_proxy':
+            base_confidence = 'medium'
+        else:
+            base_confidence = 'low'
+
+        # Reduce confidence for far-future forecasts
+        if months_ahead > 18:
+            if base_confidence == 'high':
+                base_confidence = 'medium'
+            elif base_confidence == 'medium':
+                base_confidence = 'low'
+        elif months_ahead > 12:
+            if base_confidence == 'high' and len(values) < 2:
+                base_confidence = 'medium'
+
+        return base_confidence
+
+    def calculate_monthly_breakdown_old(self, sales_data, years):
+        """
+        OLD VERSION - KEEPING FOR REFERENCE
         Calculate forecast for each month using simple averaging
 
         Returns:

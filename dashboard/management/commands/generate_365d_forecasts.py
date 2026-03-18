@@ -66,7 +66,7 @@ except Exception as e:
 
 
 class Command(BaseCommand):
-    help = 'Generate 365-day base sales forecasts (one forecast per entity, query any date range)'
+    help = 'Generate 730-day (2-year) base sales forecasts (one forecast per entity, query any date range)'
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -100,13 +100,22 @@ class Command(BaseCommand):
             default=None,
             help='Limit number of forecasts to generate (for testing)'
         )
+        parser.add_argument(
+            '--horizon-days',
+            type=int,
+            default=730,  # Changed from 365 to 730 (2 years)
+            help='Number of days to forecast ahead (default: 730 for 2 years)'
+        )
 
     def handle(self, *args, **options):
+        horizon_days = options['horizon_days']
+
         self.stdout.write(self.style.SUCCESS('=' * 80))
-        self.stdout.write(self.style.SUCCESS('365-DAY BASE FORECASTING ENGINE - Statistical + AI/ML Models'))
+        self.stdout.write(self.style.SUCCESS(f'{horizon_days}-DAY BASE FORECASTING ENGINE - Statistical + AI/ML Models'))
         self.stdout.write(self.style.SUCCESS('=' * 80))
-        self.stdout.write(self.style.WARNING('Strategy: Generate ONE 365-day forecast, extract any date range dynamically'))
-        self.stdout.write(self.style.WARNING('Benefits: 75% storage reduction, infinite flexibility, simplified maintenance'))
+        self.stdout.write(self.style.WARNING(f'Strategy: Generate ONE {horizon_days}-day forecast, extract any date range dynamically'))
+        self.stdout.write(self.style.WARNING('Benefits: Optimized storage, infinite flexibility, simplified maintenance'))
+        self.stdout.write(self.style.WARNING(f'Forecast Valid Until: {(datetime.now().date() + timedelta(days=horizon_days)).strftime("%Y-%m-%d")}'))
         self.stdout.write(self.style.SUCCESS('=' * 80))
 
         level = options['level']
@@ -119,13 +128,13 @@ class Command(BaseCommand):
         levels = ['school', 'product', 'shop'] if level == 'all' else [level]
 
         for l in levels:
-            self.stdout.write(f"\n{self.style.WARNING(f'Processing: {l.upper()} - 365-day base forecasts')}")
-            self.generate_forecasts(l, model_type, min_sales, force, limit)
+            self.stdout.write(f"\n{self.style.WARNING(f'Processing: {l.upper()} - {horizon_days}-day base forecasts')}")
+            self.generate_forecasts(l, model_type, min_sales, force, limit, horizon_days)
 
-        self.stdout.write(self.style.SUCCESS('\n✓ 365-day base forecasting complete!'))
+        self.stdout.write(self.style.SUCCESS(f'\n✓ {horizon_days}-day base forecasting complete!'))
 
-    def generate_forecasts(self, aggregation_level, model_type, min_sales, force, limit):
-        """Generate 365-day base forecasts for a specific aggregation level"""
+    def generate_forecasts(self, aggregation_level, model_type, min_sales, force, limit, horizon_days):
+        """Generate multi-day base forecasts for a specific aggregation level"""
 
         # Get historical sales data
         sales_data = self.get_historical_sales(aggregation_level)
@@ -137,7 +146,6 @@ class Command(BaseCommand):
         forecast_count = 0
         skipped_count = 0
         error_count = 0
-        horizon_days = 365  # Always generate 365-day forecasts
 
         entities = sales_data['entity_name'].unique()
         total_entities = len(entities)
@@ -728,21 +736,18 @@ class Command(BaseCommand):
         }
 
     def save_forecast(self, entity_name, aggregation_level, model_type, forecast_data, training_data):
-        """Save 365-day base forecast to database"""
+        """Save multi-day base forecast to database"""
 
         if forecast_data is None or 'forecasts' not in forecast_data:
             return
 
-        forecast_id = f"{aggregation_level}_{entity_name.replace(' ', '_')}_365d_{datetime.now().strftime('%Y%m%d')}"
-
-        # Validate that we have 365 days of forecasts
+        # Determine horizon from forecast data
         num_forecast_days = len(forecast_data['forecasts'])
-        if num_forecast_days != 365:
-            self.stdout.write(
-                self.style.WARNING(
-                    f'  Warning: Expected 365 days, got {num_forecast_days} for {entity_name}'
-                )
-            )
+        forecast_id = f"{aggregation_level}_{entity_name.replace(' ', '_')}_{num_forecast_days}d_{datetime.now().strftime('%Y%m%d')}"
+
+        # Calculate forecast_valid_until (set to last forecast date)
+        forecast_date_obj = datetime.now().date()
+        forecast_valid_until = forecast_date_obj + timedelta(days=num_forecast_days)
 
         # Calculate accuracy metrics on training data if possible
         mae, mape, rmse = None, None, None
@@ -809,9 +814,10 @@ class Command(BaseCommand):
             defaults={
                 'forecast_id': forecast_id,
                 'model_type': model_type,
-                'daily_forecasts': daily_forecasts,  # Store as JSON with 365 days
+                'daily_forecasts': daily_forecasts,  # Store as JSON with forecast data
                 'training_data_start': training_data.index.min().date(),
                 'training_data_end': training_data.index.max().date(),
+                'forecast_valid_until': forecast_valid_until,  # NEW: Track forecast expiry
                 'mae': mae,
                 'mape': mape,
                 'rmse': rmse,
@@ -820,7 +826,7 @@ class Command(BaseCommand):
                 'monthly_demand_60': monthly_demand_60,  # Pre-calculated for performance
                 'model_params': {
                     'model': forecast_data.get('model', 'Unknown'),
-                    'horizon_days': 365,
+                    'horizon_days': num_forecast_days,  # Dynamic horizon
                     'training_days': len(training_data),
                     **forecast_data.get('fitted_params', {})
                 }
