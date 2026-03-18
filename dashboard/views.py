@@ -2684,11 +2684,8 @@ def sales_forecasting(request):
         forecast_list = []
 
         if shop_filter:
-            # WITH shop_filter: 2-level school/product grouping (similar to school view)
-            logger.info(f'Shop filter provided: {shop_filter} - Using 2-level school/product view')
-
-            # Group forecasts by school
-            school_groups = defaultdict(list)
+            # WITH shop_filter: Flat table view with all products sorted by risk level
+            logger.info(f'Shop filter provided: {shop_filter} - Using flat table view for Store Manager')
 
             # Build SKU -> school mapping
             sku_to_school = {}
@@ -2705,138 +2702,184 @@ def sales_forecasting(request):
                         logger.warning(f'ProductOption not found for SKU: {f.entity_name}')
                         continue
 
-            # Group forecasts by school
-            for f in forecasts:
-                school_name = sku_to_school.get(f.entity_name)
-                if school_name:
-                    school_groups[school_name].append(f)
+            # Get PriorityScoreSettings for risk-based scoring
+            from dashboard.models import PriorityScoreSettings, TopPerformingSchool
+            priority_settings = PriorityScoreSettings.get_settings()
 
-            # Process each school group
-            forecast_list = []
-            logger.info(f'DEBUG: Processing {len(school_groups)} school groups')
+            # Get top performing schools for priority scoring
+            top_schools = set(
+                TopPerformingSchool.objects.values_list('school_name', flat=True)
+            )
+
+            # Process all forecasts into a flat list
+            all_variations = []
+            logger.info(f'DEBUG: Processing {len(forecasts)} forecasts for flat table')
             processed_count = 0
             skipped_zero_count = 0
             skipped_no_stock_gap = 0
 
-            for school_name, school_forecasts in sorted(school_groups.items()):
-                school_variations = []
-                school_total_quantity = 0
-                logger.info(f'DEBUG: Processing school "{school_name}" with {len(school_forecasts)} forecasts')
+            for f in forecasts:
+                school_name = sku_to_school.get(f.entity_name)
+                if not school_name:
+                    continue
 
-                for f in school_forecasts:
-                    size = extract_size_from_sku(f.entity_name)
+                size = extract_size_from_sku(f.entity_name)
 
-                    # Extract forecast data for the selected date range
-                    if use_legacy:
-                        date_range_data = {}
-                        for date_str, forecast_data in f.forecast_data.items():
-                            forecast_date = datetime.strptime(date_str, '%Y-%m-%d').date()
-                            if start_date <= forecast_date <= end_date:
-                                date_range_data[date_str] = forecast_data
-                    else:
-                        date_range_data = f.get_date_range_forecast(start_date, end_date)
-                        if processed_count == 0:  # Log details for first product only
-                            logger.info(f'DEBUG: First product date extraction:')
-                            logger.info(f'  - Entity: {f.entity_name}')
-                            logger.info(f'  - Forecast date: {f.forecast_date}')
-                            logger.info(f'  - Requested range: {start_date} to {end_date}')
-                            logger.info(f'  - Daily forecasts present: {bool(f.daily_forecasts)}')
-                            if f.daily_forecasts:
-                                all_dates = list(f.daily_forecasts.keys())
-                                logger.info(f'  - Daily forecasts date range: {all_dates[0]} to {all_dates[-1]} ({len(all_dates)} days)')
-                            logger.info(f'  - Extracted dates: {len(date_range_data)} days')
-                            if date_range_data:
-                                extracted_dates = list(date_range_data.keys())
-                                logger.info(f'  - Extracted range: {extracted_dates[0]} to {extracted_dates[-1]}')
+                # Extract forecast data for the selected date range
+                if use_legacy:
+                    date_range_data = {}
+                    for date_str, forecast_data in f.forecast_data.items():
+                        forecast_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+                        if start_date <= forecast_date <= end_date:
+                            date_range_data[date_str] = forecast_data
+                else:
+                    date_range_data = f.get_date_range_forecast(start_date, end_date)
+                    if processed_count == 0:  # Log details for first product only
+                        logger.info(f'DEBUG: First product date extraction:')
+                        logger.info(f'  - Entity: {f.entity_name}')
+                        logger.info(f'  - Forecast date: {f.forecast_date}')
+                        logger.info(f'  - Requested range: {start_date} to {end_date}')
+                        logger.info(f'  - Daily forecasts present: {bool(f.daily_forecasts)}')
+                        if f.daily_forecasts:
+                            all_dates = list(f.daily_forecasts.keys())
+                            logger.info(f'  - Daily forecasts date range: {all_dates[0]} to {all_dates[-1]} ({len(all_dates)} days)')
+                        logger.info(f'  - Extracted dates: {len(date_range_data)} days')
+                        if date_range_data:
+                            extracted_dates = list(date_range_data.keys())
+                            logger.info(f'  - Extracted range: {extracted_dates[0]} to {extracted_dates[-1]}')
 
-                    # Calculate total quantity
-                    total_qty = sum([day['quantity'] for day in date_range_data.values()])
+                # Calculate total quantity
+                total_qty = sum([day['quantity'] for day in date_range_data.values()])
 
-                    # Skip if zero
-                    if total_qty == 0:
-                        skipped_zero_count += 1
-                        continue
+                # Skip if zero
+                if total_qty == 0:
+                    skipped_zero_count += 1
+                    continue
 
-                    processed_count += 1
+                processed_count += 1
 
-                    # Get first 7 days detail
-                    forecast_dates = sorted(date_range_data.keys())[:7]
-                    next_7_days = [
-                        {
-                            'date': date,
-                            'quantity': date_range_data[date]['quantity'],
-                            'confidence_lower': date_range_data[date].get('confidence_lower', 0),
-                            'confidence_upper': date_range_data[date].get('confidence_upper', 0)
-                        }
-                        for date in forecast_dates
-                    ]
-
-                    # Get stock data
-                    stock_info = get_stock_data(f.entity_name)
-                    stock_on_hand = stock_info['stock_on_hand']
-                    incoming_stock = stock_info['incoming']
-                    product_name = stock_info['product_name']
-                    forecasted_stock = round(total_qty, 1)
-                    stock_gap = (stock_on_hand + incoming_stock) - forecasted_stock
-
-                    # Filter: Only show products with negative stock gap (shortages)
-                    # Apply stock gap filter in BOTH replenishment AND normal forecasting views
-                    if stock_gap >= 0:
-                        skipped_no_stock_gap += 1
-                        continue
-
-                    # Check if this variation has already been requested
-                    already_requested = (f.entity_name, size or '') in requested_items_set
-
-                    # Skip this variation entirely if already requested
-                    if already_requested:
-                        continue
-
-                    variation_data = {
-                        'sku_code': f.entity_name,
-                        'product_name': product_name,
-                        'size': size,
-                        'total_quantity': forecasted_stock,
-                        'stock_on_hand': int(stock_on_hand),
-                        'incoming_stock': int(incoming_stock),
-                        'stock_gap': round(stock_gap, 1),
-                        'accuracy_score': round(f.accuracy_score, 1) if f.accuracy_score is not None else 'N/A',
-                        'model': f.model_params.get('model', 'Unknown'),
-                        'next_7_days': next_7_days,
-                        'forecast_data': date_range_data,
-                        'training_days': f.model_params.get('training_days', 0),
-                        'mae': round(f.mae, 2) if f.mae else None,
-                        'mape': round(f.mape, 2) if f.mape else None
+                # Get first 7 days detail
+                forecast_dates = sorted(date_range_data.keys())[:7]
+                next_7_days = [
+                    {
+                        'date': date,
+                        'quantity': date_range_data[date]['quantity'],
+                        'confidence_lower': date_range_data[date].get('confidence_lower', 0),
+                        'confidence_upper': date_range_data[date].get('confidence_upper', 0)
                     }
+                    for date in forecast_dates
+                ]
 
-                    school_variations.append(variation_data)
-                    school_total_quantity += forecasted_stock
+                # Get stock data
+                stock_info = get_stock_data(f.entity_name)
+                stock_on_hand = stock_info['stock_on_hand']
+                incoming_stock = stock_info['incoming']
+                product_name = stock_info['product_name']
+                forecasted_stock = round(total_qty, 1)
+                stock_gap = (stock_on_hand + incoming_stock) - forecasted_stock
 
-                # Add school if it has variations
-                if school_variations:
-                    # Sort variations by product name, then by size
-                    school_variations = sorted(school_variations, key=lambda x: (
-                        x['product_name'],
-                        int(x['size']) if x['size'].isdigit() else 999,
-                        x['size']
-                    ))
+                # Filter: Only show products with negative stock gap (shortages)
+                if stock_gap >= 0:
+                    skipped_no_stock_gap += 1
+                    continue
 
-                    forecast_list.append({
-                        'school_name': school_name,
-                        'entity_name': school_name,
-                        'total_quantity': round(school_total_quantity, 1),
-                        'variation_count': len(school_variations),
-                        'variations': school_variations,
-                        'is_school_grouped': True  # Use same flag as school view
-                    })
+                # Check if this variation has already been requested
+                already_requested = (f.entity_name, size or '') in requested_items_set
+
+                # Skip this variation entirely if already requested
+                if already_requested:
+                    continue
+
+                # Calculate days of coverage (stock available divided by daily demand rate)
+                num_days = (end_date - start_date).days + 1
+                avg_daily_demand = forecasted_stock / num_days if num_days > 0 else 0
+                available_stock = stock_on_hand + incoming_stock
+                if avg_daily_demand > 0:
+                    days_of_coverage = available_stock / avg_daily_demand
+                else:
+                    days_of_coverage = 999  # No demand
+
+                # Get risk score and tag from settings
+                risk_score = priority_settings.get_risk_score(days_of_coverage)
+                risk_tag = priority_settings.get_risk_tag(days_of_coverage)
+
+                # Determine if top customer
+                is_top_customer = school_name in top_schools
+
+                # Determine if high velocity (above category average)
+                # For now, set to False - will implement category average calculation later
+                is_high_velocity = False
+
+                # Calculate priority score
+                priority_score = priority_settings.calculate_priority_score(
+                    days_of_coverage,
+                    is_top_customer,
+                    is_high_velocity
+                )
+
+                variation_data = {
+                    'sku_code': f.entity_name,
+                    'product_name': product_name,
+                    'school_name': school_name,  # Add school name for flat table
+                    'size': size,
+                    'total_quantity': forecasted_stock,
+                    'stock_on_hand': int(stock_on_hand),
+                    'incoming_stock': int(incoming_stock),
+                    'stock_gap': round(stock_gap, 1),
+                    'accuracy_score': round(f.accuracy_score, 1) if f.accuracy_score is not None else 'N/A',
+                    'model': f.model_params.get('model', 'Unknown'),
+                    'next_7_days': next_7_days,
+                    'forecast_data': date_range_data,
+                    'training_days': f.model_params.get('training_days', 0),
+                    'mae': round(f.mae, 2) if f.mae else None,
+                    'mape': round(f.mape, 2) if f.mape else None,
+                    # Priority scoring fields
+                    'days_of_coverage': round(days_of_coverage, 1),
+                    'risk_score': risk_score,
+                    'risk_tag': risk_tag,
+                    'priority_score': priority_score,
+                    'is_top_customer': is_top_customer,
+                    'is_high_velocity': is_high_velocity
+                }
+
+                all_variations.append(variation_data)
 
             logger.info(f'DEBUG: Processed {processed_count} products, skipped {skipped_zero_count} with zero quantity, skipped {skipped_no_stock_gap} with no stock gap (surplus)')
-            logger.info(f'DEBUG: Generated {len(forecast_list)} school groups before sorting')
 
-            # Sort schools by total quantity descending
-            forecast_list = sorted(forecast_list, key=lambda x: x['total_quantity'], reverse=True)[:100]
+            # Calculate risk level counts BEFORE filtering
+            critical_count = len([v for v in all_variations if v.get('risk_tag') == 'CRITICAL'])
+            high_count = len([v for v in all_variations if v.get('risk_tag') == 'HIGH'])
+            medium_count = len([v for v in all_variations if v.get('risk_tag') == 'MEDIUM'])
+            low_count = len([v for v in all_variations if v.get('risk_tag') == 'LOW'])
+            total_count = len(all_variations)
 
-            logger.info(f'DEBUG: Final forecast_list has {len(forecast_list)} schools after limit')
+            # Apply risk filter if not 'all'
+            if risk_filter != 'all':
+                risk_filter_upper = risk_filter.upper()
+                all_variations = [
+                    v for v in all_variations
+                    if v.get('risk_tag') == risk_filter_upper
+                ]
+                logger.info(f'Applied risk filter: {risk_filter} - {len(all_variations)} variations match')
+
+            # Sort by risk level and priority score
+            # First, assign sort order for risk levels
+            risk_order = {'CRITICAL': 0, 'HIGH': 1, 'MEDIUM': 2, 'LOW': 3}
+
+            all_variations.sort(
+                key=lambda x: (
+                    risk_order.get(x.get('risk_tag', 'LOW'), 99),  # Risk level first
+                    -x.get('priority_score', 0)  # Then priority score descending
+                )
+            )
+
+            # Limit to 500 variations
+            all_variations = all_variations[:500]
+
+            logger.info(f'DEBUG: Final all_variations has {len(all_variations)} items after sorting and limit')
+
+            # Create forecast_list with flat table flag
+            forecast_list = []
 
         else:
             # WITHOUT shop_filter: 3-level location/school/product nested view
@@ -3370,6 +3413,11 @@ def sales_forecasting(request):
         'total_count': total_count
     }
 
+    # Add flat table data for shop level with filter (Store Manager view)
+    if level == 'shop' and shop_filter and 'all_variations' in locals():
+        context['all_variations'] = all_variations
+        context['display_mode'] = 'flat_table'
+
     # Cache the context only if we have data (don't cache empty state)
     if not generating_forecasts:
         cache.set(cache_key, context, cache_timeout)
@@ -3645,8 +3693,8 @@ def store_manager_replenishment(request):
     """
     Store Manager Replenishment Dashboard
 
-    Uses the same logic as school-level forecasting but with a fixed 30-60 day forward window.
-    This ensures identical UI and data processing while maintaining replenishment-specific time range.
+    Uses shop-level forecasting with a fixed 30-60 day forward window and displays
+    products in a flat table sorted by risk level.
     """
     from datetime import date, timedelta
     from django.http import QueryDict
@@ -3656,10 +3704,11 @@ def store_manager_replenishment(request):
     start_date = today + timedelta(days=30)
     end_date = start_date + timedelta(days=30)  # 60 days from today
 
-    # Create a modified request with fixed date range and level=school
+    # Create a modified request with shop level and Uniform Shop filter
     modified_GET = QueryDict(mutable=True)
     modified_GET.update(request.GET)
-    modified_GET['level'] = 'school'
+    modified_GET['level'] = 'shop'
+    modified_GET['shop'] = 'Uniform Shop'
     modified_GET['start_date'] = start_date.strftime('%Y-%m-%d')
     modified_GET['end_date'] = end_date.strftime('%Y-%m-%d')
     request.GET = modified_GET

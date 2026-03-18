@@ -544,11 +544,24 @@
                                         </th>
                                         <th>Actions</th>
                                         {% elif render_level == 'shop' %}
+                                        {% if display_mode == 'flat_table' %}
+                                        <th></th>
+                                        <th>Risk Level</th>
+                                        <th>School</th>
+                                        <th>Product</th>
+                                        <th>SKU</th>
+                                        <th class="text-end">Stock on Hand</th>
+                                        <th class="text-end">Incoming</th>
+                                        <th class="text-end">Forecasted Demand</th>
+                                        <th class="text-center">Stock Gap</th>
+                                        <th class="text-center">Actions</th>
+                                        {% else %}
                                         <th></th>
                                         <th width="30%">Location / School</th>
                                         <th>Total Forecast</th>
                                         <th>Count</th>
                                         <th>Actions</th>
+                                        {% endif %}
                                         {% else %}
                                         <th></th>
                                         <th>{{ summary.level_display }}</th>
@@ -563,6 +576,78 @@
                                     </tr>
                                 </thead>
                                 <tbody>
+                                    {% if display_mode == 'flat_table' and all_variations %}
+                                    <!-- ========== FLAT TABLE VIEW FOR STORE MANAGER ========== -->
+                                    {% for variation in all_variations %}
+                                    <tr class="{% if variation.stock_gap < 0 %}table-warning{% endif %}">
+                                        <td></td>
+                                        <td class="text-center align-middle">
+                                            {% if variation.risk_tag == 'CRITICAL' %}
+                                                <span class="badge bg-danger">
+                                                    <i data-feather="alert-octagon" style="width: 14px; height: 14px;"></i>
+                                                    CRITICAL
+                                                </span>
+                                            {% elif variation.risk_tag == 'HIGH' %}
+                                                <span class="badge bg-warning">
+                                                    <i data-feather="alert-triangle" style="width: 14px; height: 14px;"></i>
+                                                    HIGH
+                                                </span>
+                                            {% elif variation.risk_tag == 'MEDIUM' %}
+                                                <span class="badge bg-info">
+                                                    <i data-feather="alert-circle" style="width: 14px; height: 14px;"></i>
+                                                    MEDIUM
+                                                </span>
+                                            {% else %}
+                                                <span class="badge bg-success">
+                                                    <i data-feather="check-circle" style="width: 14px; height: 14px;"></i>
+                                                    LOW
+                                                </span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-start align-middle">{{ variation.school_name }}</td>
+                                        <td class="text-start align-middle">{{ variation.product_name }}</td>
+                                        <td class="text-start align-middle"><code>{{ variation.sku_code }}</code></td>
+                                        <td class="text-end align-middle">{{ variation.stock_on_hand|floatformat:0 }}</td>
+                                        <td class="text-end align-middle">{{ variation.incoming_stock|floatformat:0 }}</td>
+                                        <td class="text-end align-middle">{{ variation.total_quantity|floatformat:0 }}</td>
+                                        <td class="text-center align-middle">
+                                            {% if variation.stock_gap < 0 %}
+                                                <span class="badge bg-danger">{{ variation.stock_gap|floatformat:0 }}</span>
+                                            {% else %}
+                                                <span class="badge bg-secondary">{{ variation.stock_gap|floatformat:0 }}</span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-center align-middle">
+                                            <button class="btn btn-sm btn-success approve-btn"
+                                                    data-sku="{{ variation.sku_code }}"
+                                                    data-product="{{ variation.product_name }}"
+                                                    data-size="{{ variation.size }}"
+                                                    data-color=""
+                                                    data-school="{{ variation.school_name }}"
+                                                    data-stock-on-hand="{{ variation.stock_on_hand|floatformat:0 }}"
+                                                    data-incoming-stock="{{ variation.incoming_stock|floatformat:0 }}"
+                                                    data-forecasted-stock="{{ variation.total_quantity|floatformat:0 }}"
+                                                    data-stock-gap="{{ variation.stock_gap|floatformat:0 }}">
+                                                <i class="fas fa-check"></i> Approve
+                                            </button>
+                                            <button class="btn btn-sm btn-warning modify-btn"
+                                                    data-sku="{{ variation.sku_code }}"
+                                                    data-product="{{ variation.product_name }}"
+                                                    data-size="{{ variation.size }}"
+                                                    data-color=""
+                                                    data-school="{{ variation.school_name }}"
+                                                    data-stock-gap="{{ variation.stock_gap|floatformat:0 }}">
+                                                <i class="fas fa-edit"></i> Modify
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    {% empty %}
+                                    <tr>
+                                        <td colspan="10" class="text-center text-muted">No products found</td>
+                                    </tr>
+                                    {% endfor %}
+                                    {% else %}
+                                    <!-- ========== STANDARD NESTED VIEWS ========== -->
                                     {% for forecast in forecasts %}
                                         {% if forecast.is_shop_grouped %}
                                         <!-- ========== 3-LEVEL NESTED VIEW: LOCATION -> SCHOOL -> PRODUCT ========== -->
@@ -987,6 +1072,7 @@
                                         </tr>
                                         {% endif %}
                                     {% endfor %}
+                                    {% endif %}
                                 </tbody>
                             </table>
                         </div>
