@@ -512,6 +512,8 @@
                     <div class="card-body">
                         {% if forecasts %}
                         <div class="table-responsive">
+                        {% elif display_mode == 'flat_table' and all_variations %}
+                        <div class="table-responsive">
                             <table id="forecastsTable" class="table table-sm table-striped">
                                 <thead>
                                     <tr>
@@ -1524,16 +1526,29 @@ $(document).ready(function() {
     } else {
         console.log('Before DataTable init (non-grouped):', new Date().toISOString());
 
-        // For non-grouped views (school, shop, category)
-        var table = $('#forecastsTable').DataTable({
-            order: [[1, 'asc']], // Order by entity name
-            pageLength: 25,
-            dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>rtip',
-            columnDefs: [
+        // Detect flat table mode for Store Manager Replenishment
+        var isFlatTableView = '{{ display_mode }}' === 'flat_table';
+        console.log('Is flat table view:', isFlatTableView);
+
+        // Configure column definitions based on view type
+        var columnDefs = isFlatTableView
+            ? [
+                // Flat table: NO dt-control column (no dropdown arrows)
+                { orderable: false, targets: -1 } // Disable sorting on last column (Actions)
+              ]
+            : [
+                // Regular non-grouped views: WITH dt-control for expandable rows
                 { className: 'dt-control', orderable: false, targets: 0 }, // Control column
                 { orderable: false, targets: -1 } // Disable sorting on last column (Actions)
-            ],
-            displayLength: 25,
+              ];
+
+        // For non-grouped views (school, shop, category) or flat table
+        var table = $('#forecastsTable').DataTable({
+            order: isFlatTableView ? [[1, 'asc']] : [[1, 'asc']], // Order by risk level for flat table, entity name for others
+            pageLength: isFlatTableView ? 50 : 25, // More rows for flat table
+            dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>rtip',
+            columnDefs: columnDefs,
+            displayLength: isFlatTableView ? 50 : 25,
             initComplete: function() {
                 console.log('✓ initComplete fired (non-grouped):', new Date().toISOString());
                 console.log('  Table initialized but NOT yet drawn');

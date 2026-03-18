@@ -2683,9 +2683,9 @@ def sales_forecasting(request):
         # Initialize forecast_list to prevent UnboundLocalError if forecasts is empty
         forecast_list = []
 
-        if shop_filter:
-            # WITH shop_filter: Flat table view with all products sorted by risk level
-            logger.info(f'Shop filter provided: {shop_filter} - Using flat table view for Store Manager')
+        if shop_filter or is_replenishment_view:
+            # WITH shop_filter OR replenishment view: Flat table view with all products sorted by risk level
+            logger.info(f'Shop filter: {shop_filter}, Replenishment view: {is_replenishment_view} - Using flat table view for Store Manager')
 
             # Build SKU -> school mapping
             sku_to_school = {}
@@ -3339,10 +3339,13 @@ def sales_forecasting(request):
     # but COULD be generated. If no forecasts are available at all (e.g., shop level
     # has never been implemented), set no_forecasts_available=True instead to prevent
     # infinite refresh loop.
-    if len(forecast_list) == 0 and no_forecasts_available:
+    # ALSO: Check for all_variations (flat table view) - if we have variations, we have data!
+    has_data = len(forecast_list) > 0 or ('all_variations' in locals() and len(all_variations) > 0)
+
+    if not has_data and no_forecasts_available:
         # No forecasts exist and none are available - don't trigger auto-refresh
         generating_forecasts = False
-    elif len(forecast_list) == 0:
+    elif not has_data:
         # No forecasts but they might be generating - trigger auto-refresh
         generating_forecasts = True
     else:
@@ -3413,10 +3416,30 @@ def sales_forecasting(request):
         'total_count': total_count
     }
 
-    # Add flat table data for shop level with filter (Store Manager view)
-    if level == 'shop' and shop_filter and 'all_variations' in locals():
+    # Add flat table data for shop level with filter OR replenishment view (Store Manager view)
+    logger.info(f'DEBUG: Checking flat table context assignment')
+    logger.info(f'  - level: {level}')
+    logger.info(f'  - shop_filter: {shop_filter}')
+    logger.info(f'  - is_replenishment_view: {is_replenishment_view}')
+    logger.info(f'  - all_variations in locals(): {"all_variations" in locals()}')
+    if 'all_variations' in locals():
+        logger.info(f'  - len(all_variations): {len(all_variations)}')
+
+    if level == 'shop' and (shop_filter or is_replenishment_view) and 'all_variations' in locals():
+        logger.info(f'✅ Adding all_variations to context with display_mode=flat_table')
         context['all_variations'] = all_variations
         context['display_mode'] = 'flat_table'
+    else:
+        logger.info(f'❌ NOT adding flat table to context')
+
+    # Debug: Log what's being passed to template
+    logger.info(f'DEBUG: Final context check before rendering:')
+    logger.info(f'  - len(context["forecasts"]): {len(context.get("forecasts", []))}')
+    logger.info(f'  - "all_variations" in context: {"all_variations" in context}')
+    if 'all_variations' in context:
+        logger.info(f'  - len(context["all_variations"]): {len(context["all_variations"])}')
+    logger.info(f'  - context.get("display_mode"): {context.get("display_mode")}')
+    logger.info(f'  - context.get("generating_forecasts"): {context.get("generating_forecasts")}')
 
     # Cache the context only if we have data (don't cache empty state)
     if not generating_forecasts:
@@ -3704,11 +3727,11 @@ def store_manager_replenishment(request):
     start_date = today + timedelta(days=30)
     end_date = start_date + timedelta(days=30)  # 60 days from today
 
-    # Create a modified request with shop level and Uniform Shop filter
+    # Create a modified request with shop level (no specific shop filter = show all Shop/Store categories)
     modified_GET = QueryDict(mutable=True)
     modified_GET.update(request.GET)
     modified_GET['level'] = 'shop'
-    modified_GET['shop'] = 'Uniform Shop'
+    # Don't set 'shop' parameter - let the view show all Shop/Store categories via pattern matching
     modified_GET['start_date'] = start_date.strftime('%Y-%m-%d')
     modified_GET['end_date'] = end_date.strftime('%Y-%m-%d')
     request.GET = modified_GET
