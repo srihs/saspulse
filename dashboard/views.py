@@ -1908,9 +1908,20 @@ def sales_forecasting(request):
     style_code_filter = request.GET.get('style_code', '').strip()
     shop_filter = request.GET.get('shop', '').strip()
     category_filter = request.GET.get('category', '').strip()
+    risk_filter = request.GET.get('risk_filter', 'all').strip().lower()  # all, critical, high, medium, low
 
     # Initialize logger for debugging
     logger = logging.getLogger(__name__)
+
+    # Get PriorityScoreSettings for risk-based filtering
+    from dashboard.models import PriorityScoreSettings, TopPerformingSchool
+    priority_settings = PriorityScoreSettings.get_settings()
+
+    # Get top performing schools for priority scoring
+    top_schools = set(
+        TopPerformingSchool.objects.filter(is_top_performer=True)
+        .values_list('school_name', flat=True)
+    )
 
     # ========== DATA SCOPE FILTERING ==========
     # Apply school-based and store-based filtering
@@ -2516,6 +2527,43 @@ def sales_forecasting(request):
 
             processed_count += 1
 
+            # === PRIORITY SCORE CALCULATION ===
+            # Calculate days of coverage
+            if forecasted_stock > 0:
+                daily_demand = forecasted_stock / num_days
+                if daily_demand > 0:
+                    days_of_coverage = (stock_on_hand + incoming_stock) / daily_demand
+                else:
+                    days_of_coverage = 999  # No demand
+            else:
+                days_of_coverage = 999  # No demand
+
+            # Get risk score and tag from settings
+            risk_score = priority_settings.get_risk_score(days_of_coverage)
+            risk_tag = priority_settings.get_risk_tag(days_of_coverage)
+
+            # Determine if top customer - need to get school_name for this SKU
+            school_name = None
+            try:
+                from cin7.models import ProductOption
+                po = ProductOption.objects.select_related('product').get(code=f.entity_name)
+                school_name = po.product.sub_category
+            except:
+                school_name = None
+
+            is_top_customer = school_name in top_schools if school_name else False
+
+            # Determine if high velocity (above category average)
+            # For now, set to False - will implement category average calculation later
+            is_high_velocity = False
+
+            # Calculate priority score
+            priority_score = priority_settings.calculate_priority_score(
+                days_of_coverage,
+                is_top_customer,
+                is_high_velocity
+            )
+
             variation_data = {
                 'sku_code': f.entity_name,
                 'product_name': product_name,
@@ -2530,7 +2578,15 @@ def sales_forecasting(request):
                 'forecast_data': date_range_data,
                 'training_days': f.model_params.get('training_days', 0),
                 'mae': round(f.mae, 2) if f.mae else None,
-                'mape': round(f.mape, 2) if f.mape else None
+                'mape': round(f.mape, 2) if f.mape else None,
+                # Priority scoring fields
+                'days_of_coverage': round(days_of_coverage, 1),
+                'risk_score': risk_score,
+                'risk_tag': risk_tag,
+                'priority_score': priority_score,
+                'is_top_customer': is_top_customer,
+                'is_high_velocity': is_high_velocity,
+                'school_name': school_name
             }
 
             grouped_products[product_name].append(variation_data)
@@ -2566,10 +2622,56 @@ def sales_forecasting(request):
                 'is_grouped': True
             })
 
-        # Sort by total quantity descending
-        forecast_list = sorted(forecast_list, key=lambda x: x['total_quantity'], reverse=True)[:500]  # Increased limit to 500 products (was 200)
+        # === RISK-BASED FILTERING ===
+        # Store unfiltered count for statistics
+        all_variations = []
+        for product in forecast_list:
+            if product.get('is_grouped') and 'variations' in product:
+                all_variations.extend(product['variations'])
 
-        logger.info(f'DEBUG: Final forecast_list has {len(forecast_list)} products after limit')
+        # Calculate risk level counts BEFORE filtering
+        critical_count = len([v for v in all_variations if v.get('risk_tag') == 'CRITICAL'])
+        high_count = len([v for v in all_variations if v.get('risk_tag') == 'HIGH'])
+        medium_count = len([v for v in all_variations if v.get('risk_tag') == 'MEDIUM'])
+        low_count = len([v for v in all_variations if v.get('risk_tag') == 'LOW'])
+        total_count = len(all_variations)
+
+        # Apply risk filter if not 'all'
+        if risk_filter != 'all':
+            filtered_forecast_list = []
+            risk_filter_upper = risk_filter.upper()
+
+            for product in forecast_list:
+                if product.get('is_grouped') and 'variations' in product:
+                    # Filter variations by risk tag
+                    filtered_variations = [
+                        v for v in product['variations']
+                        if v.get('risk_tag') == risk_filter_upper
+                    ]
+
+                    # Only include products that have variations matching the risk filter
+                    if filtered_variations:
+                        product_copy = product.copy()
+                        product_copy['variations'] = filtered_variations
+                        product_copy['variation_count'] = len(filtered_variations)
+                        # Recalculate total quantity for filtered variations
+                        product_copy['total_quantity'] = round(sum([v['total_quantity'] for v in filtered_variations]), 1)
+                        filtered_forecast_list.append(product_copy)
+
+            forecast_list = filtered_forecast_list
+            logger.info(f'Applied risk filter: {risk_filter} - {len(forecast_list)} products match')
+
+        # Sort by priority score descending (highest priority first)
+        # For grouped products, use the highest priority score among variations
+        def get_max_priority_score(product):
+            if product.get('is_grouped') and 'variations' in product:
+                priority_scores = [v.get('priority_score', 0) for v in product['variations']]
+                return max(priority_scores) if priority_scores else 0
+            return product.get('priority_score', 0)
+
+        forecast_list = sorted(forecast_list, key=get_max_priority_score, reverse=True)[:500]  # Limit to 500 products
+
+        logger.info(f'DEBUG: Final forecast_list has {len(forecast_list)} products after filtering and limit')
 
     elif level == 'shop':
         # SHOP-LEVEL NESTED VIEW: 3-level (location → school → product) or 2-level (school → product)
@@ -3231,6 +3333,14 @@ def sales_forecasting(request):
         # No filter - use generic aggregation level name
         display_name = dict(SalesForecastBase.AGGREGATION_LEVELS).get(level, level)
 
+    # Calculate risk counts if not already calculated (for non-product levels)
+    if 'critical_count' not in locals():
+        critical_count = 0
+        high_count = 0
+        medium_count = 0
+        low_count = 0
+        total_count = 0
+
     context = {
         'forecasts': forecast_list,
         'forecast_list_json': json.dumps(forecast_list, default=str),
@@ -3250,7 +3360,14 @@ def sales_forecasting(request):
         'using_365d_base': not use_legacy,  # Flag to indicate using new 365-day base system
         'display_name': display_name,  # Dynamic display name based on filter
         'has_filter': has_filter,  # Boolean to indicate if any filter is active
-        'is_replenishment_view': getattr(request, 'is_replenishment_view', False)  # Hide filters for replenishment view
+        'is_replenishment_view': getattr(request, 'is_replenishment_view', False),  # Hide filters for replenishment view
+        # Risk-based filtering
+        'risk_filter': risk_filter,
+        'critical_count': critical_count,
+        'high_count': high_count,
+        'medium_count': medium_count,
+        'low_count': low_count,
+        'total_count': total_count
     }
 
     # Cache the context only if we have data (don't cache empty state)

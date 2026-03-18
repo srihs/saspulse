@@ -409,6 +409,72 @@
                 </div>
                 {% endif %}
 
+                <!-- Risk Level Filter Tabs (for Store Manager Review) -->
+                {% if is_replenishment_view and not generating_forecasts and not no_forecasts_available %}
+                <div class="card mb-3">
+                    <div class="card-header bg-body-tertiary">
+                        <h5 class="mb-0">
+                            <i data-feather="filter" class="me-2"></i>
+                            Filter by Risk Level
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <ul class="nav nav-pills mb-3" id="riskFilterTabs" role="tablist">
+                            <li class="nav-item me-2" role="presentation">
+                                <a class="nav-link {% if risk_filter == 'all' or not risk_filter %}active{% endif %}"
+                                   href="?level={{ current_level }}&start_date={{ start_date }}&end_date={{ end_date }}&risk_filter=all">
+                                    <i data-feather="list" class="me-2" style="width: 16px; height: 16px;"></i>
+                                    All Items
+                                    <span class="badge bg-secondary ms-2">{{ total_count }}</span>
+                                </a>
+                            </li>
+                            <li class="nav-item me-2" role="presentation">
+                                <a class="nav-link {% if risk_filter == 'critical' %}active{% endif %}"
+                                   href="?level={{ current_level }}&start_date={{ start_date }}&end_date={{ end_date }}&risk_filter=critical">
+                                    <i data-feather="alert-octagon" class="me-2" style="width: 16px; height: 16px;"></i>
+                                    Critical
+                                    <span class="badge bg-danger ms-2">{{ critical_count }}</span>
+                                </a>
+                            </li>
+                            <li class="nav-item me-2" role="presentation">
+                                <a class="nav-link {% if risk_filter == 'high' %}active{% endif %}"
+                                   href="?level={{ current_level }}&start_date={{ start_date }}&end_date={{ end_date }}&risk_filter=high">
+                                    <i data-feather="alert-triangle" class="me-2" style="width: 16px; height: 16px;"></i>
+                                    High Risk
+                                    <span class="badge bg-warning ms-2">{{ high_count }}</span>
+                                </a>
+                            </li>
+                            <li class="nav-item me-2" role="presentation">
+                                <a class="nav-link {% if risk_filter == 'medium' %}active{% endif %}"
+                                   href="?level={{ current_level }}&start_date={{ start_date }}&end_date={{ end_date }}&risk_filter=medium">
+                                    <i data-feather="alert-circle" class="me-2" style="width: 16px; height: 16px;"></i>
+                                    Medium Risk
+                                    <span class="badge bg-info ms-2">{{ medium_count }}</span>
+                                </a>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <a class="nav-link {% if risk_filter == 'low' %}active{% endif %}"
+                                   href="?level={{ current_level }}&start_date={{ start_date }}&end_date={{ end_date }}&risk_filter=low">
+                                    <i data-feather="check-circle" class="me-2" style="width: 16px; height: 16px;"></i>
+                                    Low Risk
+                                    <span class="badge bg-success ms-2">{{ low_count }}</span>
+                                </a>
+                            </li>
+                        </ul>
+
+                        <div class="alert alert-info mb-0">
+                            <div class="d-flex align-items-start">
+                                <i data-feather="info" class="me-2 mt-1" style="width: 20px; height: 20px;"></i>
+                                <div>
+                                    <strong>Tip:</strong> Focus on Critical and High Risk items first for maximum impact.
+                                    These items are at risk of stockout and require immediate replenishment action.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
                 <!-- Loading Preloader (shown when forecasts are being generated) -->
                 {% if generating_forecasts %}
                 <div class="card">
@@ -648,6 +714,11 @@
                                                     <table class="table table-sm mb-0" style="width: 100%; table-layout: auto; background-color: white; font-size: 0.9rem;">
                                                         <thead class="table-light">
                                                             <tr>
+                                                                {% if is_replenishment_view %}
+                                                                <th class="text-center">Risk Level</th>
+                                                                <th class="text-center">Priority Score</th>
+                                                                <th class="text-center">Days of Coverage</th>
+                                                                {% endif %}
                                                                 <th class="text-start">Product Name</th>
                                                                 <th class="text-start">SKU Code</th>
                                                                 <th class="text-end">Stock in Hand</th>
@@ -660,6 +731,40 @@
                                                         <tbody>
                                                             {% for variation in forecast.variations %}
                                                             <tr>
+                                                                {% if is_replenishment_view %}
+                                                                <td class="text-center align-middle">
+                                                                    {% if variation.risk_tag == 'CRITICAL' %}
+                                                                        <span class="badge bg-danger">
+                                                                            <i data-feather="alert-octagon" style="width: 14px; height: 14px;"></i>
+                                                                            CRITICAL
+                                                                        </span>
+                                                                    {% elif variation.risk_tag == 'HIGH' %}
+                                                                        <span class="badge bg-warning">
+                                                                            <i data-feather="alert-triangle" style="width: 14px; height: 14px;"></i>
+                                                                            HIGH
+                                                                        </span>
+                                                                    {% elif variation.risk_tag == 'MEDIUM' %}
+                                                                        <span class="badge bg-info">
+                                                                            <i data-feather="alert-circle" style="width: 14px; height: 14px;"></i>
+                                                                            MEDIUM
+                                                                        </span>
+                                                                    {% else %}
+                                                                        <span class="badge bg-success">
+                                                                            <i data-feather="check-circle" style="width: 14px; height: 14px;"></i>
+                                                                            LOW
+                                                                        </span>
+                                                                    {% endif %}
+                                                                </td>
+                                                                <td class="text-center align-middle">
+                                                                    <span class="badge bg-primary">{{ variation.priority_score }}</span>
+                                                                    {% if variation.is_top_customer %}
+                                                                        <span class="badge bg-warning ms-1" title="Top Performing School">
+                                                                            <i data-feather="star" style="width: 12px; height: 12px;"></i>
+                                                                        </span>
+                                                                    {% endif %}
+                                                                </td>
+                                                                <td class="text-center align-middle">{{ variation.days_of_coverage|floatformat:1 }} days</td>
+                                                                {% endif %}
                                                                 <td class="text-start align-middle">{{ variation.product_name }}</td>
                                                                 <td class="text-start align-middle"><code>{{ variation.sku_code }}</code></td>
                                                                 <td class="text-end align-middle">{{ variation.stock_on_hand|floatformat:0 }}</td>
@@ -739,6 +844,11 @@
                                                 <table class="table table-sm mb-0" style="width: 100%; table-layout: auto; margin: 0 !important;">
                                                         <thead class="table-light">
                                                             <tr>
+                                                                {% if is_replenishment_view %}
+                                                                <th class="text-center">Risk Level</th>
+                                                                <th class="text-center">Priority Score</th>
+                                                                <th class="text-center">Days of Coverage</th>
+                                                                {% endif %}
                                                                 <th class="text-start">Product Name</th>
                                                                 <th class="text-start">SKU Code</th>
                                                                 <th class="text-end">Stock in Hand</th>
@@ -751,6 +861,40 @@
                                                         <tbody>
                                                             {% for variation in forecast.variations %}
                                                             <tr>
+                                                                {% if is_replenishment_view %}
+                                                                <td class="text-center align-middle">
+                                                                    {% if variation.risk_tag == 'CRITICAL' %}
+                                                                        <span class="badge bg-danger">
+                                                                            <i data-feather="alert-octagon" style="width: 14px; height: 14px;"></i>
+                                                                            CRITICAL
+                                                                        </span>
+                                                                    {% elif variation.risk_tag == 'HIGH' %}
+                                                                        <span class="badge bg-warning">
+                                                                            <i data-feather="alert-triangle" style="width: 14px; height: 14px;"></i>
+                                                                            HIGH
+                                                                        </span>
+                                                                    {% elif variation.risk_tag == 'MEDIUM' %}
+                                                                        <span class="badge bg-info">
+                                                                            <i data-feather="alert-circle" style="width: 14px; height: 14px;"></i>
+                                                                            MEDIUM
+                                                                        </span>
+                                                                    {% else %}
+                                                                        <span class="badge bg-success">
+                                                                            <i data-feather="check-circle" style="width: 14px; height: 14px;"></i>
+                                                                            LOW
+                                                                        </span>
+                                                                    {% endif %}
+                                                                </td>
+                                                                <td class="text-center align-middle">
+                                                                    <span class="badge bg-primary">{{ variation.priority_score }}</span>
+                                                                    {% if variation.is_top_customer %}
+                                                                        <span class="badge bg-warning ms-1" title="Top Performing School">
+                                                                            <i data-feather="star" style="width: 12px; height: 12px;"></i>
+                                                                        </span>
+                                                                    {% endif %}
+                                                                </td>
+                                                                <td class="text-center align-middle">{{ variation.days_of_coverage|floatformat:1 }} days</td>
+                                                                {% endif %}
                                                                 <td class="text-start align-middle">{{ variation.product_name }}</td>
                                                                 <td class="text-start align-middle"><code>{{ variation.sku_code }}</code></td>
                                                                 <td class="text-end align-middle">{{ variation.stock_on_hand|floatformat:0 }}</td>
