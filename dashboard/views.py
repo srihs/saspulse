@@ -1633,7 +1633,7 @@ def sales_forecasting(request):
                         %s
                     ) as product_name
                 FROM cin7_sync_productoption po
-                LEFT JOIN cin7_sync_product p ON p.cin7_id = po.cin7_product_id
+                LEFT JOIN cin7_sync_product p ON p.id = po.product_id
                 LEFT JOIN cin7_sync_stock s ON s.code = po.code
                 WHERE po.code = %s
             """, [sku_code, sku_code, sku_code])
@@ -1692,7 +1692,7 @@ def sales_forecasting(request):
                 po.option1 as size
             FROM dashboard_salesforecastbase sf
             JOIN cin7_sync_productoption po ON po.code = sf.entity_name
-            JOIN cin7_sync_product p ON p.cin7_id = po.cin7_product_id
+            JOIN cin7_sync_product p ON p.id = po.product_id
             WHERE sf.aggregation_level = 'product'
               AND (p.category_name LIKE %s OR p.category_name LIKE %s)
         """
@@ -2048,7 +2048,7 @@ def sales_forecasting(request):
                    p.sub_category as school_name
             FROM dashboard_salesforecastbase sf
             LEFT JOIN cin7_sync_productoption po ON po.code = sf.entity_name
-            LEFT JOIN cin7_sync_product p ON p.cin7_id = po.cin7_product_id
+            LEFT JOIN cin7_sync_product p ON p.id = po.product_id
             WHERE sf.aggregation_level = 'product'
         """
         params = []
@@ -2138,7 +2138,7 @@ def sales_forecasting(request):
                        p.sub_category as school_name
                 FROM dashboard_salesforecastbase sf
                 LEFT JOIN cin7_sync_productoption po ON po.code = sf.entity_name
-                LEFT JOIN cin7_sync_product p ON p.cin7_id = po.cin7_product_id
+                LEFT JOIN cin7_sync_product p ON p.id = po.product_id
                 WHERE sf.aggregation_level = 'product'
                   AND (p.category_name LIKE '%%Shop' OR p.category_name LIKE '%%Store')
                   AND p.category_name NOT IN ('Shop', 'Store')
@@ -2236,7 +2236,7 @@ def sales_forecasting(request):
                            sf.accuracy_score, sf.model_params, sf.created_at, sf.updated_at
                     FROM dashboard_salesforecastbase sf
                     LEFT JOIN cin7_sync_productoption po ON po.code = sf.entity_name
-                    LEFT JOIN cin7_sync_product p ON p.cin7_id = po.cin7_product_id
+                    LEFT JOIN cin7_sync_product p ON p.id = po.product_id
                     WHERE sf.aggregation_level = 'product'
                       AND p.sub_category = %s
                 """
@@ -2272,7 +2272,7 @@ def sales_forecasting(request):
                                sf.accuracy_score, sf.model_params, sf.created_at, sf.updated_at
                         FROM dashboard_salesforecastbase sf
                         LEFT JOIN cin7_sync_productoption po ON po.code = sf.entity_name
-                        LEFT JOIN cin7_sync_product p ON p.cin7_id = po.cin7_product_id
+                        LEFT JOIN cin7_sync_product p ON p.id = po.product_id
                         WHERE sf.aggregation_level = 'product'
                     """
                     params = []
@@ -3305,7 +3305,7 @@ def forecast_product_breakdown(request, school_name):
                     COALESCE(po.option1, SUBSTRING_INDEX(sf.entity_name, '-', -1)) as size
                 FROM dashboard_salesforecastbase sf
                 LEFT JOIN cin7_sync_productoption po ON po.code = sf.entity_name
-                LEFT JOIN cin7_sync_product p ON p.cin7_id = po.cin7_product_id AND p.category_name = %s
+                LEFT JOIN cin7_sync_product p ON p.id = po.product_id AND p.category_name = %s
                 LEFT JOIN cin7_sync_stock st ON st.code = sf.entity_name AND st.product_name IS NOT NULL AND st.product_name != ''
                 WHERE sf.aggregation_level = 'product'
                 ORDER BY product_name, size
@@ -3339,7 +3339,7 @@ def forecast_product_breakdown(request, school_name):
                     COALESCE(po.option1, SUBSTRING_INDEX(sf.entity_name, '-', -1)) as size
                 FROM dashboard_salesforecastbase sf
                 LEFT JOIN cin7_sync_productoption po ON po.code = sf.entity_name
-                LEFT JOIN cin7_sync_product p ON p.cin7_id = po.cin7_product_id AND p.sub_category = %s AND (p.category_name LIKE '%%Shop' OR p.category_name LIKE '%%Store') AND p.category_name NOT IN ('Shop', 'Store')
+                LEFT JOIN cin7_sync_product p ON p.id = po.product_id AND p.sub_category = %s AND (p.category_name LIKE '%%Shop' OR p.category_name LIKE '%%Store') AND p.category_name NOT IN ('Shop', 'Store')
                 LEFT JOIN cin7_sync_stock st ON st.code = sf.entity_name AND st.product_name IS NOT NULL AND st.product_name != ''
                 WHERE sf.aggregation_level = 'product'
                 ORDER BY product_name, size
