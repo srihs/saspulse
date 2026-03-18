@@ -3733,6 +3733,7 @@ def forecast_product_breakdown(request, school_name):
 
 @login_required
 @permission_required('replenishment.stores.review')
+@permission_required('forecasting.view')
 def store_manager_replenishment(request):
     """
     Store Manager Replenishment Dashboard
