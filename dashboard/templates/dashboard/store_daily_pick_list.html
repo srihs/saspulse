@@ -222,9 +222,6 @@
                     <tr>
                         <th>Product</th>
                         <th>SKU</th>
-                        <th>School</th>
-                        <th>Current Stock</th>
-                        <th>Incoming</th>
                         <th class="text-center">Last 7 Days Sales</th>
                         <th class="text-center">Next 7 Days Forecast</th>
                     </tr>
@@ -237,22 +234,6 @@
                         </td>
                         <td>
                             <span class="sku-code">{{ item.sku }}</span>
-                        </td>
-                        <td>
-                            <span class="school-name">{{ item.school_name|default:"—" }}</span>
-                        </td>
-                        <td>
-                            <span class="stock-number">{{ item.current_stock }}</span>
-                            <small class="text-muted"> units</small>
-                        </td>
-                        <td>
-                            <span class="incoming-stock">
-                                {% if item.incoming_stock and item.incoming_stock > 0 %}
-                                    +{{ item.incoming_stock }}
-                                {% else %}
-                                    —
-                                {% endif %}
-                            </span>
                         </td>
                         <td class="text-center">
                             <span class="sales-badge sales-badge-blue">
@@ -295,7 +276,7 @@ $(document).ready(function() {
     $('#pickListTable').DataTable({
         pageLength: 25,
         lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
-        order: [[5, 'desc']], // Sort by Last 7 Days Sales (descending)
+        order: [[2, 'desc']], // Sort by Last 7 Days Sales (descending)
         language: {
             search: "Search products:",
             lengthMenu: "Show _MENU_ items per page",
