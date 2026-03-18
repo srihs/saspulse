@@ -492,7 +492,7 @@
                         <ul class="nav nav-pills mb-3 flex-wrap" id="riskFilterTabs" role="tablist">
                             <li class="nav-item me-2 mb-2" role="presentation">
                                 <a class="nav-link nav-link-replenish {% if risk_filter == 'all' or not risk_filter %}active{% endif %}"
-                                   href="?level={{ current_level }}&start_date={{ start_date }}&end_date={{ end_date }}&risk_filter=all">
+                                   href="?level={{ current_level }}&start_date={{ start_date }}&end_date={{ end_date }}&risk_filter=all{% if is_replenishment_view %}&replenish=true{% endif %}">
                                     <i data-feather="list" class="me-2" style="width: 18px; height: 18px;"></i>
                                     All Items
                                     <span class="badge bg-secondary ms-2">{{ total_count }}</span>
@@ -500,7 +500,7 @@
                             </li>
                             <li class="nav-item me-2 mb-2" role="presentation">
                                 <a class="nav-link nav-link-replenish nav-link-critical {% if risk_filter == 'critical' %}active{% endif %}"
-                                   href="?level={{ current_level }}&start_date={{ start_date }}&end_date={{ end_date }}&risk_filter=critical">
+                                   href="?level={{ current_level }}&start_date={{ start_date }}&end_date={{ end_date }}&risk_filter=critical{% if is_replenishment_view %}&replenish=true{% endif %}">
                                     <i data-feather="alert-octagon" class="me-2" style="width: 18px; height: 18px;"></i>
                                     <span class="d-none d-sm-inline">Urgent - </span>Order Today
                                     <span class="badge bg-danger ms-2">{{ critical_count }}</span>
@@ -508,7 +508,7 @@
                             </li>
                             <li class="nav-item me-2 mb-2" role="presentation">
                                 <a class="nav-link nav-link-replenish nav-link-high {% if risk_filter == 'high' %}active{% endif %}"
-                                   href="?level={{ current_level }}&start_date={{ start_date }}&end_date={{ end_date }}&risk_filter=high">
+                                   href="?level={{ current_level }}&start_date={{ start_date }}&end_date={{ end_date }}&risk_filter=high{% if is_replenishment_view %}&replenish=true{% endif %}">
                                     <i data-feather="alert-triangle" class="me-2" style="width: 18px; height: 18px;"></i>
                                     <span class="d-none d-sm-inline">Soon - </span>This Week
                                     <span class="badge bg-warning ms-2">{{ high_count }}</span>
@@ -516,7 +516,7 @@
                             </li>
                             <li class="nav-item me-2 mb-2" role="presentation">
                                 <a class="nav-link nav-link-replenish nav-link-medium {% if risk_filter == 'medium' %}active{% endif %}"
-                                   href="?level={{ current_level }}&start_date={{ start_date }}&end_date={{ end_date }}&risk_filter=medium">
+                                   href="?level={{ current_level }}&start_date={{ start_date }}&end_date={{ end_date }}&risk_filter=medium{% if is_replenishment_view %}&replenish=true{% endif %}">
                                     <i data-feather="alert-circle" class="me-2" style="width: 18px; height: 18px;"></i>
                                     <span class="d-none d-sm-inline">Watch - </span>May Need
                                     <span class="badge bg-info ms-2">{{ medium_count }}</span>
@@ -524,7 +524,7 @@
                             </li>
                             <li class="nav-item mb-2" role="presentation">
                                 <a class="nav-link nav-link-replenish nav-link-low {% if risk_filter == 'low' %}active{% endif %}"
-                                   href="?level={{ current_level }}&start_date={{ start_date }}&end_date={{ end_date }}&risk_filter=low">
+                                   href="?level={{ current_level }}&start_date={{ start_date }}&end_date={{ end_date }}&risk_filter=low{% if is_replenishment_view %}&replenish=true{% endif %}">
                                     <i data-feather="check-circle" class="me-2" style="width: 18px; height: 18px;"></i>
                                     Good Stock
                                     <span class="badge bg-success ms-2">{{ low_count }}</span>

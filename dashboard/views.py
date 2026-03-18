@@ -2427,7 +2427,8 @@ def sales_forecasting(request):
 
     # Check if this is a replenishment view and preload already requested items for efficiency
     requested_items_set = set()
-    is_replenishment_view = getattr(request, 'is_replenishment_view', False)
+    # Check both request attribute (set by store_manager_replenishment) and URL parameter (set by filter tabs)
+    is_replenishment_view = getattr(request, 'is_replenishment_view', False) or request.GET.get('replenish', '').lower() == 'true'
 
     if is_replenishment_view:
         # Get all SKU+size combos that are already in active requests for this user's schools
