@@ -188,6 +188,7 @@ def can_view_menu(user, menu_section):
     permission_map = {
         'dashboard': 'dashboard.view',
         'forecasting': 'forecasting.view',
+        'finance': 'finance.view',
         'replenishment': 'replenishment.stores.view',  # Show if can view either stores or DP
         'replenishment_stores': 'replenishment.stores.view',
         'replenishment_dp': 'replenishment.demand_planning.view',

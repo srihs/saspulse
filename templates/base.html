@@ -77,6 +77,7 @@
           <!-- scrollbar removed-->
           <div class="navbar-vertical-content">
             <ul class="navbar-nav flex-column" id="navbarVerticalNav">
+              {% if request.user|has_perm:'dashboard.view' %}
               <li class="nav-item">
                 <!-- Dashboard Section -->
                 <p class="navbar-vertical-label">Dashboard</p>
@@ -162,6 +163,7 @@
                   </div>
                 </div>
               </li>
+              {% endif %}
               {% if request.user|has_perm:'forecasting.view' %}
               <li class="nav-item">
                 <!-- Forecasts Section -->
@@ -247,6 +249,7 @@
                 {% endif %}
               </li>
               {% endif %}
+              {% if request.user|has_perm:'finance.view' %}
               <li class="nav-item">
                 <!-- Finance Section -->
                 <p class="navbar-vertical-label">Finance</p>
@@ -267,6 +270,7 @@
                   </div>
                 </div>
               </li>
+              {% endif %}
               {% if request.user|has_perm:'admin.users.view' %}
               <li class="nav-item">
                 <!-- Admin Section -->

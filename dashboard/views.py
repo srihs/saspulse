@@ -1991,8 +1991,11 @@ def sales_forecasting(request):
         end_date_str = end_date.strftime('%Y-%m-%d')
         num_days = 30
 
-    # Build cache key including filters
-    filter_key = f"{school_filter}_{product_filter}_{style_code_filter}_{shop_filter}_{category_filter}_{search_query}"
+    # Build cache key including filters AND user data scope
+    # IMPORTANT: Include user's data scope in cache key to prevent users from seeing cached data
+    # that belongs to other users with different permissions
+    user_scope_key = f"{'_'.join(sorted(user_school_subcategories)) if user_school_subcategories else 'all_schools'}_{'_'.join(sorted(user_store_categories)) if user_store_categories else 'all_stores'}"
+    filter_key = f"{school_filter}_{product_filter}_{style_code_filter}_{shop_filter}_{category_filter}_{search_query}_{risk_filter}_{user_scope_key}"
     cache_key = f'forecast_{level}_{start_date_str}_{end_date_str}_{filter_key}'
 
     # Determine cache timeout based on range
