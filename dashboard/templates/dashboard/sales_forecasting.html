@@ -268,10 +268,27 @@
         <div class="row g-4">
             <div class="col-12">
                 <div class="mb-8">
+                    {% if is_replenishment_view %}
+                    <h2 class="mb-2">
+                        <i data-feather="package" class="me-2"></i>
+                        Products Needing Restocking
+                    </h2>
+                    <h5 class="text-body-tertiary fw-semibold">
+                        Review and request stock for items running low
+                    </h5>
+                    <div class="alert alert-info mt-3 d-flex align-items-start">
+                        <i data-feather="info" class="me-3 mt-1" style="width: 24px; height: 24px; flex-shrink: 0;"></i>
+                        <div>
+                            <strong>How this works:</strong> Products below show items that may run out of stock soon based on expected sales.
+                            Review urgent items first, then click "Order Stock" to request replenishment.
+                        </div>
+                    </div>
+                    {% else %}
                     <h2 class="mb-2">AI Sales Forecasting</h2>
                     <h5 class="text-body-tertiary fw-semibold">
                         Statistical + Machine Learning Predictions for School Products
                     </h5>
+                    {% endif %}
                 </div>
 
                 <!-- Filters -->
@@ -411,66 +428,127 @@
 
                 <!-- Risk Level Filter Tabs (for Store Manager Review) -->
                 {% if is_replenishment_view and not generating_forecasts and not no_forecasts_available %}
+
+                <!-- Summary Cards -->
+                <div class="row g-3 mb-4">
+                    <div class="col-md-3 col-sm-6">
+                        <div class="summary-card summary-card-critical">
+                            <div class="summary-card-icon">
+                                <i data-feather="alert-octagon"></i>
+                            </div>
+                            <div class="summary-card-content">
+                                <div class="summary-card-label">Urgent - Order Today</div>
+                                <div class="summary-card-value">{{ critical_count }}</div>
+                                <div class="summary-card-subtitle">Need immediate attention</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-sm-6">
+                        <div class="summary-card summary-card-high">
+                            <div class="summary-card-icon">
+                                <i data-feather="alert-triangle"></i>
+                            </div>
+                            <div class="summary-card-content">
+                                <div class="summary-card-label">Soon - Order This Week</div>
+                                <div class="summary-card-value">{{ high_count }}</div>
+                                <div class="summary-card-subtitle">Plan to restock soon</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-sm-6">
+                        <div class="summary-card summary-card-medium">
+                            <div class="summary-card-icon">
+                                <i data-feather="alert-circle"></i>
+                            </div>
+                            <div class="summary-card-content">
+                                <div class="summary-card-label">Watch - May Need Stock</div>
+                                <div class="summary-card-value">{{ medium_count }}</div>
+                                <div class="summary-card-subtitle">Monitor stock levels</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-sm-6">
+                        <div class="summary-card summary-card-good">
+                            <div class="summary-card-icon">
+                                <i data-feather="check-circle"></i>
+                            </div>
+                            <div class="summary-card-content">
+                                <div class="summary-card-label">Good Stock Level</div>
+                                <div class="summary-card-value">{{ low_count }}</div>
+                                <div class="summary-card-subtitle">No action needed</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="card mb-3">
                     <div class="card-header bg-body-tertiary">
                         <h5 class="mb-0">
                             <i data-feather="filter" class="me-2"></i>
-                            Filter by Risk Level
+                            Filter by Urgency
                         </h5>
                     </div>
                     <div class="card-body">
-                        <ul class="nav nav-pills mb-3" id="riskFilterTabs" role="tablist">
-                            <li class="nav-item me-2" role="presentation">
-                                <a class="nav-link {% if risk_filter == 'all' or not risk_filter %}active{% endif %}"
+                        <ul class="nav nav-pills mb-3 flex-wrap" id="riskFilterTabs" role="tablist">
+                            <li class="nav-item me-2 mb-2" role="presentation">
+                                <a class="nav-link nav-link-replenish {% if risk_filter == 'all' or not risk_filter %}active{% endif %}"
                                    href="?level={{ current_level }}&start_date={{ start_date }}&end_date={{ end_date }}&risk_filter=all">
-                                    <i data-feather="list" class="me-2" style="width: 16px; height: 16px;"></i>
+                                    <i data-feather="list" class="me-2" style="width: 18px; height: 18px;"></i>
                                     All Items
                                     <span class="badge bg-secondary ms-2">{{ total_count }}</span>
                                 </a>
                             </li>
-                            <li class="nav-item me-2" role="presentation">
-                                <a class="nav-link {% if risk_filter == 'critical' %}active{% endif %}"
+                            <li class="nav-item me-2 mb-2" role="presentation">
+                                <a class="nav-link nav-link-replenish nav-link-critical {% if risk_filter == 'critical' %}active{% endif %}"
                                    href="?level={{ current_level }}&start_date={{ start_date }}&end_date={{ end_date }}&risk_filter=critical">
-                                    <i data-feather="alert-octagon" class="me-2" style="width: 16px; height: 16px;"></i>
-                                    Critical
+                                    <i data-feather="alert-octagon" class="me-2" style="width: 18px; height: 18px;"></i>
+                                    <span class="d-none d-sm-inline">Urgent - </span>Order Today
                                     <span class="badge bg-danger ms-2">{{ critical_count }}</span>
                                 </a>
                             </li>
-                            <li class="nav-item me-2" role="presentation">
-                                <a class="nav-link {% if risk_filter == 'high' %}active{% endif %}"
+                            <li class="nav-item me-2 mb-2" role="presentation">
+                                <a class="nav-link nav-link-replenish nav-link-high {% if risk_filter == 'high' %}active{% endif %}"
                                    href="?level={{ current_level }}&start_date={{ start_date }}&end_date={{ end_date }}&risk_filter=high">
-                                    <i data-feather="alert-triangle" class="me-2" style="width: 16px; height: 16px;"></i>
-                                    High Risk
+                                    <i data-feather="alert-triangle" class="me-2" style="width: 18px; height: 18px;"></i>
+                                    <span class="d-none d-sm-inline">Soon - </span>This Week
                                     <span class="badge bg-warning ms-2">{{ high_count }}</span>
                                 </a>
                             </li>
-                            <li class="nav-item me-2" role="presentation">
-                                <a class="nav-link {% if risk_filter == 'medium' %}active{% endif %}"
+                            <li class="nav-item me-2 mb-2" role="presentation">
+                                <a class="nav-link nav-link-replenish nav-link-medium {% if risk_filter == 'medium' %}active{% endif %}"
                                    href="?level={{ current_level }}&start_date={{ start_date }}&end_date={{ end_date }}&risk_filter=medium">
-                                    <i data-feather="alert-circle" class="me-2" style="width: 16px; height: 16px;"></i>
-                                    Medium Risk
+                                    <i data-feather="alert-circle" class="me-2" style="width: 18px; height: 18px;"></i>
+                                    <span class="d-none d-sm-inline">Watch - </span>May Need
                                     <span class="badge bg-info ms-2">{{ medium_count }}</span>
                                 </a>
                             </li>
-                            <li class="nav-item" role="presentation">
-                                <a class="nav-link {% if risk_filter == 'low' %}active{% endif %}"
+                            <li class="nav-item mb-2" role="presentation">
+                                <a class="nav-link nav-link-replenish nav-link-low {% if risk_filter == 'low' %}active{% endif %}"
                                    href="?level={{ current_level }}&start_date={{ start_date }}&end_date={{ end_date }}&risk_filter=low">
-                                    <i data-feather="check-circle" class="me-2" style="width: 16px; height: 16px;"></i>
-                                    Low Risk
+                                    <i data-feather="check-circle" class="me-2" style="width: 18px; height: 18px;"></i>
+                                    Good Stock
                                     <span class="badge bg-success ms-2">{{ low_count }}</span>
                                 </a>
                             </li>
                         </ul>
 
-                        <div class="alert alert-info mb-0">
-                            <div class="d-flex align-items-start">
-                                <i data-feather="info" class="me-2 mt-1" style="width: 20px; height: 20px;"></i>
-                                <div>
-                                    <strong>Tip:</strong> Focus on Critical and High Risk items first for maximum impact.
-                                    These items are at risk of stockout and require immediate replenishment action.
-                                </div>
+                        <div class="alert alert-warning mb-0 d-flex align-items-start">
+                            <i data-feather="zap" class="me-3 mt-1" style="width: 24px; height: 24px; flex-shrink: 0;"></i>
+                            <div>
+                                <strong>Priority Tip:</strong> Start with "Urgent - Order Today" items first to prevent stockouts.
+                                These products will run out soonest based on expected customer demand.
                             </div>
                         </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Data Scope Warning (for users with store scope but no assigned stores) -->
+                {% if data_scope_warning %}
+                <div class="alert alert-danger d-flex align-items-start mb-4">
+                    <i data-feather="alert-circle" class="me-3 mt-1" style="width: 24px; height: 24px; flex-shrink: 0;"></i>
+                    <div>
+                        <strong>Access Restricted:</strong> {{ data_scope_warning }}
                     </div>
                 </div>
                 {% endif %}
@@ -548,14 +626,44 @@
                                         {% elif render_level == 'shop' %}
                                         {% if display_mode == 'flat_table' %}
                                         <th></th>
-                                        <th>Risk Level</th>
+                                        <th>Urgency
+                                            <i data-feather="help-circle" class="text-muted ms-1"
+                                               style="width: 14px; height: 14px; cursor: help;"
+                                               data-bs-toggle="tooltip"
+                                               title="How soon this item needs restocking. Urgent items may run out within days."></i>
+                                        </th>
                                         <th>School</th>
-                                        <th>Product</th>
-                                        <th>SKU</th>
-                                        <th class="text-end">Stock on Hand</th>
-                                        <th class="text-end">Incoming</th>
-                                        <th class="text-end">Forecasted Demand</th>
-                                        <th class="text-center">Stock Gap</th>
+                                        <th>Product Name</th>
+                                        <th class="d-none d-lg-table-cell">Product Code
+                                            <i data-feather="help-circle" class="text-muted ms-1"
+                                               style="width: 14px; height: 14px; cursor: help;"
+                                               data-bs-toggle="tooltip"
+                                               title="Unique identifier for this product variation"></i>
+                                        </th>
+                                        <th class="text-end">Current Stock
+                                            <i data-feather="help-circle" class="text-muted ms-1"
+                                               style="width: 14px; height: 14px; cursor: help;"
+                                               data-bs-toggle="tooltip"
+                                               title="How many units are currently in stock"></i>
+                                        </th>
+                                        <th class="text-end d-none d-md-table-cell">On Order
+                                            <i data-feather="help-circle" class="text-muted ms-1"
+                                               style="width: 14px; height: 14px; cursor: help;"
+                                               data-bs-toggle="tooltip"
+                                               title="Units already ordered and coming soon"></i>
+                                        </th>
+                                        <th class="text-end">Expected Sales
+                                            <i data-feather="help-circle" class="text-muted ms-1"
+                                               style="width: 14px; height: 14px; cursor: help;"
+                                               data-bs-toggle="tooltip"
+                                               title="How many units we expect to sell in the forecast period"></i>
+                                        </th>
+                                        <th class="text-center">Amount Needed
+                                            <i data-feather="help-circle" class="text-muted ms-1"
+                                               style="width: 14px; height: 14px; cursor: help;"
+                                               data-bs-toggle="tooltip"
+                                               title="How many more units needed. Negative numbers mean shortage."></i>
+                                        </th>
                                         <th class="text-center">Actions</th>
                                         {% else %}
                                         <th></th>
@@ -581,66 +689,105 @@
                                     {% if display_mode == 'flat_table' and all_variations %}
                                     <!-- ========== FLAT TABLE VIEW FOR STORE MANAGER ========== -->
                                     {% for variation in all_variations %}
-                                    <tr class="{% if variation.stock_gap < 0 %}table-warning{% endif %}">
+                                    <tr class="{% if variation.risk_tag == 'CRITICAL' %}table-danger-subtle replenish-row-critical{% elif variation.risk_tag == 'HIGH' %}table-warning-subtle replenish-row-high{% elif variation.stock_gap < 0 %}table-warning{% endif %}">
                                         <td></td>
                                         <td class="text-center align-middle">
                                             {% if variation.risk_tag == 'CRITICAL' %}
-                                                <span class="badge bg-danger">
-                                                    <i data-feather="alert-octagon" style="width: 14px; height: 14px;"></i>
-                                                    CRITICAL
+                                                <span class="badge-replenish badge-replenish-critical">
+                                                    <i data-feather="alert-octagon" style="width: 16px; height: 16px;"></i>
+                                                    <span class="d-none d-sm-inline">URGENT</span>
+                                                    <span class="d-inline d-sm-none">!</span>
                                                 </span>
                                             {% elif variation.risk_tag == 'HIGH' %}
-                                                <span class="badge bg-warning">
-                                                    <i data-feather="alert-triangle" style="width: 14px; height: 14px;"></i>
-                                                    HIGH
+                                                <span class="badge-replenish badge-replenish-high">
+                                                    <i data-feather="alert-triangle" style="width: 16px; height: 16px;"></i>
+                                                    <span class="d-none d-sm-inline">SOON</span>
+                                                    <span class="d-inline d-sm-none">!</span>
                                                 </span>
                                             {% elif variation.risk_tag == 'MEDIUM' %}
-                                                <span class="badge bg-info">
-                                                    <i data-feather="alert-circle" style="width: 14px; height: 14px;"></i>
-                                                    MEDIUM
+                                                <span class="badge-replenish badge-replenish-medium">
+                                                    <i data-feather="alert-circle" style="width: 16px; height: 16px;"></i>
+                                                    <span class="d-none d-sm-inline">WATCH</span>
                                                 </span>
                                             {% else %}
-                                                <span class="badge bg-success">
-                                                    <i data-feather="check-circle" style="width: 14px; height: 14px;"></i>
-                                                    LOW
+                                                <span class="badge-replenish badge-replenish-low">
+                                                    <i data-feather="check-circle" style="width: 16px; height: 16px;"></i>
+                                                    <span class="d-none d-sm-inline">OK</span>
                                                 </span>
                                             {% endif %}
                                         </td>
-                                        <td class="text-start align-middle">{{ variation.school_name }}</td>
+                                        <td class="text-start align-middle"><strong>{{ variation.school_name }}</strong></td>
                                         <td class="text-start align-middle">{{ variation.product_name }}</td>
-                                        <td class="text-start align-middle"><code>{{ variation.sku_code }}</code></td>
-                                        <td class="text-end align-middle">{{ variation.stock_on_hand|floatformat:0 }}</td>
-                                        <td class="text-end align-middle">{{ variation.incoming_stock|floatformat:0 }}</td>
-                                        <td class="text-end align-middle">{{ variation.total_quantity|floatformat:0 }}</td>
+                                        <td class="text-start align-middle d-none d-lg-table-cell"><code>{{ variation.sku_code }}</code></td>
+                                        <td class="text-end align-middle">
+                                            <strong>{{ variation.stock_on_hand|floatformat:0 }}</strong>
+                                            <small class="text-muted d-block d-md-none">units</small>
+                                        </td>
+                                        <td class="text-end align-middle d-none d-md-table-cell">{{ variation.incoming_stock|floatformat:0 }}</td>
+                                        <td class="text-end align-middle">
+                                            <strong>{{ variation.total_quantity|floatformat:0 }}</strong>
+                                            <small class="text-muted d-block d-md-none">expected</small>
+                                        </td>
                                         <td class="text-center align-middle">
                                             {% if variation.stock_gap < 0 %}
-                                                <span class="badge bg-danger">{{ variation.stock_gap|floatformat:0 }}</span>
+                                                <span class="badge-stock-gap badge-stock-gap-negative">
+                                                    {{ variation.stock_gap|floatformat:0 }}
+                                                    <small class="d-block" style="font-size: 0.7em; margin-top: 2px;">short</small>
+                                                </span>
                                             {% else %}
-                                                <span class="badge bg-secondary">{{ variation.stock_gap|floatformat:0 }}</span>
+                                                <span class="badge-stock-gap badge-stock-gap-positive">
+                                                    +{{ variation.stock_gap|floatformat:0 }}
+                                                    <small class="d-block" style="font-size: 0.7em; margin-top: 2px;">extra</small>
+                                                </span>
                                             {% endif %}
                                         </td>
                                         <td class="text-center align-middle">
-                                            <button class="btn btn-sm btn-success approve-btn"
-                                                    data-sku="{{ variation.sku_code }}"
-                                                    data-product="{{ variation.product_name }}"
-                                                    data-size="{{ variation.size }}"
-                                                    data-color=""
-                                                    data-school="{{ variation.school_name }}"
-                                                    data-stock-on-hand="{{ variation.stock_on_hand|floatformat:0 }}"
-                                                    data-incoming-stock="{{ variation.incoming_stock|floatformat:0 }}"
-                                                    data-forecasted-stock="{{ variation.total_quantity|floatformat:0 }}"
-                                                    data-stock-gap="{{ variation.stock_gap|floatformat:0 }}">
-                                                <i class="fas fa-check"></i> Approve
-                                            </button>
-                                            <button class="btn btn-sm btn-warning modify-btn"
-                                                    data-sku="{{ variation.sku_code }}"
-                                                    data-product="{{ variation.product_name }}"
-                                                    data-size="{{ variation.size }}"
-                                                    data-color=""
-                                                    data-school="{{ variation.school_name }}"
-                                                    data-stock-gap="{{ variation.stock_gap|floatformat:0 }}">
-                                                <i class="fas fa-edit"></i> Modify
-                                            </button>
+                                            <div class="btn-group-vertical btn-group-sm d-lg-none" role="group">
+                                                <button class="btn btn-success approve-btn"
+                                                        data-sku="{{ variation.sku_code }}"
+                                                        data-product="{{ variation.product_name }}"
+                                                        data-size="{{ variation.size }}"
+                                                        data-color=""
+                                                        data-school="{{ variation.school_name }}"
+                                                        data-stock-on-hand="{{ variation.stock_on_hand|floatformat:0 }}"
+                                                        data-incoming-stock="{{ variation.incoming_stock|floatformat:0 }}"
+                                                        data-forecasted-stock="{{ variation.total_quantity|floatformat:0 }}"
+                                                        data-stock-gap="{{ variation.stock_gap|floatformat:0 }}">
+                                                    <i data-feather="package" style="width: 14px; height: 14px;"></i> Order Stock
+                                                </button>
+                                                <button class="btn btn-outline-secondary modify-btn"
+                                                        data-sku="{{ variation.sku_code }}"
+                                                        data-product="{{ variation.product_name }}"
+                                                        data-size="{{ variation.size }}"
+                                                        data-color=""
+                                                        data-school="{{ variation.school_name }}"
+                                                        data-stock-gap="{{ variation.stock_gap|floatformat:0 }}">
+                                                    <i data-feather="edit-2" style="width: 14px; height: 14px;"></i> Adjust
+                                                </button>
+                                            </div>
+                                            <div class="d-none d-lg-block">
+                                                <button class="btn btn-sm btn-success approve-btn me-1"
+                                                        data-sku="{{ variation.sku_code }}"
+                                                        data-product="{{ variation.product_name }}"
+                                                        data-size="{{ variation.size }}"
+                                                        data-color=""
+                                                        data-school="{{ variation.school_name }}"
+                                                        data-stock-on-hand="{{ variation.stock_on_hand|floatformat:0 }}"
+                                                        data-incoming-stock="{{ variation.incoming_stock|floatformat:0 }}"
+                                                        data-forecasted-stock="{{ variation.total_quantity|floatformat:0 }}"
+                                                        data-stock-gap="{{ variation.stock_gap|floatformat:0 }}">
+                                                    <i data-feather="package" style="width: 14px; height: 14px;"></i> Order Stock
+                                                </button>
+                                                <button class="btn btn-sm btn-outline-secondary modify-btn"
+                                                        data-sku="{{ variation.sku_code }}"
+                                                        data-product="{{ variation.product_name }}"
+                                                        data-size="{{ variation.size }}"
+                                                        data-color=""
+                                                        data-school="{{ variation.school_name }}"
+                                                        data-stock-gap="{{ variation.stock_gap|floatformat:0 }}">
+                                                    <i data-feather="edit-2" style="width: 14px; height: 14px;"></i> Adjust Quantity
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                     {% empty %}

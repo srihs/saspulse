@@ -1370,3 +1370,313 @@ table.dataTable tbody tr.child td table {
         font-size: 0.9rem;
     }
 }
+
+/* ========================================
+   REPLENISHMENT PAGE STYLES (STORE MANAGER UX)
+   ======================================== */
+
+/* Summary Cards at Top */
+.summary-card {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    border-left: 4px solid #e5e7eb;
+    min-height: 120px;
+}
+
+.summary-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.summary-card-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.summary-card-icon svg {
+    width: 28px;
+    height: 28px;
+}
+
+.summary-card-content {
+    flex: 1;
+}
+
+.summary-card-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #6b7280;
+    margin-bottom: 0.5rem;
+}
+
+.summary-card-value {
+    font-size: 2.25rem;
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: 0.25rem;
+}
+
+.summary-card-subtitle {
+    font-size: 0.8125rem;
+    color: #6b7280;
+}
+
+/* Critical (Urgent) Card */
+.summary-card-critical {
+    border-left-color: #dc2626;
+}
+
+.summary-card-critical .summary-card-icon {
+    background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+    color: #dc2626;
+}
+
+.summary-card-critical .summary-card-value {
+    color: #dc2626;
+}
+
+/* High (Soon) Card */
+.summary-card-high {
+    border-left-color: #f59e0b;
+}
+
+.summary-card-high .summary-card-icon {
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    color: #f59e0b;
+}
+
+.summary-card-high .summary-card-value {
+    color: #f59e0b;
+}
+
+/* Medium (Watch) Card */
+.summary-card-medium {
+    border-left-color: #3b82f6;
+}
+
+.summary-card-medium .summary-card-icon {
+    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+    color: #3b82f6;
+}
+
+.summary-card-medium .summary-card-value {
+    color: #3b82f6;
+}
+
+/* Good Stock Card */
+.summary-card-good {
+    border-left-color: #10b981;
+}
+
+.summary-card-good .summary-card-icon {
+    background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+    color: #10b981;
+}
+
+.summary-card-good .summary-card-value {
+    color: #10b981;
+}
+
+/* Enhanced Nav Pills for Replenishment */
+.nav-link-replenish {
+    padding: 0.75rem 1.25rem;
+    font-weight: 600;
+    font-size: 0.9375rem;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+}
+
+.nav-link-replenish:hover {
+    background-color: #f3f4f6;
+    transform: translateY(-2px);
+}
+
+.nav-link-replenish.active {
+    font-weight: 700;
+}
+
+/* Risk Badge Styles (Larger & More Prominent) */
+.badge-replenish {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.875rem;
+    border-radius: 8px;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+}
+
+.badge-replenish-critical {
+    background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+    color: white;
+    box-shadow: 0 2px 6px rgba(220, 38, 38, 0.3);
+}
+
+.badge-replenish-high {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    color: white;
+    box-shadow: 0 2px 6px rgba(245, 158, 11, 0.3);
+}
+
+.badge-replenish-medium {
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    color: white;
+    box-shadow: 0 2px 6px rgba(59, 130, 246, 0.3);
+}
+
+.badge-replenish-low {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: white;
+    box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3);
+}
+
+/* Stock Gap Badges */
+.badge-stock-gap {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 0.625rem 0.875rem;
+    border-radius: 8px;
+    font-size: 1.125rem;
+    font-weight: 700;
+    min-width: 70px;
+}
+
+.badge-stock-gap-negative {
+    background: linear-gradient(135deg, #fecaca 0%, #fca5a5 100%);
+    color: #991b1b;
+    border: 2px solid #dc2626;
+}
+
+.badge-stock-gap-positive {
+    background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+    color: #065f46;
+    border: 2px solid #10b981;
+}
+
+/* Table Row Highlighting for Critical Items */
+.replenish-row-critical {
+    border-left: 4px solid #dc2626 !important;
+}
+
+.replenish-row-high {
+    border-left: 4px solid #f59e0b !important;
+}
+
+.table-danger-subtle {
+    background-color: #fef2f2 !important;
+}
+
+.table-warning-subtle {
+    background-color: #fffbeb !important;
+}
+
+.replenish-row-critical:hover,
+.replenish-row-high:hover {
+    background-color: #f3f4f6 !important;
+}
+
+/* Responsive Adjustments for Replenishment Page */
+@media (max-width: 991px) {
+    .summary-card {
+        padding: 1.25rem;
+    }
+
+    .summary-card-value {
+        font-size: 1.875rem;
+    }
+
+    .summary-card-icon {
+        width: 48px;
+        height: 48px;
+    }
+
+    .summary-card-icon svg {
+        width: 24px;
+        height: 24px;
+    }
+}
+
+@media (max-width: 767px) {
+    .summary-card {
+        padding: 1rem;
+        min-height: 100px;
+    }
+
+    .summary-card-label {
+        font-size: 0.6875rem;
+    }
+
+    .summary-card-value {
+        font-size: 1.5rem;
+    }
+
+    .summary-card-subtitle {
+        font-size: 0.75rem;
+    }
+
+    .badge-replenish {
+        padding: 0.375rem 0.625rem;
+        font-size: 0.75rem;
+        gap: 0.25rem;
+    }
+
+    .badge-stock-gap {
+        font-size: 1rem;
+        padding: 0.5rem 0.75rem;
+        min-width: 60px;
+    }
+
+    .nav-link-replenish {
+        padding: 0.625rem 1rem;
+        font-size: 0.875rem;
+    }
+}
+
+/* Mobile Table Improvements */
+@media (max-width: 575px) {
+    .summary-card {
+        flex-direction: column;
+        text-align: center;
+    }
+
+    .summary-card-icon {
+        margin-bottom: 0.5rem;
+    }
+}
+
+/* Touch-Friendly Buttons for Tablets */
+.btn-group-vertical .btn {
+    min-height: 44px;
+    font-size: 0.875rem;
+}
+
+/* Tooltip Improvements for Help Icons */
+[data-bs-toggle="tooltip"] {
+    cursor: help;
+    opacity: 0.7;
+    transition: opacity 0.2s ease;
+}
+
+[data-bs-toggle="tooltip"]:hover {
+    opacity: 1;
+}

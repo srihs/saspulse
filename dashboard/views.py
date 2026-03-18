@@ -1930,6 +1930,9 @@ def sales_forecasting(request):
     user_school_subcategories = []
     user_store_categories = []
 
+    # Log user's data scope configuration
+    logger.info(f'User: {user.username}, is_superuser: {user.is_superuser}, data_scope: {data_scope}')
+
     if data_scope == 'school' and not user.is_superuser:
         user_school_subcategories = user.get_assigned_school_subcategories()
         # If user has school scope but no assignments, they see no data
@@ -1938,6 +1941,7 @@ def sales_forecasting(request):
 
     if data_scope == 'store' and not user.is_superuser:
         user_store_categories = user.get_accessible_categories()
+        logger.info(f'Retrieved {len(user_store_categories)} store categories for user {user.username}: {user_store_categories}')
         # If user has store scope but no assignments, they see no data
         if not user_store_categories:
             logger.warning(f'User {user.username} has store scope but no assigned stores')
@@ -2059,7 +2063,9 @@ def sales_forecasting(request):
         logger.info(f'Date range: {start_date_str} to {end_date_str}')
         logger.info(f'Search query: {search_query}')
         logger.info(f'Shop filter: {shop_filter}')
+        logger.info(f'User: {user.username}, Data scope: {data_scope}')
         logger.info(f'User school subcategories: {user_school_subcategories}')
+        logger.info(f'User store categories: {user_store_categories}')
 
         # Shop level does its own deduplication, so skip generic dedup
         skip_generic_dedup = True
@@ -2105,6 +2111,9 @@ def sales_forecasting(request):
             placeholders = ', '.join(['%s'] * len(user_store_categories))
             sql += f" AND p.category_name IN ({placeholders})"
             params.extend(user_store_categories)
+            logger.info(f'DEBUG: Applied store filter - restricting to {len(user_store_categories)} stores: {user_store_categories}')
+        else:
+            logger.info(f'DEBUG: No store filter applied - user will see ALL stores')
 
         # Add search query if provided
         if search_query:
@@ -3387,6 +3396,12 @@ def sales_forecasting(request):
         low_count = 0
         total_count = 0
 
+    # Warning message for users with store scope but no assigned stores
+    data_scope_warning = None
+    if data_scope == 'store' and not user_store_categories:
+        data_scope_warning = "You have store-level access but no stores are assigned to your account. Please contact your administrator to assign stores."
+        logger.warning(f'User {user.username} has store scope but no assigned stores')
+
     context = {
         'forecasts': forecast_list,
         'forecast_list_json': json.dumps(forecast_list, default=str),
@@ -3413,7 +3428,9 @@ def sales_forecasting(request):
         'high_count': high_count,
         'medium_count': medium_count,
         'low_count': low_count,
-        'total_count': total_count
+        'total_count': total_count,
+        # Data scope warning
+        'data_scope_warning': data_scope_warning
     }
 
     # Add flat table data for shop level with filter OR replenishment view (Store Manager view)
