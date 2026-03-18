@@ -6533,14 +6533,14 @@ def store_daily_pick_list(request):
             'category': category,
             'current_stock': int(current_stock),
             'incoming_stock': int(incoming_stock),
-            'last_7_days_sales': int(total_qty_sold),
-            'next_7_days_forecast': int(forecasted_demand),
+            'total_sales_7d': int(total_qty_sold),
+            'forecasted_demand': int(forecasted_demand),
         })
 
         categories.add(category)
 
     # Sort by highest forecasted demand (descending)
-    products.sort(key=lambda x: x['next_7_days_forecast'], reverse=True)
+    products.sort(key=lambda x: x['forecasted_demand'], reverse=True)
 
     # Get unique categories for filter dropdown
     all_categories = []
@@ -6561,7 +6561,7 @@ def store_daily_pick_list(request):
         'target_date': target_date,
         'start_date': start_date,
         'end_date': end_date,
-        'products': products,
+        'pick_list': products,
         'total_items': len(products),
         'category_count': len(categories),
         'store_name': store_name,
