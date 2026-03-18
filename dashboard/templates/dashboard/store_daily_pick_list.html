@@ -4,486 +4,319 @@
 {% block title %}Daily Pick List{% endblock %}
 
 {% block extra_css %}
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.4/css/dataTables.bootstrap5.min.css">
 <style>
-    .priority-critical { background-color: #fee; border-left: 4px solid #dc3545; }
-    .priority-high { background-color: #fff3cd; border-left: 4px solid #ffc107; }
-    .priority-medium { background-color: #d1ecf1; border-left: 4px solid #17a2b8; }
-    .priority-low { background-color: #d4edda; border-left: 4px solid #28a745; }
-
-    .pick-list-table th {
-        background-color: #f8f9fa;
-        font-weight: 600;
-        position: sticky;
-        top: 0;
-        z-index: 10;
+    .page-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 2rem;
+        border-radius: 12px;
+        margin-bottom: 2rem;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     }
 
-    .priority-badge {
-        padding: 0.4rem 0.8rem;
-        font-size: 0.85rem;
+    .info-card {
+        background: #f8f9fa;
+        border-left: 4px solid #0d6efd;
+        padding: 1.5rem;
+        border-radius: 8px;
+        margin-bottom: 2rem;
+    }
+
+    .info-card .icon {
+        font-size: 1.5rem;
+        color: #0d6efd;
+        margin-right: 1rem;
+    }
+
+    .data-table-card {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+        padding: 1.5rem;
+    }
+
+    .sales-badge {
+        padding: 0.5rem 1rem;
+        border-radius: 20px;
         font-weight: 600;
+        font-size: 0.9rem;
+        display: inline-block;
+        min-width: 60px;
+        text-align: center;
+    }
+
+    .sales-badge-blue {
+        background: #e7f1ff;
+        color: #0d6efd;
+        border: 1px solid #b6d4fe;
+    }
+
+    .sales-badge-green {
+        background: #d1e7dd;
+        color: #198754;
+        border: 1px solid #a3cfbb;
+    }
+
+    table.dataTable thead th {
+        background-color: #f8f9fa;
+        font-weight: 600;
+        border-bottom: 2px solid #dee2e6;
+        padding: 1rem 0.75rem;
+        color: #495057;
+    }
+
+    table.dataTable tbody td {
+        padding: 1rem 0.75rem;
+        vertical-align: middle;
+    }
+
+    table.dataTable tbody tr:hover {
+        background-color: #f8f9fa;
+    }
+
+    .product-name {
+        font-weight: 500;
+        color: #212529;
+    }
+
+    .sku-code {
+        font-family: 'Courier New', monospace;
+        background: #e9ecef;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        font-size: 0.85rem;
+        color: #495057;
+    }
+
+    .school-name {
+        color: #6c757d;
+        font-size: 0.9rem;
+    }
+
+    .stock-number {
+        font-weight: 600;
+        color: #212529;
+        font-size: 1rem;
+    }
+
+    .incoming-stock {
+        color: #0d6efd;
+        font-size: 0.9rem;
+    }
+
+    .dataTables_wrapper .dataTables_filter input {
+        border: 1px solid #ced4da;
+        border-radius: 6px;
+        padding: 0.5rem 1rem;
+        margin-left: 0.5rem;
+    }
+
+    .dataTables_wrapper .dataTables_length select {
+        border: 1px solid #ced4da;
+        border-radius: 6px;
+        padding: 0.5rem;
+        margin: 0 0.5rem;
+    }
+
+    .page-subtitle {
+        font-size: 1.1rem;
+        opacity: 0.9;
+        margin-top: 0.5rem;
+    }
+
+    .current-date {
+        display: inline-flex;
+        align-items: center;
+        background: rgba(255, 255, 255, 0.2);
+        padding: 0.5rem 1rem;
+        border-radius: 20px;
+        margin-top: 1rem;
+    }
+
+    .current-date i {
+        margin-right: 0.5rem;
     }
 
     @media print {
-        .no-print { display: none; }
-        .card { border: 1px solid #dee2e6 !important; box-shadow: none !important; }
-        .pick-checkbox { display: inline-block; }
-        h2 { font-size: 1.5rem; }
-        h5 { font-size: 1rem; }
+        .no-print { display: none !important; }
+        .data-table-card { box-shadow: none; }
+        .page-header { background: #667eea; }
     }
 
-    .days-critical { color: #dc3545; font-weight: bold; }
-    .days-high { color: #ffc107; font-weight: bold; }
-    .days-medium { color: #17a2b8; }
-    .days-low { color: #28a745; }
+    /* DataTables custom styling */
+    .dataTables_wrapper .dataTables_paginate .paginate_button {
+        padding: 0.5rem 1rem;
+        margin: 0 2px;
+        border-radius: 6px;
+    }
+
+    .dataTables_wrapper .dataTables_paginate .paginate_button.current {
+        background: #0d6efd;
+        color: white !important;
+        border: 1px solid #0d6efd;
+    }
+
+    .export-btn {
+        margin-bottom: 1rem;
+    }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="pb-5">
-    <div class="row g-4">
-        <div class="col-12">
-            <!-- Header -->
-            <div class="mb-4">
-                <h2 class="mb-2">Daily Pick List (Weekly Forecast)</h2>
-                <h5 class="text-body-tertiary fw-semibold">
-                    Based on 7-day sales analysis ({{ start_date|date:"M d" }} - {{ end_date|date:"M d, Y" }})
-                </h5>
-            </div>
-
-            {% if error %}
-            <div class="alert alert-danger">
-                <i class="fas fa-exclamation-triangle me-2"></i>
-                {{ error }}
-            </div>
-            {% else %}
-
-            <!-- Branch Info Banner -->
-            <div class="alert alert-info mb-4 no-print">
-                <i class="fas fa-store me-2"></i>
-                <strong>Branch:</strong> {{ branch_name }}
-                {% if not is_admin %}
-                <span class="text-muted ms-3">(Store Manager View)</span>
-                {% endif %}
-            </div>
-
-            <!-- Filters and Controls -->
-            <div class="card mb-4 no-print">
-                <div class="card-body">
-                    <form method="GET" id="filterForm">
-                        <div class="row g-3">
-                            <div class="col-md-3">
-                                <label class="form-label">End Date (Analysis)</label>
-                                <input type="date"
-                                       name="date"
-                                       class="form-control"
-                                       value="{{ target_date|date:'Y-m-d' }}"
-                                       max="{{ today|date:'Y-m-d' }}">
-                                <small class="text-muted">7-day analysis ending on this date</small>
-                            </div>
-                            <div class="col-md-2">
-                                <label class="form-label">Forecast Horizon</label>
-                                <select name="forecast_days" class="form-select">
-                                    <option value="3" {% if forecast_days == 3 %}selected{% endif %}>Next 3 Days</option>
-                                    <option value="7" {% if forecast_days == 7 %}selected{% endif %}>Next 7 Days</option>
-                                </select>
-                                <small class="text-muted">Demand forecast period</small>
-                            </div>
-                            <div class="col-md-2">
-                                <label class="form-label">Safety Buffer</label>
-                                <select name="safety_buffer" class="form-select">
-                                    <option value="auto" {% if safety_buffer_option == 'auto' %}selected{% endif %}>Auto (10-30%)</option>
-                                    <option value="10" {% if safety_buffer_option == '10' %}selected{% endif %}>10% Fixed</option>
-                                    <option value="20" {% if safety_buffer_option == '20' %}selected{% endif %}>20% Fixed</option>
-                                    <option value="30" {% if safety_buffer_option == '30' %}selected{% endif %}>30% Fixed</option>
-                                </select>
-                                <small class="text-muted">Forecast buffer</small>
-                            </div>
-                            <div class="col-md-2">
-                                <label class="form-label">Category</label>
-                                <select name="category" class="form-select">
-                                    <option value="">All</option>
-                                    {% for cat in all_categories %}
-                                        <option value="{{ cat }}" {% if cat == selected_category %}selected{% endif %}>
-                                            {{ cat }}
-                                        </option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                            <div class="col-md-1">
-                                <label class="form-label">Min Pick</label>
-                                <input type="number"
-                                       name="min_qty"
-                                       class="form-control"
-                                       value="{{ min_pick_qty }}"
-                                       min="1">
-                            </div>
-                            <div class="col-md-2">
-                                <label class="form-label">&nbsp;</label>
-                                <div class="d-grid gap-2">
-                                    <button type="submit" class="btn btn-primary">
-                                        <i class="fas fa-sync-alt me-2"></i>Refresh
-                                    </button>
-                                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="window.print()">
-                                        <i class="fas fa-print me-2"></i>Print
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </form>
-                </div>
-            </div>
-
-            <!-- Summary Cards -->
-            <div class="row mb-4">
-                <div class="col-md-3">
-                    <div class="card border-primary">
-                        <div class="card-body text-center">
-                            <h6 class="text-muted mb-2">Total Items</h6>
-                            <h2 class="text-primary mb-0">{{ total_items }}</h2>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="card border-success">
-                        <div class="card-body text-center">
-                            <h6 class="text-muted mb-2">Total Pick Quantity</h6>
-                            <h2 class="text-success mb-0">{{ total_pick_quantity }}</h2>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="card border-info">
-                        <div class="card-body text-center">
-                            <h6 class="text-muted mb-2">Categories</h6>
-                            <h2 class="text-info mb-0">{{ category_count }}</h2>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="card border-warning">
-                        <div class="card-body text-center">
-                            <h6 class="text-muted mb-2">Critical Items</h6>
-                            <h2 class="text-warning mb-0">{{ critical_items|length }}</h2>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            {% if pick_list %}
-
-            <!-- Critical Priority Items -->
-            {% if critical_items %}
-            <div class="card mb-4 priority-critical">
-                <div class="card-header bg-danger text-white">
-                    <h5 class="mb-0">
-                        <i class="fas fa-exclamation-triangle me-2"></i>
-                        CRITICAL Priority ({{ critical_items|length }} items)
-                        <small class="ms-3">Less than 2 days until stockout</small>
-                    </h5>
-                </div>
-                <div class="card-body p-0">
-                    <div class="table-responsive">
-                        <table class="table table-sm table-hover mb-0 pick-list-table">
-                            <thead>
-                                <tr>
-                                    <th style="width: 50px;" class="no-print">
-                                        <input type="checkbox" class="form-check-input">
-                                    </th>
-                                    <th>SKU</th>
-                                    <th>Product</th>
-                                    <th>Category</th>
-                                    <th class="text-center" title="Average daily sales over past 7 days">Avg Daily</th>
-                                    <th class="text-center" title="Sales consistency">Pattern</th>
-                                    <th class="text-center">Stock</th>
-                                    <th class="text-center" title="Forecasted demand for selected horizon">Forecast</th>
-                                    <th class="text-center" title="Days until stockout at current rate">Days Left</th>
-                                    <th class="text-center">Pick Qty</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for item in critical_items %}
-                                <tr>
-                                    <td class="no-print">
-                                        <input type="checkbox" class="form-check-input pick-checkbox">
-                                    </td>
-                                    <td><code>{{ item.sku }}</code></td>
-                                    <td><strong>{{ item.product_name }}</strong></td>
-                                    <td><small class="text-muted">{{ item.category }}</small></td>
-                                    <td class="text-center"><span class="badge bg-primary">{{ item.avg_daily_sales }}</span></td>
-                                    <td class="text-center">
-                                        <small class="{% if item.sales_consistency == 'Stable' %}text-success{% elif item.sales_consistency == 'Moderate' %}text-warning{% else %}text-danger{% endif %}">
-                                            {{ item.sales_consistency }}
-                                        </small>
-                                    </td>
-                                    <td class="text-center">{{ item.current_stock }}</td>
-                                    <td class="text-center text-muted">{{ item.forecasted_demand }}</td>
-                                    <td class="text-center days-critical">{{ item.days_until_stockout }}</td>
-                                    <td class="text-center"><strong class="text-danger">{{ item.pick_qty }}</strong></td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-            {% endif %}
-
-            <!-- High Priority Items -->
-            {% if high_items %}
-            <div class="card mb-4 priority-high">
-                <div class="card-header bg-warning">
-                    <h5 class="mb-0">
-                        <i class="fas fa-exclamation-circle me-2"></i>
-                        HIGH Priority ({{ high_items|length }} items)
-                        <small class="ms-3">2-4 days until stockout</small>
-                    </h5>
-                </div>
-                <div class="card-body p-0">
-                    <div class="table-responsive">
-                        <table class="table table-sm table-hover mb-0 pick-list-table">
-                            <thead>
-                                <tr>
-                                    <th style="width: 50px;" class="no-print">
-                                        <input type="checkbox" class="form-check-input">
-                                    </th>
-                                    <th>SKU</th>
-                                    <th>Product</th>
-                                    <th>Category</th>
-                                    <th class="text-center" title="Average daily sales over past 7 days">Avg Daily</th>
-                                    <th class="text-center" title="Sales consistency">Pattern</th>
-                                    <th class="text-center">Stock</th>
-                                    <th class="text-center" title="Forecasted demand for selected horizon">Forecast</th>
-                                    <th class="text-center" title="Days until stockout at current rate">Days Left</th>
-                                    <th class="text-center">Pick Qty</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for item in high_items %}
-                                <tr>
-                                    <td class="no-print">
-                                        <input type="checkbox" class="form-check-input pick-checkbox">
-                                    </td>
-                                    <td><code>{{ item.sku }}</code></td>
-                                    <td>{{ item.product_name }}</td>
-                                    <td><small class="text-muted">{{ item.category }}</small></td>
-                                    <td class="text-center"><span class="badge bg-primary">{{ item.avg_daily_sales }}</span></td>
-                                    <td class="text-center">
-                                        <small class="{% if item.sales_consistency == 'Stable' %}text-success{% elif item.sales_consistency == 'Moderate' %}text-warning{% else %}text-danger{% endif %}">
-                                            {{ item.sales_consistency }}
-                                        </small>
-                                    </td>
-                                    <td class="text-center">{{ item.current_stock }}</td>
-                                    <td class="text-center text-muted">{{ item.forecasted_demand }}</td>
-                                    <td class="text-center days-high">{{ item.days_until_stockout }}</td>
-                                    <td class="text-center"><strong class="text-warning">{{ item.pick_qty }}</strong></td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-            {% endif %}
-
-            <!-- Medium Priority Items -->
-            {% if medium_items %}
-            <div class="card mb-4 priority-medium">
-                <div class="card-header bg-info text-white">
-                    <h5 class="mb-0">
-                        <i class="fas fa-info-circle me-2"></i>
-                        MEDIUM Priority ({{ medium_items|length }} items)
-                        <small class="ms-3">4-7 days until stockout</small>
-                    </h5>
-                </div>
-                <div class="card-body p-0">
-                    <div class="table-responsive">
-                        <table class="table table-sm table-hover mb-0 pick-list-table">
-                            <thead>
-                                <tr>
-                                    <th style="width: 50px;" class="no-print">
-                                        <input type="checkbox" class="form-check-input">
-                                    </th>
-                                    <th>SKU</th>
-                                    <th>Product</th>
-                                    <th>Category</th>
-                                    <th class="text-center" title="Average daily sales over past 7 days">Avg Daily</th>
-                                    <th class="text-center" title="Sales consistency">Pattern</th>
-                                    <th class="text-center">Stock</th>
-                                    <th class="text-center" title="Forecasted demand for selected horizon">Forecast</th>
-                                    <th class="text-center" title="Days until stockout at current rate">Days Left</th>
-                                    <th class="text-center">Pick Qty</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for item in medium_items %}
-                                <tr>
-                                    <td class="no-print">
-                                        <input type="checkbox" class="form-check-input pick-checkbox">
-                                    </td>
-                                    <td><code>{{ item.sku }}</code></td>
-                                    <td>{{ item.product_name }}</td>
-                                    <td><small class="text-muted">{{ item.category }}</small></td>
-                                    <td class="text-center"><span class="badge bg-primary">{{ item.avg_daily_sales }}</span></td>
-                                    <td class="text-center">
-                                        <small class="{% if item.sales_consistency == 'Stable' %}text-success{% elif item.sales_consistency == 'Moderate' %}text-warning{% else %}text-danger{% endif %}">
-                                            {{ item.sales_consistency }}
-                                        </small>
-                                    </td>
-                                    <td class="text-center">{{ item.current_stock }}</td>
-                                    <td class="text-center text-muted">{{ item.forecasted_demand }}</td>
-                                    <td class="text-center days-medium">{{ item.days_until_stockout }}</td>
-                                    <td class="text-center"><strong class="text-info">{{ item.pick_qty }}</strong></td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-            {% endif %}
-
-            <!-- Low Priority Items -->
-            {% if low_items %}
-            <div class="card mb-4 priority-low">
-                <div class="card-header bg-success text-white">
-                    <h5 class="mb-0">
-                        <i class="fas fa-check-circle me-2"></i>
-                        LOW Priority ({{ low_items|length }} items)
-                        <small class="ms-3">More than 7 days until stockout</small>
-                    </h5>
-                </div>
-                <div class="card-body p-0">
-                    <div class="table-responsive">
-                        <table class="table table-sm table-hover mb-0 pick-list-table">
-                            <thead>
-                                <tr>
-                                    <th style="width: 50px;" class="no-print">
-                                        <input type="checkbox" class="form-check-input">
-                                    </th>
-                                    <th>SKU</th>
-                                    <th>Product</th>
-                                    <th>Category</th>
-                                    <th class="text-center" title="Average daily sales over past 7 days">Avg Daily</th>
-                                    <th class="text-center" title="Sales consistency">Pattern</th>
-                                    <th class="text-center">Stock</th>
-                                    <th class="text-center" title="Forecasted demand for selected horizon">Forecast</th>
-                                    <th class="text-center" title="Days until stockout at current rate">Days Left</th>
-                                    <th class="text-center">Pick Qty</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for item in low_items %}
-                                <tr>
-                                    <td class="no-print">
-                                        <input type="checkbox" class="form-check-input pick-checkbox">
-                                    </td>
-                                    <td><code>{{ item.sku }}</code></td>
-                                    <td>{{ item.product_name }}</td>
-                                    <td><small class="text-muted">{{ item.category }}</small></td>
-                                    <td class="text-center"><span class="badge bg-primary">{{ item.avg_daily_sales }}</span></td>
-                                    <td class="text-center">
-                                        <small class="{% if item.sales_consistency == 'Stable' %}text-success{% elif item.sales_consistency == 'Moderate' %}text-warning{% else %}text-danger{% endif %}">
-                                            {{ item.sales_consistency }}
-                                        </small>
-                                    </td>
-                                    <td class="text-center">{{ item.current_stock }}</td>
-                                    <td class="text-center text-muted">{{ item.forecasted_demand }}</td>
-                                    <td class="text-center days-low">{{ item.days_until_stockout }}</td>
-                                    <td class="text-center"><strong class="text-success">{{ item.pick_qty }}</strong></td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-            {% endif %}
-
-            <!-- Pick List Logic Explanation -->
-            <div class="card mb-4 no-print">
-                <div class="card-header bg-light">
-                    <h6 class="mb-0">
-                        <i class="fas fa-question-circle me-2"></i>
-                        How the Forecasting Works
-                    </h6>
-                </div>
-                <div class="card-body">
-                    <div class="row">
-                        <div class="col-md-4">
-                            <h6>Forecasting Logic:</h6>
-                            <ul class="mb-0">
-                                <li><strong>Analysis Period:</strong> Past 7 days of sales</li>
-                                <li><strong>Avg Daily Sales:</strong> Total sold ÷ 7 days</li>
-                                <li><strong>Forecast:</strong> Avg Daily × Days × (1 + Safety Buffer)</li>
-                                <li><strong>Pick Qty:</strong> Forecast - Current Stock</li>
-                            </ul>
-                        </div>
-                        <div class="col-md-4">
-                            <h6>Safety Buffers (Auto Mode):</h6>
-                            <ul class="mb-0">
-                                <li><strong class="text-success">Stable (10%):</strong> Sold 5-7 days/week</li>
-                                <li><strong class="text-warning">Moderate (20%):</strong> Sold 3-4 days/week</li>
-                                <li><strong class="text-danger">Volatile (30%):</strong> Sold 1-2 days/week</li>
-                            </ul>
-                        </div>
-                        <div class="col-md-4">
-                            <h6>Priority Levels:</h6>
-                            <ul class="mb-0">
-                                <li><strong class="text-danger">Critical:</strong> Less than 2 days until stockout</li>
-                                <li><strong class="text-warning">High:</strong> 2-4 days until stockout</li>
-                                <li><strong class="text-info">Medium:</strong> 4-7 days until stockout</li>
-                                <li><strong class="text-success">Low:</strong> More than 7 days until stockout</li>
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            {% else %}
-            <div class="alert alert-info">
-                <i class="fas fa-info-circle me-2"></i>
-                No items need picking based on 7-day sales analysis ({{ start_date|date:"M d" }} - {{ end_date|date:"M d, Y" }}). All products have sufficient stock for the selected forecast period.
-            </div>
-            {% endif %}
-
-            {% endif %}
-
+<div class="container-fluid pb-5">
+    <!-- Page Header -->
+    <div class="page-header">
+        <h1 class="mb-0">
+            <i data-feather="package" style="width: 36px; height: 36px; vertical-align: middle; margin-right: 10px;"></i>
+            Daily Pick List
+        </h1>
+        <div class="page-subtitle">7-Day Sales Analysis & Forecast</div>
+        <div class="current-date">
+            <i data-feather="calendar"></i>
+            <span>{{ target_date|date:"F d, Y" }}</span>
         </div>
     </div>
-</div>
 
-<!-- Print Signature Section (only visible when printing) -->
-<div style="display:none;">
-    <div class="print-signature" style="display:block; page-break-before: always;">
-        <h5>Pick List Completion</h5>
-        <p><strong>Date:</strong> {{ target_date|date:"F d, Y" }}</p>
-        <p><strong>Branch:</strong> {{ branch_name }}</p>
-        <p><strong>Total Items:</strong> {{ total_items }} | <strong>Total Quantity:</strong> {{ total_pick_quantity }}</p>
-        <br><br>
-        <p>Picked By: _____________________________ Date: _______________</p>
-        <p>Verified By: _____________________________ Date: _______________</p>
+    {% if error %}
+    <div class="alert alert-danger">
+        <i data-feather="alert-circle" style="width: 20px; height: 20px; vertical-align: middle;"></i>
+        {{ error }}
     </div>
-</div>
+    {% else %}
 
+    <!-- Info Card -->
+    <div class="info-card">
+        <div class="d-flex align-items-start">
+            <div class="icon">
+                <i data-feather="info"></i>
+            </div>
+            <div>
+                <h5 class="mb-2">How This List Works</h5>
+                <p class="mb-0">
+                    This list shows products based on the last 7 days of sales
+                    ({{ start_date|date:"M d" }} - {{ end_date|date:"M d, Y" }}).
+                    The forecast predicts the next 7 days using the same sales pattern,
+                    helping you maintain optimal stock levels.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    {% if pick_list %}
+
+    <!-- Data Table Card -->
+    <div class="data-table-card">
+        <!-- Export Button -->
+        <div class="export-btn no-print">
+            <button type="button" class="btn btn-outline-primary" onclick="window.print()">
+                <i data-feather="printer" style="width: 16px; height: 16px;"></i>
+                Export / Print
+            </button>
+        </div>
+
+        <!-- Data Table -->
+        <div class="table-responsive">
+            <table id="pickListTable" class="table table-hover" style="width:100%">
+                <thead>
+                    <tr>
+                        <th>Product</th>
+                        <th>SKU</th>
+                        <th>School</th>
+                        <th>Current Stock</th>
+                        <th>Incoming</th>
+                        <th class="text-center">Last 7 Days Sales</th>
+                        <th class="text-center">Next 7 Days Forecast</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in pick_list %}
+                    <tr>
+                        <td>
+                            <div class="product-name">{{ item.product_name }}</div>
+                        </td>
+                        <td>
+                            <span class="sku-code">{{ item.sku }}</span>
+                        </td>
+                        <td>
+                            <span class="school-name">{{ item.school_name|default:"—" }}</span>
+                        </td>
+                        <td>
+                            <span class="stock-number">{{ item.current_stock }}</span>
+                            <small class="text-muted"> units</small>
+                        </td>
+                        <td>
+                            <span class="incoming-stock">
+                                {% if item.incoming_stock and item.incoming_stock > 0 %}
+                                    +{{ item.incoming_stock }}
+                                {% else %}
+                                    —
+                                {% endif %}
+                            </span>
+                        </td>
+                        <td class="text-center">
+                            <span class="sales-badge sales-badge-blue">
+                                <i data-feather="trending-up" style="width: 14px; height: 14px; vertical-align: middle;"></i>
+                                {{ item.total_sales_7d|default:"0" }}
+                            </span>
+                        </td>
+                        <td class="text-center">
+                            <span class="sales-badge sales-badge-green">
+                                <i data-feather="activity" style="width: 14px; height: 14px; vertical-align: middle;"></i>
+                                {{ item.forecasted_demand|default:"0" }}
+                            </span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {% else %}
+    <div class="alert alert-info">
+        <i data-feather="info" style="width: 20px; height: 20px; vertical-align: middle;"></i>
+        No products available for the selected date range.
+    </div>
+    {% endif %}
+
+    {% endif %}
+</div>
 {% endblock %}
 
 {% block extra_js %}
+<!-- DataTables JS -->
+<script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.4/js/dataTables.bootstrap5.min.js"></script>
+
 <script>
 $(document).ready(function() {
-    // Auto-submit form when date or category changes
-    $('#filterForm input[type="date"], #filterForm select[name="category"]').on('change', function() {
-        $('#filterForm').submit();
+    // Initialize DataTable
+    $('#pickListTable').DataTable({
+        pageLength: 25,
+        lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
+        order: [[5, 'desc']], // Sort by Last 7 Days Sales (descending)
+        language: {
+            search: "Search products:",
+            lengthMenu: "Show _MENU_ items per page",
+            info: "Showing _START_ to _END_ of _TOTAL_ products",
+            infoEmpty: "No products available",
+            infoFiltered: "(filtered from _MAX_ total products)",
+            paginate: {
+                first: "First",
+                last: "Last",
+                next: "Next",
+                previous: "Previous"
+            }
+        },
+        dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>rtip',
+        responsive: true
     });
-});
 
-// Print styling
-window.addEventListener('beforeprint', function() {
-    document.querySelector('.print-signature').style.display = 'block';
-});
-
-window.addEventListener('afterprint', function() {
-    document.querySelector('.print-signature').style.display = 'none';
+    // Initialize Feather icons
+    if (typeof feather !== 'undefined') {
+        feather.replace();
+    }
 });
 </script>
 {% endblock %}
