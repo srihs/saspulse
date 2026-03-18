@@ -324,6 +324,44 @@
                 </div>
               {% endif %}
             </div>
+
+            <hr class="my-4">
+
+            <!-- Store Assignment Section -->
+            <div class="mb-0" id="store-assignment-section">
+              <h6 class="mb-3">
+                <span data-feather="shopping-bag" class="me-2"></span>Assigned Stores
+              </h6>
+              <p class="text-muted small mb-3">
+                For <strong>Store-Level Access</strong>: Select one or more stores this user can access.
+                Users will only see products and forecasts for their assigned stores (via Store-School mapping).
+              </p>
+
+              {% if form.assigned_stores %}
+                <div class="row">
+                  {% for store in form.assigned_stores %}
+                    <div class="col-md-4 col-lg-3 mb-2">
+                      <div class="form-check">
+                        {{ store.tag }}
+                        <label class="form-check-label" for="{{ store.id_for_label }}">
+                          {{ store.choice_label }}
+                        </label>
+                      </div>
+                    </div>
+                  {% endfor %}
+                </div>
+                {% if form.assigned_stores.errors %}
+                  <div class="invalid-feedback d-block">
+                    {{ form.assigned_stores.errors.0 }}
+                  </div>
+                {% endif %}
+              {% else %}
+                <div class="alert alert-warning mb-0">
+                  <span data-feather="alert-triangle" class="me-2"></span>
+                  No stores available. Stores are derived from Store-School mappings.
+                </div>
+              {% endif %}
+            </div>
           </div>
         </div>
 
@@ -574,8 +612,10 @@
     const roleCheckboxes = document.querySelectorAll('.role-checkbox');
     const branchSection = document.getElementById('branch-assignment-section');
     const schoolSection = document.getElementById('school-assignment-section');
+    const storeSection = document.getElementById('store-assignment-section');
     const branchCheckboxes = document.querySelectorAll('.branch-checkbox');
     const schoolCheckboxes = document.querySelectorAll('.school-checkbox');
+    const storeCheckboxes = document.querySelectorAll('.store-checkbox');
 
     // Function to get selected role names
     function getSelectedRoles() {
@@ -627,6 +667,16 @@
         schoolSection.style.display = 'none';
       }
 
+      // Store Section Logic
+      // Show stores section for Admin or users with store-level data scope
+      // For now, show for all users (can be refined based on role requirements)
+      if (hasAdmin) {
+        storeSection.style.display = 'block';
+      } else {
+        // Show store section for non-admin users (they can choose store-level access)
+        storeSection.style.display = 'block';
+      }
+
       // Admin Auto-Selection Logic
       if (hasAdmin) {
         // Select all branches
@@ -642,6 +692,13 @@
             checkbox.checked = true;
           }
         });
+
+        // Select all stores
+        storeCheckboxes.forEach(checkbox => {
+          if (!checkbox.checked) {
+            checkbox.checked = true;
+          }
+        });
       }
     }
 
@@ -651,13 +708,15 @@
       const isAdminCheckbox = label && label.textContent.trim() === 'Admin';
 
       if (isAdminCheckbox && checkbox.checked) {
-        // Admin was just checked - select all branches and schools
+        // Admin was just checked - select all branches, schools, and stores
         branchCheckboxes.forEach(cb => cb.checked = true);
         schoolCheckboxes.forEach(cb => cb.checked = true);
+        storeCheckboxes.forEach(cb => cb.checked = true);
       } else if (isAdminCheckbox && !checkbox.checked) {
-        // Admin was just unchecked - uncheck all branches and schools
+        // Admin was just unchecked - uncheck all branches, schools, and stores
         branchCheckboxes.forEach(cb => cb.checked = false);
         schoolCheckboxes.forEach(cb => cb.checked = false);
+        storeCheckboxes.forEach(cb => cb.checked = false);
       }
     }
 

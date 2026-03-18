@@ -100,6 +100,15 @@ class CustomUser(models.Model):
         help_text="Assigned schools for sales team (via Product sub_category)"
     )
 
+    # Store Assignment (for store-level data access)
+    # Stores are mapped via StoreSchoolMapping
+    assigned_stores = models.ManyToManyField(
+        'dashboard.StoreSchoolMapping',
+        related_name='assigned_users',
+        blank=True,
+        help_text="Stores this user manages (for store-level data access)"
+    )
+
     # Status & Flags
     is_active = models.BooleanField(
         default=False,
@@ -350,10 +359,10 @@ class CustomUser(models.Model):
 
     def get_data_scope(self):
         """
-        Get user's data scope (all, branch, school).
+        Get user's data scope (all, branch, school, store).
 
         Returns:
-            str: 'all', 'branch', or 'school'
+            str: 'all', 'branch', 'school', or 'store'
         """
         if self.is_superuser:
             return 'all'
@@ -374,10 +383,10 @@ class CustomUser(models.Model):
         Check if user requires data filtering.
 
         Returns:
-            bool: True if user needs data filtered by branch/school
+            bool: True if user needs data filtered by branch/school/store
         """
         scope = self.get_data_scope()
-        return scope in ['branch', 'school']
+        return scope in ['branch', 'school', 'store']
 
     def get_assigned_branch_names(self):
         """
@@ -408,6 +417,54 @@ class CustomUser(models.Model):
         """
         try:
             return list(self.assigned_schools.values_list('sub_category', flat=True).distinct())
+        except Exception:
+            # If there's an error (e.g., table doesn't exist during migrations), return empty list
+            return []
+
+    def get_assigned_store_mappings(self):
+        """
+        Get all active store-school mappings for user's assigned stores.
+
+        Returns:
+            QuerySet: Active StoreSchoolMapping objects assigned to this user
+        """
+        try:
+            return self.assigned_stores.filter(is_active=True)
+        except Exception:
+            # If there's an error (e.g., table doesn't exist during migrations), return empty queryset
+            from dashboard.models import StoreSchoolMapping
+            return StoreSchoolMapping.objects.none()
+
+    def get_accessible_schools(self):
+        """
+        Get list of school names accessible through assigned stores.
+
+        Returns:
+            list: List of unique school names from assigned store mappings
+        """
+        try:
+            return list(
+                self.assigned_stores.filter(is_active=True)
+                .values_list('school_name', flat=True)
+                .distinct()
+            )
+        except Exception:
+            # If there's an error (e.g., table doesn't exist during migrations), return empty list
+            return []
+
+    def get_accessible_categories(self):
+        """
+        Get list of category names (for product filtering) from assigned stores.
+
+        Returns:
+            list: List of unique category_name values for filtering products
+        """
+        try:
+            return list(
+                self.assigned_stores.filter(is_active=True)
+                .values_list('category_name', flat=True)
+                .distinct()
+            )
         except Exception:
             # If there's an error (e.g., table doesn't exist during migrations), return empty list
             return []

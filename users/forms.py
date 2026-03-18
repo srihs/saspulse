@@ -163,7 +163,8 @@ class RoleForm(forms.ModelForm):
         choices=[
             ('all', 'All Data (No Restrictions)'),
             ('branch', 'Branch Level (Store Managers)'),
-            ('school', 'School Level (Sales Team)')
+            ('school', 'School Level (Sales Team)'),
+            ('store', 'Store Level (Store-School Mapping)')
         ],
         initial='all',
         widget=forms.RadioSelect(attrs={'class': 'form-check-input'})
@@ -345,7 +346,7 @@ class RoleForm(forms.ModelForm):
 class CustomUserCreateForm(forms.ModelForm):
     """
     Form for creating new users with CustomUser model.
-    Includes all user fields, roles, branches, and schools.
+    Includes all user fields, roles, branches, schools, and stores.
     """
     # Password fields
     password1 = forms.CharField(
@@ -396,6 +397,17 @@ class CustomUserCreateForm(forms.ModelForm):
         required=False,
         label='Assigned Schools',
         help_text='Select schools for sales team members'
+    )
+
+    # Store assignment (from StoreSchoolMapping)
+    assigned_stores = forms.MultipleChoiceField(
+        choices=[],
+        widget=forms.CheckboxSelectMultiple(attrs={
+            'class': 'form-check-input store-checkbox'
+        }),
+        required=False,
+        label='Assigned Stores',
+        help_text='Select stores for store-level data access (via StoreSchoolMapping)'
     )
 
     class Meta:
@@ -469,6 +481,10 @@ class CustomUserCreateForm(forms.ModelForm):
         school_choices = self._get_school_choices()
         self.fields['assigned_schools'].choices = school_choices
 
+        # Populate store choices from StoreSchoolMapping
+        store_choices = self._get_store_choices()
+        self.fields['assigned_stores'].choices = store_choices
+
     def _get_branch_choices(self):
         """
         Get unique branch/shop choices from ProductCategory table where name ends with 'Shop'.
@@ -502,6 +518,24 @@ class CustomUserCreateForm(forms.ModelForm):
             ).values_list('sub_category', flat=True).distinct().order_by('sub_category')
 
             return [(school, school) for school in schools]
+        except Exception:
+            # If there's an error (e.g., table doesn't exist), return empty list
+            return []
+
+    def _get_store_choices(self):
+        """
+        Get unique store choices from StoreSchoolMapping.
+        Returns a list of tuples (value, display_name) - value is store_name.
+        """
+        try:
+            from dashboard.models import StoreSchoolMapping
+
+            # Get distinct active store names
+            stores = StoreSchoolMapping.objects.filter(
+                is_active=True
+            ).values_list('store_name', flat=True).distinct().order_by('store_name')
+
+            return [(store, store) for store in stores]
         except Exception:
             # If there's an error (e.g., table doesn't exist), return empty list
             return []
@@ -600,6 +634,20 @@ class CustomUserCreateForm(forms.ModelForm):
                 else:
                     user.assigned_schools.clear()
 
+            # Stores (convert store names to StoreSchoolMapping instances)
+            if 'assigned_stores' in self.cleaned_data:
+                selected_stores = self.cleaned_data['assigned_stores']
+                if selected_stores:
+                    from dashboard.models import StoreSchoolMapping
+                    # Get StoreSchoolMapping objects matching selected store names
+                    store_mappings = StoreSchoolMapping.objects.filter(
+                        store_name__in=selected_stores,
+                        is_active=True
+                    ).distinct()
+                    user.assigned_stores.set(store_mappings)
+                else:
+                    user.assigned_stores.clear()
+
         return user
 
 
@@ -639,6 +687,17 @@ class CustomUserUpdateForm(forms.ModelForm):
         required=False,
         label='Assigned Schools',
         help_text='Select schools for sales team members'
+    )
+
+    # Store assignment (from StoreSchoolMapping)
+    assigned_stores = forms.MultipleChoiceField(
+        choices=[],
+        widget=forms.CheckboxSelectMultiple(attrs={
+            'class': 'form-check-input store-checkbox'
+        }),
+        required=False,
+        label='Assigned Stores',
+        help_text='Select stores for store-level data access (via StoreSchoolMapping)'
     )
 
     class Meta:
@@ -712,6 +771,10 @@ class CustomUserUpdateForm(forms.ModelForm):
         school_choices = self._get_school_choices()
         self.fields['assigned_schools'].choices = school_choices
 
+        # Populate store choices from StoreSchoolMapping
+        store_choices = self._get_store_choices()
+        self.fields['assigned_stores'].choices = store_choices
+
         # Pre-populate M2M fields if this is an existing user
         if self.instance and self.instance.pk:
             # Pre-select current roles
@@ -732,6 +795,15 @@ class CustomUserUpdateForm(forms.ModelForm):
                     self.instance.assigned_schools.values_list('sub_category', flat=True).distinct()
                 )
                 self.fields['assigned_schools'].initial = current_school_subcategories
+            except Exception:
+                pass
+
+            # Pre-select current stores (get store names from assigned stores)
+            try:
+                current_store_names = list(
+                    self.instance.assigned_stores.filter(is_active=True).values_list('store_name', flat=True).distinct()
+                )
+                self.fields['assigned_stores'].initial = current_store_names
             except Exception:
                 pass
 
@@ -768,6 +840,24 @@ class CustomUserUpdateForm(forms.ModelForm):
             ).values_list('sub_category', flat=True).distinct().order_by('sub_category')
 
             return [(school, school) for school in schools]
+        except Exception:
+            # If there's an error (e.g., table doesn't exist), return empty list
+            return []
+
+    def _get_store_choices(self):
+        """
+        Get unique store choices from StoreSchoolMapping.
+        Returns a list of tuples (value, display_name) - value is store_name.
+        """
+        try:
+            from dashboard.models import StoreSchoolMapping
+
+            # Get distinct active store names
+            stores = StoreSchoolMapping.objects.filter(
+                is_active=True
+            ).values_list('store_name', flat=True).distinct().order_by('store_name')
+
+            return [(store, store) for store in stores]
         except Exception:
             # If there's an error (e.g., table doesn't exist), return empty list
             return []
@@ -859,6 +949,21 @@ class CustomUserUpdateForm(forms.ModelForm):
                 else:
                     # Clear all schools if none selected
                     user.assigned_schools.clear()
+
+            # Stores (convert store names to StoreSchoolMapping instances)
+            if 'assigned_stores' in self.cleaned_data:
+                selected_stores = self.cleaned_data['assigned_stores']
+                if selected_stores:
+                    from dashboard.models import StoreSchoolMapping
+                    # Get StoreSchoolMapping objects matching selected store names
+                    store_mappings = StoreSchoolMapping.objects.filter(
+                        store_name__in=selected_stores,
+                        is_active=True
+                    ).distinct()
+                    user.assigned_stores.set(store_mappings)
+                else:
+                    # Clear all stores if none selected
+                    user.assigned_stores.clear()
 
         return user
 

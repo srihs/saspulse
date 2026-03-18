@@ -1646,7 +1646,7 @@ def sales_forecasting(request):
         }
 
     # Helper function to aggregate product forecasts by shop
-    def get_shop_forecasts_from_products(start_date, end_date, search_query=None, filters=None, user_school_subcategories=None):
+    def get_shop_forecasts_from_products(start_date, end_date, search_query=None, filters=None, user_school_subcategories=None, user_store_categories=None):
         """
         Aggregate product-level forecasts by shop category (category_name ending with 'Shop')
 
@@ -1665,6 +1665,7 @@ def sales_forecasting(request):
             search_query: General search query (legacy)
             filters: Dictionary containing specific filters (school, product, style_code, shop, category)
             user_school_subcategories: List of school sub_categories for data scope filtering (Sales Team)
+            user_store_categories: List of category_name values for data scope filtering (Store Level)
 
         Returns:
             list: List of shop forecast dictionaries with aggregated data
@@ -1677,6 +1678,7 @@ def sales_forecasting(request):
         logger.info(f'Search query: {search_query}')
         logger.info(f'Filters: {filters}')
         logger.info(f'User school filter: {user_school_subcategories}')
+        logger.info(f'User store categories filter: {user_store_categories}')
 
         # Build SQL query to fetch product forecasts with shop category
         sql = """
@@ -1705,6 +1707,12 @@ def sales_forecasting(request):
             placeholders = ', '.join(['%s'] * len(user_school_subcategories))
             sql += f" AND p.sub_category IN ({placeholders})"
             params.extend(user_school_subcategories)
+
+        # DATA SCOPE: Filter by user's assigned stores (Store Level)
+        if user_store_categories:
+            placeholders = ', '.join(['%s'] * len(user_store_categories))
+            sql += f" AND p.category_name IN ({placeholders})"
+            params.extend(user_store_categories)
 
         # Apply search filter if provided
         if search_query:
@@ -1905,16 +1913,23 @@ def sales_forecasting(request):
     logger = logging.getLogger(__name__)
 
     # ========== DATA SCOPE FILTERING ==========
-    # Apply school-based filtering for Sales Team users
+    # Apply school-based and store-based filtering
     user = request.user
     data_scope = user.get_data_scope()
     user_school_subcategories = []
+    user_store_categories = []
 
     if data_scope == 'school' and not user.is_superuser:
         user_school_subcategories = user.get_assigned_school_subcategories()
         # If user has school scope but no assignments, they see no data
         if not user_school_subcategories:
             logger.warning(f'User {user.username} has school scope but no assigned schools')
+
+    if data_scope == 'store' and not user.is_superuser:
+        user_store_categories = user.get_accessible_categories()
+        # If user has store scope but no assignments, they see no data
+        if not user_store_categories:
+            logger.warning(f'User {user.username} has store scope but no assigned stores')
 
     # Date range parameters (new approach)
     start_date_str = request.GET.get('start_date')
@@ -2074,6 +2089,12 @@ def sales_forecasting(request):
             sql += f" AND p.sub_category IN ({placeholders})"
             params.extend(user_school_subcategories)
 
+        # DATA SCOPE: Filter by user's assigned stores (Store-Level)
+        if user_store_categories:
+            placeholders = ', '.join(['%s'] * len(user_store_categories))
+            sql += f" AND p.category_name IN ({placeholders})"
+            params.extend(user_store_categories)
+
         # Add search query if provided
         if search_query:
             sql += " AND (sf.entity_name LIKE %s OR p.name LIKE %s OR p.sub_category LIKE %s OR p.category_name LIKE %s)"
@@ -2153,6 +2174,12 @@ def sales_forecasting(request):
                 placeholders = ', '.join(['%s'] * len(user_school_subcategories))
                 sql += f" AND p.sub_category IN ({placeholders})"
                 params.extend(user_school_subcategories)
+
+            # DATA SCOPE: Filter by user's assigned stores (Store Level)
+            if user_store_categories:
+                placeholders = ', '.join(['%s'] * len(user_store_categories))
+                sql += f" AND p.category_name IN ({placeholders})"
+                params.extend(user_store_categories)
 
             # Add school filter if provided
             if school_filter:
