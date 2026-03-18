@@ -77,9 +77,16 @@
     }
 
     /* Modal Styling */
+    .breakdown-modal .modal-dialog {
+        margin: 1.75rem auto;
+    }
+
     .breakdown-modal .modal-header {
         border-bottom: 2px solid #dee2e6;
         padding: 1.5rem;
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
     }
 
     .breakdown-modal .modal-header.sales-header {
@@ -97,13 +104,17 @@
         display: flex;
         align-items: center;
         gap: 0.75rem;
+        font-size: 1.25rem;
+        line-height: 1.4;
+        word-wrap: break-word;
     }
 
     .breakdown-modal .modal-subtitle {
         font-size: 0.9rem;
         opacity: 0.8;
         font-weight: 400;
-        margin-top: 0.25rem;
+        margin-top: 0.5rem;
+        font-family: 'Courier New', monospace;
     }
 
     .breakdown-modal .breakdown-table {
@@ -119,12 +130,21 @@
         position: sticky;
         top: 0;
         z-index: 10;
+        white-space: nowrap;
     }
 
     .breakdown-modal .breakdown-table tbody td {
         padding: 0.875rem 1rem;
         vertical-align: middle;
         border-bottom: 1px solid #f0f0f0;
+        white-space: normal;
+        word-wrap: break-word;
+    }
+
+    .breakdown-modal .breakdown-table tfoot td {
+        padding: 1rem;
+        vertical-align: middle;
+        white-space: nowrap;
     }
 
     .breakdown-modal .breakdown-table tbody tr:hover {
@@ -148,15 +168,52 @@
     .breakdown-modal .day-name {
         color: #6c757d;
         font-size: 0.9rem;
+        white-space: nowrap;
     }
 
     .breakdown-modal .qty-value {
         font-weight: 600;
         font-size: 1.1rem;
+        white-space: nowrap;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: 0.02em;
     }
 
     .breakdown-modal .date-value {
         font-weight: 500;
+    }
+
+    /* Ensure modal is properly centered and visible */
+    .breakdown-modal .modal-content {
+        border-radius: 12px;
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+    }
+
+    /* Responsive modal adjustments */
+    @media (max-width: 768px) {
+        .breakdown-modal .modal-dialog {
+            margin: 1rem;
+            max-width: calc(100% - 2rem);
+        }
+
+        .breakdown-modal .modal-title {
+            font-size: 1.1rem;
+            gap: 0.5rem;
+        }
+
+        .breakdown-modal .modal-subtitle {
+            font-size: 0.8rem;
+        }
+
+        .breakdown-modal .breakdown-table thead th,
+        .breakdown-modal .breakdown-table tbody td {
+            padding: 0.75rem;
+            font-size: 0.9rem;
+        }
+
+        .breakdown-modal .qty-value {
+            font-size: 1rem;
+        }
     }
 
     table.dataTable thead th {
@@ -380,10 +437,10 @@
 
     <!-- Breakdown Modal -->
     <div class="modal fade breakdown-modal" id="breakdownModal" tabindex="-1" aria-labelledby="breakdownModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width: 600px;">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width: 650px;">
             <div class="modal-content">
                 <div class="modal-header" id="modalHeader">
-                    <div>
+                    <div style="flex: 1;">
                         <h5 class="modal-title" id="breakdownModalLabel">
                             <i data-feather="calendar" style="width: 24px; height: 24px;"></i>
                             <span id="modalTitle"></span>
@@ -394,12 +451,12 @@
                 </div>
                 <div class="modal-body p-0">
                     <div class="table-responsive">
-                        <table class="table breakdown-table">
+                        <table class="table breakdown-table mb-0">
                             <thead>
                                 <tr>
-                                    <th>Date</th>
-                                    <th>Day</th>
-                                    <th class="text-end" id="qtyColumnHeader">Units</th>
+                                    <th style="width: 50%;">Date</th>
+                                    <th style="width: 25%;">Day</th>
+                                    <th class="text-end" style="width: 25%;" id="qtyColumnHeader">Units</th>
                                 </tr>
                             </thead>
                             <tbody id="breakdownTableBody">
@@ -502,11 +559,23 @@ $(document).ready(function() {
                 const qty = parseFloat(day.qty) || 0;
                 calculatedTotal += qty;
 
+                // Format quantity: whole numbers for sales, one decimal for forecasts
+                let formattedQty;
+                if (type === 'sales') {
+                    formattedQty = Math.round(qty).toLocaleString();
+                } else {
+                    // For forecasts, show one decimal place
+                    formattedQty = qty.toLocaleString('en-US', {
+                        minimumFractionDigits: 1,
+                        maximumFractionDigits: 1
+                    });
+                }
+
                 const row = `
                     <tr>
                         <td class="date-value">${formattedDate}</td>
                         <td class="day-name">${day.day_name}</td>
-                        <td class="text-end qty-value">${qty.toLocaleString()}</td>
+                        <td class="text-end qty-value">${formattedQty}</td>
                     </tr>
                 `;
                 tbody.append(row);
@@ -515,8 +584,17 @@ $(document).ready(function() {
             tbody.append('<tr><td colspan="3" class="text-center text-muted">No breakdown data available</td></tr>');
         }
 
-        // Update total
-        $('#totalQty').text(calculatedTotal.toLocaleString());
+        // Update total with proper formatting
+        let formattedTotal;
+        if (type === 'sales') {
+            formattedTotal = Math.round(calculatedTotal).toLocaleString();
+        } else {
+            formattedTotal = calculatedTotal.toLocaleString('en-US', {
+                minimumFractionDigits: 1,
+                maximumFractionDigits: 1
+            });
+        }
+        $('#totalQty').text(formattedTotal);
 
         // Re-initialize Feather icons in modal
         if (typeof feather !== 'undefined') {
