@@ -1,7 +1,7 @@
 from django import forms
 from django.contrib.auth.forms import UserCreationForm, UserChangeForm
 from .models import CustomUser, Role
-from cin7.models import Branch, Product
+from cin7.models import Product
 import json
 
 
@@ -346,7 +346,7 @@ class RoleForm(forms.ModelForm):
 class CustomUserCreateForm(forms.ModelForm):
     """
     Form for creating new users with CustomUser model.
-    Includes all user fields, roles, branches, schools, and stores.
+    Includes all user fields, roles, schools, and stores.
     """
     # Password fields
     password1 = forms.CharField(
@@ -375,17 +375,6 @@ class CustomUserCreateForm(forms.ModelForm):
         required=False,
         label='Roles',
         help_text='Select one or more roles for this user'
-    )
-
-    # Branch assignment (shop names from Product.category_name ending with 'Shop')
-    assigned_branches = forms.MultipleChoiceField(
-        choices=[],
-        widget=forms.CheckboxSelectMultiple(attrs={
-            'class': 'form-check-input branch-checkbox'
-        }),
-        required=False,
-        label='Assigned Branches',
-        help_text='Select branches/shops for store managers (can have multiple)'
     )
 
     # School assignment (unique sub_category values from Product where category_name ends with 'Shop')
@@ -473,10 +462,6 @@ class CustomUserCreateForm(forms.ModelForm):
         self.fields['first_name'].required = True
         self.fields['last_name'].required = True
 
-        # Populate branch choices from Product.category_name ending with 'Shop'
-        branch_choices = self._get_branch_choices()
-        self.fields['assigned_branches'].choices = branch_choices
-
         # Populate school choices from Product.sub_category where category_name ends with 'Shop'
         school_choices = self._get_school_choices()
         self.fields['assigned_schools'].choices = school_choices
@@ -484,25 +469,6 @@ class CustomUserCreateForm(forms.ModelForm):
         # Populate store choices from StoreSchoolMapping
         store_choices = self._get_store_choices()
         self.fields['assigned_stores'].choices = store_choices
-
-    def _get_branch_choices(self):
-        """
-        Get unique branch/shop choices from ProductCategory table where name ends with 'Shop'.
-        Returns a list of tuples (value, display_name).
-        """
-        try:
-            from cin7.models import ProductCategory
-
-            # Get root categories (shops) where name ends with 'Shop'
-            shops = ProductCategory.objects.filter(
-                parent__isnull=True,
-                name__iendswith='Shop'
-            ).order_by('name').values_list('name', flat=True)
-
-            return [(shop, shop) for shop in shops if shop]
-        except Exception:
-            # If there's an error (e.g., table doesn't exist), return empty list
-            return []
 
     def _get_school_choices(self):
         """
@@ -577,7 +543,7 @@ class CustomUserCreateForm(forms.ModelForm):
         cleaned_data = super().clean()
         roles = cleaned_data.get('roles', [])
         assigned_schools = cleaned_data.get('assigned_schools', [])
-        assigned_branches = cleaned_data.get('assigned_branches', [])
+        assigned_stores = cleaned_data.get('assigned_stores', [])
 
         # Get role names
         role_names = [role.name for role in roles]
@@ -587,8 +553,8 @@ class CustomUserCreateForm(forms.ModelForm):
             self.add_error('assigned_schools', 'Sales Team users must have at least one school assigned.')
 
         # Store Manager role validation
-        if 'Store Manager' in role_names and not assigned_branches:
-            self.add_error('assigned_branches', 'Store Manager users must have at least one branch assigned.')
+        if 'Store Manager' in role_names and not assigned_stores:
+            self.add_error('assigned_stores', 'Store Manager users must have at least one store assigned.')
 
         return cleaned_data
 
@@ -609,16 +575,6 @@ class CustomUserCreateForm(forms.ModelForm):
             # Roles
             if 'roles' in self.cleaned_data:
                 user.roles.set(self.cleaned_data['roles'])
-
-            # Branches (convert branch names to Branch instances)
-            if 'assigned_branches' in self.cleaned_data:
-                selected_branches = self.cleaned_data['assigned_branches']
-                if selected_branches:
-                    # Find Branch objects matching the selected category names
-                    branch_objects = Branch.objects.filter(name__in=selected_branches)
-                    user.assigned_branches.set(branch_objects)
-                else:
-                    user.assigned_branches.clear()
 
             # Schools (convert sub_category values to Product instances)
             if 'assigned_schools' in self.cleaned_data:
@@ -665,17 +621,6 @@ class CustomUserUpdateForm(forms.ModelForm):
         required=False,
         label='Roles',
         help_text='Select one or more roles for this user'
-    )
-
-    # Branch assignment (shop names from Product.category_name ending with 'Shop')
-    assigned_branches = forms.MultipleChoiceField(
-        choices=[],
-        widget=forms.CheckboxSelectMultiple(attrs={
-            'class': 'form-check-input branch-checkbox'
-        }),
-        required=False,
-        label='Assigned Branches',
-        help_text='Select branches/shops for store managers (can have multiple)'
     )
 
     # School assignment (unique sub_category values from Product where category_name ends with 'Shop')
@@ -763,10 +708,6 @@ class CustomUserUpdateForm(forms.ModelForm):
         self.fields['first_name'].required = True
         self.fields['last_name'].required = True
 
-        # Populate branch choices from Product.category_name ending with 'Shop'
-        branch_choices = self._get_branch_choices()
-        self.fields['assigned_branches'].choices = branch_choices
-
         # Populate school choices from Product.sub_category where category_name ends with 'Shop'
         school_choices = self._get_school_choices()
         self.fields['assigned_schools'].choices = school_choices
@@ -779,15 +720,6 @@ class CustomUserUpdateForm(forms.ModelForm):
         if self.instance and self.instance.pk:
             # Pre-select current roles
             self.fields['roles'].initial = self.instance.roles.all()
-
-            # Pre-select current branches (get branch names from assigned branches)
-            try:
-                current_branch_names = list(
-                    self.instance.assigned_branches.values_list('name', flat=True)
-                )
-                self.fields['assigned_branches'].initial = current_branch_names
-            except Exception:
-                pass
 
             # Pre-select current schools (get unique sub_category values)
             try:
@@ -806,25 +738,6 @@ class CustomUserUpdateForm(forms.ModelForm):
                 self.fields['assigned_stores'].initial = current_store_names
             except Exception:
                 pass
-
-    def _get_branch_choices(self):
-        """
-        Get unique branch/shop choices from ProductCategory table where name ends with 'Shop'.
-        Returns a list of tuples (value, display_name).
-        """
-        try:
-            from cin7.models import ProductCategory
-
-            # Get root categories (shops) where name ends with 'Shop'
-            shops = ProductCategory.objects.filter(
-                parent__isnull=True,
-                name__iendswith='Shop'
-            ).order_by('name').values_list('name', flat=True)
-
-            return [(shop, shop) for shop in shops if shop]
-        except Exception:
-            # If there's an error (e.g., table doesn't exist), return empty list
-            return []
 
     def _get_school_choices(self):
         """
@@ -897,7 +810,7 @@ class CustomUserUpdateForm(forms.ModelForm):
         cleaned_data = super().clean()
         roles = cleaned_data.get('roles', [])
         assigned_schools = cleaned_data.get('assigned_schools', [])
-        assigned_branches = cleaned_data.get('assigned_branches', [])
+        assigned_stores = cleaned_data.get('assigned_stores', [])
 
         # Get role names
         role_names = [role.name for role in roles]
@@ -907,8 +820,8 @@ class CustomUserUpdateForm(forms.ModelForm):
             self.add_error('assigned_schools', 'Sales Team users must have at least one school assigned.')
 
         # Store Manager role validation
-        if 'Store Manager' in role_names and not assigned_branches:
-            self.add_error('assigned_branches', 'Store Manager users must have at least one branch assigned.')
+        if 'Store Manager' in role_names and not assigned_stores:
+            self.add_error('assigned_stores', 'Store Manager users must have at least one store assigned.')
 
         return cleaned_data
 
@@ -923,17 +836,6 @@ class CustomUserUpdateForm(forms.ModelForm):
             # Roles
             if 'roles' in self.cleaned_data:
                 user.roles.set(self.cleaned_data['roles'])
-
-            # Branches (convert branch names to Branch instances)
-            if 'assigned_branches' in self.cleaned_data:
-                selected_branches = self.cleaned_data['assigned_branches']
-                if selected_branches:
-                    # Find Branch objects matching the selected category names
-                    branch_objects = Branch.objects.filter(name__in=selected_branches)
-                    user.assigned_branches.set(branch_objects)
-                else:
-                    # Clear all branches if none selected
-                    user.assigned_branches.clear()
 
             # Schools (convert sub_category values to Product instances)
             if 'assigned_schools' in self.cleaned_data:
