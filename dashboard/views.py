@@ -6506,6 +6506,45 @@ def store_daily_pick_list(request):
         # Simple forecast: next 7 days = last 7 days average * 7 = last 7 days total
         forecasted_demand = total_qty_sold
 
+        # Get daily breakdown for the last 7 days
+        sales_by_day = []
+        current_date = start_date
+        for i in range(7):
+            # Query sales for this specific day
+            day_sales = SalesOrderLineItem.objects.filter(
+                code=sku,
+                sales_order__invoice_date__date=current_date,
+                sales_order__is_void=False
+            )
+
+            # Apply store filtering if needed
+            if not is_admin and has_assigned_stores:
+                accessible_categories = user.get_accessible_categories()
+                if accessible_categories:
+                    day_sales = day_sales.filter(product__category_name__in=accessible_categories)
+
+            day_qty = day_sales.aggregate(total=Sum('qty'))['total'] or 0
+
+            sales_by_day.append({
+                'date': current_date.strftime('%Y-%m-%d'),
+                'day_name': current_date.strftime('%A'),
+                'qty': int(day_qty)
+            })
+
+            current_date += timedelta(days=1)
+
+        # Generate forecast breakdown for next 7 days (evenly distributed)
+        daily_forecast = forecasted_demand / 7
+        forecast_by_day = []
+        forecast_date = end_date + timedelta(days=1)
+        for i in range(7):
+            forecast_by_day.append({
+                'date': forecast_date.strftime('%Y-%m-%d'),
+                'day_name': forecast_date.strftime('%A'),
+                'qty': round(daily_forecast, 1)  # Keep one decimal place for accuracy
+            })
+            forecast_date += timedelta(days=1)
+
         # Get current stock for this product at the user's assigned stores
         stock_query = Stock.objects.filter(code=sku)
 
@@ -6535,6 +6574,8 @@ def store_daily_pick_list(request):
             'incoming_stock': int(incoming_stock),
             'total_sales_7d': int(total_qty_sold),
             'forecasted_demand': int(forecasted_demand),
+            'sales_by_day': sales_by_day,
+            'forecast_by_day': forecast_by_day,
         })
 
         categories.add(category)

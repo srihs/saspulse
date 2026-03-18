@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load custom_filters %}
 
 {% block title %}Daily Pick List{% endblock %}
 
@@ -44,6 +45,13 @@
         display: inline-block;
         min-width: 60px;
         text-align: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .sales-badge:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
     }
 
     .sales-badge-blue {
@@ -52,10 +60,103 @@
         border: 1px solid #b6d4fe;
     }
 
+    .sales-badge-blue:hover {
+        background: #d0e7ff;
+        border-color: #0d6efd;
+    }
+
     .sales-badge-green {
         background: #d1e7dd;
         color: #198754;
         border: 1px solid #a3cfbb;
+    }
+
+    .sales-badge-green:hover {
+        background: #badbcc;
+        border-color: #198754;
+    }
+
+    /* Modal Styling */
+    .breakdown-modal .modal-header {
+        border-bottom: 2px solid #dee2e6;
+        padding: 1.5rem;
+    }
+
+    .breakdown-modal .modal-header.sales-header {
+        background: linear-gradient(135deg, #e7f1ff 0%, #d0e7ff 100%);
+        border-bottom-color: #0d6efd;
+    }
+
+    .breakdown-modal .modal-header.forecast-header {
+        background: linear-gradient(135deg, #d1e7dd 0%, #badbcc 100%);
+        border-bottom-color: #198754;
+    }
+
+    .breakdown-modal .modal-title {
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .breakdown-modal .modal-subtitle {
+        font-size: 0.9rem;
+        opacity: 0.8;
+        font-weight: 400;
+        margin-top: 0.25rem;
+    }
+
+    .breakdown-modal .breakdown-table {
+        margin: 0;
+    }
+
+    .breakdown-modal .breakdown-table thead th {
+        background-color: #f8f9fa;
+        font-weight: 600;
+        border-bottom: 2px solid #dee2e6;
+        padding: 1rem;
+        color: #495057;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+    }
+
+    .breakdown-modal .breakdown-table tbody td {
+        padding: 0.875rem 1rem;
+        vertical-align: middle;
+        border-bottom: 1px solid #f0f0f0;
+    }
+
+    .breakdown-modal .breakdown-table tbody tr:hover {
+        background-color: #f8f9fa;
+    }
+
+    .breakdown-modal .breakdown-table tbody tr:last-child {
+        border-bottom: none;
+    }
+
+    .breakdown-modal .breakdown-table .total-row {
+        font-weight: 700;
+        background-color: #f8f9fa;
+        border-top: 2px solid #dee2e6;
+    }
+
+    .breakdown-modal .breakdown-table .total-row:hover {
+        background-color: #f8f9fa;
+    }
+
+    .breakdown-modal .day-name {
+        color: #6c757d;
+        font-size: 0.9rem;
+    }
+
+    .breakdown-modal .qty-value {
+        font-weight: 600;
+        font-size: 1.1rem;
+    }
+
+    .breakdown-modal .date-value {
+        font-weight: 500;
     }
 
     table.dataTable thead th {
@@ -236,13 +337,27 @@
                             <span class="sku-code">{{ item.sku }}</span>
                         </td>
                         <td class="text-center">
-                            <span class="sales-badge sales-badge-blue">
+                            <span class="sales-badge sales-badge-blue"
+                                  role="button"
+                                  tabindex="0"
+                                  data-breakdown-type="sales"
+                                  data-product-name="{{ item.product_name }}"
+                                  data-sku="{{ item.sku }}"
+                                  data-total="{{ item.total_sales_7d|default:'0' }}"
+                                  data-breakdown='{{ item.sales_by_day|tojson }}'>
                                 <i data-feather="trending-up" style="width: 14px; height: 14px; vertical-align: middle;"></i>
                                 {{ item.total_sales_7d|default:"0" }}
                             </span>
                         </td>
                         <td class="text-center">
-                            <span class="sales-badge sales-badge-green">
+                            <span class="sales-badge sales-badge-green"
+                                  role="button"
+                                  tabindex="0"
+                                  data-breakdown-type="forecast"
+                                  data-product-name="{{ item.product_name }}"
+                                  data-sku="{{ item.sku }}"
+                                  data-total="{{ item.forecasted_demand|default:'0' }}"
+                                  data-breakdown='{{ item.forecast_by_day|tojson }}'>
                                 <i data-feather="activity" style="width: 14px; height: 14px; vertical-align: middle;"></i>
                                 {{ item.forecasted_demand|default:"0" }}
                             </span>
@@ -262,6 +377,46 @@
     {% endif %}
 
     {% endif %}
+
+    <!-- Breakdown Modal -->
+    <div class="modal fade breakdown-modal" id="breakdownModal" tabindex="-1" aria-labelledby="breakdownModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width: 600px;">
+            <div class="modal-content">
+                <div class="modal-header" id="modalHeader">
+                    <div>
+                        <h5 class="modal-title" id="breakdownModalLabel">
+                            <i data-feather="calendar" style="width: 24px; height: 24px;"></i>
+                            <span id="modalTitle"></span>
+                        </h5>
+                        <div class="modal-subtitle" id="modalSubtitle"></div>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-0">
+                    <div class="table-responsive">
+                        <table class="table breakdown-table">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Day</th>
+                                    <th class="text-end" id="qtyColumnHeader">Units</th>
+                                </tr>
+                            </thead>
+                            <tbody id="breakdownTableBody">
+                                <!-- Populated by JavaScript -->
+                            </tbody>
+                            <tfoot>
+                                <tr class="total-row">
+                                    <td colspan="2"><strong>Total</strong></td>
+                                    <td class="text-end"><strong><span id="totalQty"></span></strong></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}
 
@@ -298,6 +453,87 @@ $(document).ready(function() {
     if (typeof feather !== 'undefined') {
         feather.replace();
     }
+
+    // Modal functionality for breakdown
+    const breakdownModal = new bootstrap.Modal(document.getElementById('breakdownModal'));
+
+    // Handle badge clicks
+    $(document).on('click', '.sales-badge', function() {
+        const badge = $(this);
+        const type = badge.data('breakdown-type');
+        const productName = badge.data('product-name');
+        const sku = badge.data('sku');
+        const total = badge.data('total');
+        const breakdownData = badge.data('breakdown');
+
+        // Update modal header based on type
+        const modalHeader = $('#modalHeader');
+        const modalTitle = $('#modalTitle');
+        const modalSubtitle = $('#modalSubtitle');
+        const qtyColumnHeader = $('#qtyColumnHeader');
+
+        if (type === 'sales') {
+            modalHeader.removeClass('forecast-header').addClass('sales-header');
+            modalTitle.html('<i data-feather="trending-up" style="width: 24px; height: 24px;"></i> Sales Breakdown - ' + productName);
+            modalSubtitle.text('SKU: ' + sku);
+            qtyColumnHeader.text('Units Sold');
+        } else {
+            modalHeader.removeClass('sales-header').addClass('forecast-header');
+            modalTitle.html('<i data-feather="activity" style="width: 24px; height: 24px;"></i> Forecast Breakdown - ' + productName);
+            modalSubtitle.text('SKU: ' + sku);
+            qtyColumnHeader.text('Forecasted Units');
+        }
+
+        // Populate table body
+        const tbody = $('#breakdownTableBody');
+        tbody.empty();
+
+        let calculatedTotal = 0;
+
+        if (Array.isArray(breakdownData) && breakdownData.length > 0) {
+            breakdownData.forEach(function(day) {
+                const date = new Date(day.date);
+                const formattedDate = date.toLocaleDateString('en-US', {
+                    month: 'long',
+                    day: 'numeric',
+                    year: 'numeric'
+                });
+
+                const qty = parseFloat(day.qty) || 0;
+                calculatedTotal += qty;
+
+                const row = `
+                    <tr>
+                        <td class="date-value">${formattedDate}</td>
+                        <td class="day-name">${day.day_name}</td>
+                        <td class="text-end qty-value">${qty.toLocaleString()}</td>
+                    </tr>
+                `;
+                tbody.append(row);
+            });
+        } else {
+            tbody.append('<tr><td colspan="3" class="text-center text-muted">No breakdown data available</td></tr>');
+        }
+
+        // Update total
+        $('#totalQty').text(calculatedTotal.toLocaleString());
+
+        // Re-initialize Feather icons in modal
+        if (typeof feather !== 'undefined') {
+            feather.replace();
+        }
+
+        // Show modal
+        breakdownModal.show();
+    });
+
+    // Handle keyboard accessibility for badges
+    $(document).on('keypress', '.sales-badge', function(e) {
+        if (e.which === 13 || e.which === 32) { // Enter or Space
+            e.preventDefault();
+            $(this).click();
+        }
+    });
 });
 </script>
 {% endblock %}
