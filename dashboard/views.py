@@ -2417,6 +2417,7 @@ def sales_forecasting(request):
         processed_count = 0
         skipped_zero_count = 0
         skipped_already_requested = 0
+        skipped_no_stock_gap = 0
 
         for f in forecasts:
             size = extract_size_from_sku(f.entity_name)
@@ -2470,11 +2471,12 @@ def sales_forecasting(request):
             stock_gap = (stock_on_hand + incoming_stock) - forecasted_stock
 
             # Filter: Only show products with negative stock gap (shortages)
-            # BUT only apply stock gap filter in replenishment view, not in normal forecasting view
+            # Apply stock gap filter in BOTH replenishment AND normal forecasting views
             if total_qty == 0:
                 skipped_zero_count += 1
                 continue
-            if is_replenishment_view and stock_gap >= 0:
+            if stock_gap >= 0:
+                skipped_no_stock_gap += 1
                 continue
 
             # Check if this variation has already been requested
@@ -2509,6 +2511,7 @@ def sales_forecasting(request):
         logger.info(f'DEBUG: Product level summary:')
         logger.info(f'  - Processed: {processed_count} products')
         logger.info(f'  - Skipped (zero quantity): {skipped_zero_count}')
+        logger.info(f'  - Skipped (no stock gap - surplus): {skipped_no_stock_gap}')
         logger.info(f'  - Skipped (already requested): {skipped_already_requested}')
         logger.info(f'  - Grouped into {len(grouped_products)} parent products')
 
@@ -2584,6 +2587,7 @@ def sales_forecasting(request):
             logger.info(f'DEBUG: Processing {len(school_groups)} school groups')
             processed_count = 0
             skipped_zero_count = 0
+            skipped_no_stock_gap = 0
 
             for school_name, school_forecasts in sorted(school_groups.items()):
                 school_variations = []
@@ -2647,8 +2651,9 @@ def sales_forecasting(request):
                     stock_gap = (stock_on_hand + incoming_stock) - forecasted_stock
 
                     # Filter: Only show products with negative stock gap (shortages)
-                    # BUT only apply this filter in replenishment view, not in normal forecasting view
-                    if is_replenishment_view and stock_gap >= 0:
+                    # Apply stock gap filter in BOTH replenishment AND normal forecasting views
+                    if stock_gap >= 0:
+                        skipped_no_stock_gap += 1
                         continue
 
                     # Check if this variation has already been requested
@@ -2696,7 +2701,7 @@ def sales_forecasting(request):
                         'is_school_grouped': True  # Use same flag as school view
                     })
 
-            logger.info(f'DEBUG: Processed {processed_count} products, skipped {skipped_zero_count} with zero quantity')
+            logger.info(f'DEBUG: Processed {processed_count} products, skipped {skipped_zero_count} with zero quantity, skipped {skipped_no_stock_gap} with no stock gap (surplus)')
             logger.info(f'DEBUG: Generated {len(forecast_list)} school groups before sorting')
 
             # Sort schools by total quantity descending
@@ -2750,6 +2755,7 @@ def sales_forecasting(request):
             forecast_list = []
             processed_count = 0
             skipped_zero_count = 0
+            skipped_no_stock_gap = 0
 
             for location_name, schools in sorted(location_groups.items()):
                 logger.info(f'DEBUG: Processing location "{location_name}" with {len(schools)} schools')
@@ -2818,8 +2824,9 @@ def sales_forecasting(request):
                         stock_gap = (stock_on_hand + incoming_stock) - forecasted_stock
 
                         # Filter: Only show products with negative stock gap (shortages)
-                        # BUT only apply this filter in replenishment view, not in normal forecasting view
-                        if is_replenishment_view and stock_gap >= 0:
+                        # Apply stock gap filter in BOTH replenishment AND normal forecasting views
+                        if stock_gap >= 0:
+                            skipped_no_stock_gap += 1
                             continue
 
                         # Check if this variation has already been requested
@@ -2880,7 +2887,7 @@ def sales_forecasting(request):
                         'is_shop_grouped': True  # NEW FLAG for 3-level view
                     })
 
-            logger.info(f'DEBUG: Processed {processed_count} products, skipped {skipped_zero_count} with zero quantity')
+            logger.info(f'DEBUG: Processed {processed_count} products, skipped {skipped_zero_count} with zero quantity, skipped {skipped_no_stock_gap} with no stock gap (surplus)')
             logger.info(f'DEBUG: Generated {len(forecast_list)} location groups before sorting')
 
             # Sort locations by total quantity descending
@@ -2927,6 +2934,7 @@ def sales_forecasting(request):
         logger.info(f'DEBUG: Processing school level with {len(school_groups)} school groups')
         processed_count = 0
         skipped_zero_count = 0
+        skipped_no_stock_gap = 0
 
         for school_name, school_forecasts in sorted(school_groups.items()):
             # Direct list of variations (no product grouping)
@@ -2991,8 +2999,9 @@ def sales_forecasting(request):
                 stock_gap = (stock_on_hand + incoming_stock) - forecasted_stock
 
                 # Filter: Only show products with negative stock gap (shortages)
-                # BUT only apply this filter in replenishment view, not in normal forecasting view
-                if is_replenishment_view and stock_gap >= 0:
+                # Apply stock gap filter in BOTH replenishment AND normal forecasting views
+                if stock_gap >= 0:
+                    skipped_no_stock_gap += 1
                     continue
 
                 # Check if this variation has already been requested
@@ -3044,6 +3053,7 @@ def sales_forecasting(request):
         logger.info(f'DEBUG: School level summary:')
         logger.info(f'  - Processed: {processed_count} products')
         logger.info(f'  - Skipped (zero quantity): {skipped_zero_count}')
+        logger.info(f'  - Skipped (no stock gap - surplus): {skipped_no_stock_gap}')
         logger.info(f'  - Generated {len(forecast_list)} school groups')
 
         # Sort schools by total quantity descending
