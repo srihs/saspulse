@@ -105,7 +105,7 @@ WSGI_APPLICATION = 'saspulse.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': os.getenv('DB_NAME', 'db_dataSync'),
+        'NAME': os.getenv('DB_NAME'),  # Use DB_NAME from .env file
         'USER': os.getenv('DB_USER', 'root'),
         'PASSWORD': os.getenv('DB_PASSWORD', 'imaliem123'),
         'HOST': os.getenv('DB_HOST', 'localhost'),
