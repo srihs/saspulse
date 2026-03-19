@@ -6426,13 +6426,13 @@ def store_daily_pick_list(request):
 
     Forecasting Algorithm:
     - Step 1: Base Value = Same weekday from last week
-    - Step 2: Trend Factor = Recent 7 days / Previous 7 days
-    - Step 3: Forecast = Base × Trend Factor
+    - Step 2: Daily Trend Factor = Recent week's day sales / Previous week's same day sales
+    - Step 3: Forecast = Base × Daily Trend Factor
     - Step 4: Minimum Rule = If forecast < 1, set to 1
 
     Features:
     - Shows last 7 days of sales with daily breakdown
-    - Forecasts next 7 days using weekday patterns + trend adjustment
+    - Forecasts next 7 days using weekday patterns + per-day trend adjustment
     - Displays current stock and incoming stock
     - Sorted by highest forecasted demand
     """
@@ -6545,28 +6545,27 @@ def store_daily_pick_list(request):
             for item in daily_sales_data
         }
 
-        # Calculate trend factor
+        # Calculate daily trend factors (recent day / previous day for each weekday)
         recent_week_sales = 0
         previous_week_sales = 0
+        daily_trend_factors = []
 
-        # Sum recent week (last 7 days)
-        current_date = recent_week_start
         for i in range(7):
-            recent_week_sales += sales_by_date.get(current_date, 0)
-            current_date += timedelta(days=1)
+            recent_day_date = recent_week_start + timedelta(days=i)
+            previous_day_date = previous_week_start + timedelta(days=i)
 
-        # Sum previous week (7 days before that)
-        current_date = previous_week_start
-        for i in range(7):
-            previous_week_sales += sales_by_date.get(current_date, 0)
-            current_date += timedelta(days=1)
+            recent_day_sales = sales_by_date.get(recent_day_date, 0)
+            previous_day_sales = sales_by_date.get(previous_day_date, 0)
 
-        # Calculate trend factor (avoid division by zero)
-        if previous_week_sales > 0:
-            trend_factor = recent_week_sales / previous_week_sales
-        else:
-            # No previous sales data - use neutral trend
-            trend_factor = 1.0
+            recent_week_sales += recent_day_sales
+            previous_week_sales += previous_day_sales
+
+            # Calculate daily trend factor (avoid division by zero)
+            if previous_day_sales > 0:
+                daily_trend_factors.append(recent_day_sales / previous_day_sales)
+            else:
+                # No previous sales for this day - use neutral trend
+                daily_trend_factors.append(1.0)
 
         # Build daily breakdown for previous week (7 days before recent week)
         previous_week_sales_by_day = []
@@ -6597,7 +6596,7 @@ def store_daily_pick_list(request):
             current_date += timedelta(days=1)
 
         # Generate forecast breakdown for next 7 days using weekday-based logic
-        # Each day uses same weekday from last week × trend factor
+        # Each day uses same weekday from last week × that day's trend factor
         forecast_by_day = []
         forecast_date = recent_week_end + timedelta(days=1)  # Day after recent week ends
         base_date = recent_week_start  # Start of recent week
@@ -6606,8 +6605,8 @@ def store_daily_pick_list(request):
             # Get base sales (same weekday from last week)
             base_sales = sales_by_date.get(base_date, 0)
 
-            # Apply trend factor
-            daily_forecast = base_sales * trend_factor
+            # Apply daily trend factor for this weekday
+            daily_forecast = base_sales * daily_trend_factors[i]
 
             # Apply minimum rule: if forecast < 1, set to 1 (but keep 0 as 0)
             if 0 < daily_forecast < 1:
@@ -6659,7 +6658,7 @@ def store_daily_pick_list(request):
             'previous_week_sales_by_day': previous_week_sales_by_day,
             'sales_by_day': sales_by_day,
             'forecast_by_day': forecast_by_day,
-            'trend_factor': round(trend_factor, 2),
+            'daily_trend_factors': [round(tf, 2) for tf in daily_trend_factors],
             'recent_week_total': int(recent_week_sales),
             'previous_week_total': int(previous_week_sales),
         })
