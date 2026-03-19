@@ -41,22 +41,8 @@
     border-bottom: 2px solid #dee2e6;
 }
 
-#deadStockTable tbody tr {
-    background-color: #fff5f5;
-}
-
 #deadStockTable tbody tr:hover {
-    background-color: #ffe0e0;
-}
-
-/* Alert styling for high carrying cost */
-.high-cost {
-    background-color: #fff0f0 !important;
-    border-left: 4px solid #dc3545;
-}
-
-.high-cost:hover {
-    background-color: #ffd7d7 !important;
+    background-color: #f8f9fa;
 }
 </style>
 {% endblock %}
@@ -175,7 +161,7 @@
                             </thead>
                             <tbody>
                                 {% for item in report_data %}
-                                <tr {% if item.carrying_cost > 5000 %}class="high-cost"{% endif %}>
+                                <tr>
                                     <td>{{ item.product_name }}</td>
                                     <td>{{ item.sku }}</td>
                                     <td class="text-center">
@@ -230,7 +216,6 @@
                                 <p class="mb-0 mt-2 small">This capital could be reinvested in faster-moving products. Additional costs include warehousing, insurance, and potential obsolescence.</p>
                             </div>
 
-                            <p class="mb-0 mt-3 text-muted small"><em>Note: Items highlighted in red have carrying costs exceeding $5,000 and should be prioritized for action.</em></p>
                         </div>
                     </div>
                 </div>
@@ -244,8 +229,8 @@
 
                             <ul class="mb-3">
                                 <li class="mb-2">
-                                    <strong class="text-danger">High carrying cost items (red highlighted):</strong><br>
-                                    <small>Priority for clearance actions - highest financial impact.</small>
+                                    <strong class="text-danger">High carrying cost items:</strong><br>
+                                    <small>Priority for clearance actions - highest financial impact. Table is sorted by carrying cost.</small>
                                 </li>
                                 <li class="mb-2">
                                     <strong>Recent dead stock (600-700 days):</strong><br>
