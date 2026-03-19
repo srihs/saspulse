@@ -82,7 +82,7 @@
 
     /* Modal Dialog */
     .timeline-modal .modal-dialog {
-        max-width: 1000px;
+        max-width: 1400px;
         margin: 1.75rem auto;
     }
 
@@ -128,6 +128,13 @@
         font-size: 0.9rem;
     }
 
+    .timeline-summary-previous {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        color: #6c757d;
+    }
+
     .timeline-summary-sales {
         display: flex;
         align-items: center;
@@ -157,6 +164,10 @@
         border-right: none;
     }
 
+    .timeline-section-previous {
+        background: linear-gradient(to bottom, #f8f9fa 0%, #ffffff 100%);
+    }
+
     .timeline-section-past {
         background: linear-gradient(to bottom, #f8f9ff 0%, #ffffff 100%);
     }
@@ -178,6 +189,13 @@
         text-transform: uppercase;
         letter-spacing: 0.5px;
         color: #495057;
+    }
+
+    .timeline-section-previous .timeline-section-header {
+        color: #6c757d;
+        background: linear-gradient(135deg, #e9ecef 0%, #f8f9fa 100%);
+        border-bottom-color: #6c757d;
+        padding-left: 2rem;
     }
 
     .timeline-section-past .timeline-section-header {
@@ -243,7 +261,11 @@
         letter-spacing: 0.02em;
     }
 
-    /* Differentiate Sales vs Forecast Values */
+    /* Differentiate Previous Week vs Sales vs Forecast Values */
+    .timeline-section-previous .qty-value {
+        color: #6c757d;
+    }
+
     .timeline-section-past .qty-value {
         color: #0d6efd;
     }
@@ -557,6 +579,8 @@
                                   tabindex="0"
                                   data-product-name="{{ item.product_name }}"
                                   data-sku="{{ item.sku }}"
+                                  data-previous-week-total="{{ item.previous_week_total|default:'0' }}"
+                                  data-previous-week-breakdown='{{ item.previous_week_sales_by_day|tojson }}'
                                   data-sales-total="{{ item.total_sales_7d|default:'0' }}"
                                   data-sales-breakdown='{{ item.sales_by_day|tojson }}'
                                   data-forecast-total="{{ item.forecasted_demand|default:'0' }}"
@@ -596,28 +620,61 @@
 
                         <!-- Summary Row -->
                         <div class="timeline-summary">
+                            <span class="timeline-summary-previous">
+                                <i data-feather="rewind" style="width: 16px; height: 16px;"></i>
+                                Previous Week: <strong id="totalPreviousWeek"></strong> units
+                            </span>
+                            <span class="timeline-divider">→</span>
                             <span class="timeline-summary-sales">
                                 <i data-feather="calendar" style="width: 16px; height: 16px;"></i>
-                                Last 7 Days: <strong id="totalSales"></strong> units
+                                Recent Week: <strong id="totalSales"></strong> units
                             </span>
                             <span class="timeline-divider">→</span>
                             <span class="timeline-summary-forecast">
                                 <i data-feather="trending-up" style="width: 16px; height: 16px;"></i>
-                                Next 7 Days: <strong id="totalForecast"></strong> units
+                                Forecast: <strong id="totalForecast"></strong> units
                             </span>
                         </div>
                     </div>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
 
-                <!-- Body (Split Columns) -->
+                <!-- Body (Three Columns) -->
                 <div class="modal-body p-0">
                     <div class="row g-0">
-                        <!-- LEFT: Past Sales -->
-                        <div class="col-md-6 timeline-section timeline-section-past">
+                        <!-- COLUMN 1: Previous Week -->
+                        <div class="col-md-4 timeline-section timeline-section-previous">
+                            <div class="timeline-section-header">
+                                <i data-feather="rewind" style="width: 18px; height: 18px;"></i>
+                                <span>PREVIOUS 7 DAYS</span>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table timeline-table mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th style="width: 45%;">Date</th>
+                                            <th style="width: 30%;">Day</th>
+                                            <th class="text-end" style="width: 25%;">Sold</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="previousWeekTableBody">
+                                        <!-- Populated by JS -->
+                                    </tbody>
+                                    <tfoot>
+                                        <tr class="total-row">
+                                            <td colspan="2"><strong>TOTAL</strong></td>
+                                            <td class="text-end"><strong><span id="totalPreviousWeekFooter" class="qty-value"></span></strong></td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- COLUMN 2: Recent Week -->
+                        <div class="col-md-4 timeline-section timeline-section-past">
                             <div class="timeline-section-header">
                                 <i data-feather="calendar" style="width: 18px; height: 18px;"></i>
-                                <span>PAST 7 DAYS (ACTUAL)</span>
+                                <span>RECENT 7 DAYS</span>
                             </div>
                             <div class="table-responsive">
                                 <table class="table timeline-table mb-0">
@@ -641,8 +698,8 @@
                             </div>
                         </div>
 
-                        <!-- RIGHT: Future Forecast -->
-                        <div class="col-md-6 timeline-section timeline-section-future">
+                        <!-- COLUMN 3: Future Forecast -->
+                        <div class="col-md-4 timeline-section timeline-section-future">
                             <div class="timeline-section-header">
                                 <i data-feather="trending-up" style="width: 18px; height: 18px;"></i>
                                 <span>NEXT 7 DAYS (FORECAST)</span>
@@ -731,7 +788,11 @@ $(document).ready(function() {
         const productName = badge.data('product-name');
         const sku = badge.data('sku');
 
-        // Extract sales data (historical)
+        // Extract previous week data
+        const previousWeekData = badge.data('previous-week-breakdown');
+        const previousWeekTotal = badge.data('previous-week-total');
+
+        // Extract sales data (recent week)
         const salesData = badge.data('sales-breakdown');
         const salesTotal = badge.data('sales-total');
 
@@ -742,17 +803,22 @@ $(document).ready(function() {
         // Update modal header
         $('#productName').text(productName);
         $('#productSku').text(sku);
+        $('#totalPreviousWeek').text(Math.round(previousWeekTotal).toLocaleString());
         $('#totalSales').text(Math.round(salesTotal).toLocaleString());
         $('#totalForecast').text(parseFloat(forecastTotal).toLocaleString('en-US', {
             minimumFractionDigits: 1,
             maximumFractionDigits: 1
         }));
 
-        // Populate sales table (left column)
+        // Populate previous week table (column 1)
+        populateTimelineTable('previousWeekTableBody', previousWeekData, 'sales');
+        $('#totalPreviousWeekFooter').text(Math.round(previousWeekTotal).toLocaleString());
+
+        // Populate sales table (column 2)
         populateTimelineTable('salesTableBody', salesData, 'sales');
         $('#totalSalesFooter').text(Math.round(salesTotal).toLocaleString());
 
-        // Populate forecast table (right column)
+        // Populate forecast table (column 3)
         populateTimelineTable('forecastTableBody', forecastData, 'forecast');
         $('#totalForecastFooter').text(parseFloat(forecastTotal).toLocaleString('en-US', {
             minimumFractionDigits: 1,

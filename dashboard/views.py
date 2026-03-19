@@ -6568,6 +6568,20 @@ def store_daily_pick_list(request):
             # No previous sales data - use neutral trend
             trend_factor = 1.0
 
+        # Build daily breakdown for previous week (7 days before recent week)
+        previous_week_sales_by_day = []
+        current_date = previous_week_start
+        for i in range(7):
+            day_qty = sales_by_date.get(current_date, 0)
+
+            previous_week_sales_by_day.append({
+                'date': current_date.strftime('%Y-%m-%d'),
+                'day_name': current_date.strftime('%A'),
+                'qty': int(day_qty)
+            })
+
+            current_date += timedelta(days=1)
+
         # Build daily breakdown for recent week (last 7 days for display)
         sales_by_day = []
         current_date = recent_week_start
@@ -6642,6 +6656,7 @@ def store_daily_pick_list(request):
             'incoming_stock': int(incoming_stock),
             'total_sales_7d': int(recent_week_sales),
             'forecasted_demand': int(forecasted_demand),
+            'previous_week_sales_by_day': previous_week_sales_by_day,
             'sales_by_day': sales_by_day,
             'forecast_by_day': forecast_by_day,
             'trend_factor': round(trend_factor, 2),
