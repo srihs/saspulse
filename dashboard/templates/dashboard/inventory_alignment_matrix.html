@@ -249,13 +249,12 @@
                         </h4>
                     </div>
                     <div class="table-responsive">
-                        <table id="alignmentMatrixTable" class="table table-hover table-sm" style="width:100%">
+                        <table id="alignmentMatrixTable" class="table table-hover table-sm">
                             <thead>
                                 <tr>
                                     <th>Customer</th>
-                                    <th>Style Code</th>
                                     <th>Product Name</th>
-                                    <th>SKU</th>
+                                    <th>Stylecode</th>
                                     <th>Annual Sales</th>
                                     <th>BTS Sales</th>
                                     <th>Growth %</th>
@@ -270,7 +269,6 @@
                                 {% for item in matrix_data %}
                                 <tr>
                                     <td>{{ item.customer }}</td>
-                                    <td>{{ item.style_code }}</td>
                                     <td>{{ item.product_name }}</td>
                                     <td>{{ item.sku }}</td>
                                     <td class="text-end">{{ item.units_sold_annual|floatformat:0|intcomma }}</td>
@@ -336,7 +334,8 @@ $(document).ready(function() {
 
     var table = $('#alignmentMatrixTable').DataTable({
         pageLength: 25,
-        order: [[0, 'asc'], [2, 'asc'], [9, 'asc']],  // Sort by Customer, Product Name, then Days Coverage
+        order: [[0, 'asc'], [1, 'asc'], [8, 'asc']],  // Sort by Customer, Product Name, then Days Coverage
+        autoWidth: false,
         dom: '<"row"<"col-sm-12 col-md-6"B><"col-sm-12 col-md-6"f>>rtip',
         buttons: [
             {
@@ -384,7 +383,7 @@ $(document).ready(function() {
             }
         ],
         rowGroup: {
-            dataSrc: [0, 2],  // Group by Customer (column 0), then Product Name (column 2)
+            dataSrc: [0, 1],  // Group by Customer (column 0), then Product Name (column 1)
             startRender: function (rows, group, level) {
                 var count = rows.count();
 
@@ -394,12 +393,12 @@ $(document).ready(function() {
                         // Customer group header (Level 0)
                         return $('<tr/>')
                             .addClass('group-header customer-group')
-                            .append('<td colspan="12"><i class="fas fa-school me-2"></i><strong>' + group + '</strong> <span class="badge">' + count + ' items</span></td>');
+                            .append('<td colspan="11"><i class="fas fa-school me-2"></i><strong>' + group + '</strong> <span class="badge">' + count + ' items</span></td>');
                     } else {
                         // Product group header (Level 1)
                         return $('<tr/>')
                             .addClass('group-header product-group')
-                            .append('<td colspan="12"><i class="fas fa-box me-2"></i>' + group + ' <span class="badge">' + count + ' variations</span></td>');
+                            .append('<td colspan="11"><i class="fas fa-box me-2"></i>' + group + ' <span class="badge">' + count + ' variations</span></td>');
                     }
                 }
                 // Return null to skip group header for single items
@@ -408,12 +407,12 @@ $(document).ready(function() {
         },
         columnDefs: [
             {
-                targets: [0, 2],  // Customer and Product Name columns
+                targets: [0, 1],  // Customer and Product Name columns
                 visible: false,   // Hide but still use for grouping and searching
                 searchable: true
             },
             {
-                targets: [4, 5, 6, 7, 8, 9, 10],  // Numeric columns to right-align
+                targets: [3, 4, 5, 6, 7, 8, 9],  // Numeric columns to right-align
                 className: "text-end"
             }
         ],

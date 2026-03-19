@@ -106,7 +106,7 @@
 
                     {% if top_performing_schools %}
                     <div class="table-responsive">
-                        <table id="performanceTable" class="table table-striped table-hover ranking-table" style="width:100%">
+                        <table id="performanceTable" class="table table-striped table-hover ranking-table">
                             <thead>
                                 <tr>
                                     <th rowspan="2">School</th>
@@ -282,7 +282,7 @@
                             <thead>
                                 <tr>
                                     <th>School</th>
-                                    <th>Style Code</th>
+                                    <th>Stylecode</th>
                                     <th>Product Name</th>
                                     <th class="text-end">Stock Value</th>
                                     <th class="text-end">BTS Sales</th>
@@ -374,6 +374,7 @@ $(document).ready(function() {
         var performanceTable = $('#performanceTable').DataTable({
             order: [[1, 'desc']],
             pageLength: 20,
+            autoWidth: false,
             dom: 'frtip',
             language: {
                 search: "_INPUT_",
@@ -396,6 +397,7 @@ $(document).ready(function() {
         var customerTable = $('#customerRankingsTable').DataTable({
             order: [[5, 'desc']],  // Sort by hidden priority column
             pageLength: 25,
+            autoWidth: false,
             dom: 'frtip',
             language: {
                 search: "_INPUT_",
@@ -418,6 +420,7 @@ $(document).ready(function() {
         var productTable = $('#productRankingsTable').DataTable({
             order: [[7, 'desc']],  // Sort by hidden priority column
             pageLength: 25,
+            autoWidth: false,
             dom: 'frtip',
             language: {
                 search: "_INPUT_",

@@ -376,11 +376,11 @@
 
         <!-- Data Table -->
         <div class="table-responsive">
-            <table id="pickListTable" class="table table-hover" style="width:100%">
+            <table id="pickListTable" class="table table-hover">
                 <thead>
                     <tr>
                         <th>Product</th>
-                        <th>SKU</th>
+                        <th>Stylecode</th>
                         <th class="text-center">Last 7 Days Sales</th>
                         <th class="text-center">Next 7 Days Forecast</th>
                     </tr>
@@ -490,6 +490,7 @@ $(document).ready(function() {
         pageLength: 25,
         lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
         order: [[2, 'desc']], // Sort by Last 7 Days Sales (descending)
+        autoWidth: false,
         language: {
             search: "Search products:",
             lengthMenu: "Show _MENU_ items per page",
