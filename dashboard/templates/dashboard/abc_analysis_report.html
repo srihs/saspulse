@@ -279,14 +279,13 @@
                         </h4>
                     </div>
                     <div class="table-responsive">
-                        <table id="abcAnalysisTable" class="table table-hover table-sm" style="width:100%">
+                        <table id="abcAnalysisTable" class="table table-hover table-sm">
                             <thead>
                                 <tr>
                                     <th>Rank</th>
                                     <th>Customer (School)</th>
                                     <th>Product Name</th>
-                                    <th>Style Code</th>
-                                    <th>SKU</th>
+                                    <th>Stylecode</th>
                                     <th>Annual Revenue</th>
                                     <th>Cumulative %</th>
                                     <th>ABC Category</th>
@@ -299,7 +298,6 @@
                                     <td class="text-center">{{ item.rank }}</td>
                                     <td>{{ item.customer }}</td>
                                     <td>{{ item.product_name }}</td>
-                                    <td>{{ item.style_code }}</td>
                                     <td>{{ item.sku }}</td>
                                     <td class="text-end">${{ item.annual_revenue|floatformat:2|intcomma }}</td>
                                     <td class="text-end">{{ item.cumulative_pct }}%</td>
@@ -453,6 +451,7 @@ $(document).ready(function() {
     var table = $('#abcAnalysisTable').DataTable({
         pageLength: 50,
         order: [[0, 'asc']],  // Sort by Rank ascending (already sorted by revenue DESC)
+        autoWidth: false,  // Disable automatic column width calculation
         dom: '<"row"<"col-sm-12 col-md-6"B><"col-sm-12 col-md-6"f>>rtip',
         buttons: [
             {
@@ -493,7 +492,7 @@ $(document).ready(function() {
             }
         ],
         rowGroup: {
-            dataSrc: 7,  // Group by ABC Category column (index 7)
+            dataSrc: 6,  // Group by ABC Category column (index 6)
             startRender: function(rows, group) {
                 var categoryClass = 'category-' + group.toLowerCase();
                 var icon = '';
@@ -511,16 +510,16 @@ $(document).ready(function() {
                 }
 
                 return $('<tr class="dtrg-group ' + categoryClass + '"/>')
-                    .append('<td colspan="9">' + icon + '<strong>' + group + ' Items</strong>' + description + ' (' + rows.count() + ' products)</td>');
+                    .append('<td colspan="8">' + icon + '<strong>' + group + ' Items</strong>' + description + ' (' + rows.count() + ' products)</td>');
             }
         },
         columnDefs: [
             {
-                targets: [0, 6, 7, 8],  // Rank, Cumulative %, ABC Category, Monitoring - center align
+                targets: [0, 5, 6, 7],  // Rank, Cumulative %, ABC Category, Monitoring - center align
                 className: "text-center"
             },
             {
-                targets: [5, 6],  // Annual Revenue, Cumulative % - right align
+                targets: [4, 5],  // Annual Revenue, Cumulative % - right align
                 className: "text-end"
             }
         ],

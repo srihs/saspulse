@@ -212,14 +212,13 @@
                         </h4>
                     </div>
                     <div class="table-responsive">
-                        <table id="bestSellersTable" class="table table-hover table-sm" style="width:100%">
+                        <table id="bestSellersTable" class="table table-hover table-sm">
                             <thead>
                                 <tr>
                                     <th>Rank</th>
                                     <th>Customer</th>
                                     <th>Product Name</th>
-                                    <th>Style Code</th>
-                                    <th>SKU</th>
+                                    <th>Stylecode</th>
                                     <th>Revenue</th>
                                     <th>Units Sold</th>
                                     <th>Turn Rate</th>
@@ -240,7 +239,6 @@
                                             <i class="fas fa-crown text-warning ms-1"></i>
                                         {% endif %}
                                     </td>
-                                    <td>{{ item.style_code }}</td>
                                     <td>{{ item.sku }}</td>
                                     <td class="text-end">
                                         <strong class="text-success">${{ item.total_revenue|floatformat:2|intcomma }}</strong>
@@ -364,6 +362,7 @@ $(document).ready(function() {
         pageLength: 20,
         paging: false,  // Disable pagination since we only have 20 items
         order: [[0, 'asc']],  // Sort by Rank ascending
+        autoWidth: false,  // Disable automatic column width calculation
         dom: '<"row"<"col-sm-12 col-md-6"B><"col-sm-12 col-md-6"f>>rt',  // Remove pagination controls
         buttons: [
             {
@@ -405,7 +404,7 @@ $(document).ready(function() {
         ],
         columnDefs: [
             {
-                targets: [5, 6, 7],  // Numeric columns to right-align
+                targets: [4, 5, 6],  // Numeric columns to right-align
                 className: "text-end"
             }
         ],

@@ -161,12 +161,11 @@
                         </h4>
                     </div>
                     <div class="table-responsive">
-                        <table id="deadStockTable" class="table table-hover table-sm" style="width:100%">
+                        <table id="deadStockTable" class="table table-hover table-sm">
                             <thead>
                                 <tr>
                                     <th>Product Name</th>
-                                    <th>Style Code</th>
-                                    <th>SKU</th>
+                                    <th>Stylecode</th>
                                     <th>Last Sale Date</th>
                                     <th>Days Since Sale</th>
                                     <th>Units Remaining</th>
@@ -178,7 +177,6 @@
                                 {% for item in report_data %}
                                 <tr {% if item.carrying_cost > 5000 %}class="high-cost"{% endif %}>
                                     <td>{{ item.product_name }}</td>
-                                    <td>{{ item.style_code }}</td>
                                     <td>{{ item.sku }}</td>
                                     <td class="text-center">
                                         {% if item.last_sale_date == 'Never' %}
@@ -298,7 +296,8 @@ $(document).ready(function() {
 
     var table = $('#deadStockTable').DataTable({
         pageLength: 25,
-        order: [[7, 'desc']],  // Sort by Total Carrying Cost descending (highest cost first)
+        order: [[6, 'desc']],  // Sort by Total Carrying Cost descending (highest cost first)
+        autoWidth: false,  // Disable automatic column width calculation
         dom: '<"row"<"col-sm-12 col-md-6"B><"col-sm-12 col-md-6"f>>rtip',
         buttons: [
             {
@@ -340,7 +339,7 @@ $(document).ready(function() {
         ],
         columnDefs: [
             {
-                targets: [4, 5, 6, 7],  // Numeric columns to right-align
+                targets: [3, 4, 5, 6],  // Numeric columns to right-align
                 className: "text-end"
             }
         ],
