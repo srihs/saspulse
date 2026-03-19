@@ -179,8 +179,8 @@
                                     <td>{{ item.product_name }}</td>
                                     <td>{{ item.sku }}</td>
                                     <td class="text-center">
-                                        {% if item.last_sale_date == 'Never' %}
-                                            <span class="badge bg-dark">{{ item.last_sale_date }}</span>
+                                        {% if item.last_sale_date == 'Never' or not item.last_sale_date %}
+                                            <span class="badge bg-dark">Never</span>
                                         {% else %}
                                             {{ item.last_sale_date|date:"M d, Y" }}
                                         {% endif %}
