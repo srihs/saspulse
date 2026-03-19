@@ -182,7 +182,7 @@
                                         {% if item.last_sale_date == 'Never' %}
                                             <span class="badge bg-dark">{{ item.last_sale_date }}</span>
                                         {% else %}
-                                            {{ item.last_sale_date }}
+                                            {{ item.last_sale_date|date:"M d, Y" }}
                                         {% endif %}
                                     </td>
                                     <td class="text-end">
