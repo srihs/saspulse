@@ -363,6 +363,7 @@ $(document).ready(function() {
     var table = $('#stockTurnRateTable').DataTable({
         pageLength: 25,
         order: [[5, 'desc']],  // Sort by Turn Rate descending
+        autoWidth: true,  // Allow columns to size automatically based on content
         dom: '<"row"<"col-sm-12 col-md-6"B><"col-sm-12 col-md-6"f>>rtip',
         buttons: [
             {
