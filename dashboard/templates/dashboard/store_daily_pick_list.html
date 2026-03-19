@@ -76,144 +76,249 @@
         border-color: #198754;
     }
 
-    /* Modal Styling */
-    .breakdown-modal .modal-dialog {
+    /* ================================================
+       CONSOLIDATED TIMELINE MODAL STYLES
+       ================================================ */
+
+    /* Modal Dialog */
+    .timeline-modal .modal-dialog {
+        max-width: 1000px;
         margin: 1.75rem auto;
     }
 
-    .breakdown-modal .modal-header {
-        border-bottom: 2px solid #dee2e6;
+    .timeline-modal .modal-content {
+        border-radius: 12px;
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+    }
+
+    /* Modal Header */
+    .timeline-modal .modal-header {
+        background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+        border-bottom: 3px solid #dee2e6;
         padding: 1.5rem;
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
     }
 
-    .breakdown-modal .modal-header.sales-header {
-        background: linear-gradient(135deg, #e7f1ff 0%, #d0e7ff 100%);
-        border-bottom-color: #0d6efd;
-    }
-
-    .breakdown-modal .modal-header.forecast-header {
-        background: linear-gradient(135deg, #d1e7dd 0%, #badbcc 100%);
-        border-bottom-color: #198754;
-    }
-
-    .breakdown-modal .modal-title {
+    .timeline-modal .modal-title {
         font-weight: 700;
+        font-size: 1.35rem;
         display: flex;
         align-items: center;
         gap: 0.75rem;
-        font-size: 1.25rem;
-        line-height: 1.4;
-        word-wrap: break-word;
+        color: #212529;
     }
 
-    .breakdown-modal .modal-subtitle {
+    .timeline-modal .modal-subtitle {
         font-size: 0.9rem;
-        opacity: 0.8;
+        color: #6c757d;
         font-weight: 400;
         margin-top: 0.5rem;
         font-family: 'Courier New', monospace;
     }
 
-    .breakdown-modal .breakdown-table {
+    /* Timeline Summary Row (in header) */
+    .timeline-summary {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        margin-top: 1rem;
+        padding: 0.75rem 1rem;
+        background: white;
+        border-radius: 8px;
+        border: 1px solid #dee2e6;
+        font-size: 0.9rem;
+    }
+
+    .timeline-summary-sales {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        color: #0d6efd;
+    }
+
+    .timeline-summary-forecast {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        color: #198754;
+    }
+
+    .timeline-divider {
+        font-size: 1.25rem;
+        color: #adb5bd;
+        font-weight: 300;
+    }
+
+    /* Timeline Sections (Left/Right Columns) */
+    .timeline-section {
+        border-right: 2px solid #dee2e6;
+    }
+
+    .timeline-section:last-child {
+        border-right: none;
+    }
+
+    .timeline-section-past {
+        background: linear-gradient(to bottom, #f8f9ff 0%, #ffffff 100%);
+    }
+
+    .timeline-section-future {
+        background: linear-gradient(to bottom, #f8fff9 0%, #ffffff 100%);
+    }
+
+    /* Section Headers */
+    .timeline-section-header {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 1rem 1.5rem;
+        background: #f8f9fa;
+        border-bottom: 2px solid #dee2e6;
+        font-size: 0.75rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: #495057;
+    }
+
+    .timeline-section-past .timeline-section-header {
+        color: #0d6efd;
+        background: linear-gradient(135deg, #e7f1ff 0%, #f8f9fa 100%);
+        border-bottom-color: #0d6efd;
+    }
+
+    .timeline-section-future .timeline-section-header {
+        color: #198754;
+        background: linear-gradient(135deg, #d1e7dd 0%, #f8f9fa 100%);
+        border-bottom-color: #198754;
+    }
+
+    /* Timeline Tables */
+    .timeline-table {
         margin: 0;
     }
 
-    .breakdown-modal .breakdown-table thead th {
+    .timeline-table thead th {
         background-color: #f8f9fa;
         font-weight: 600;
         border-bottom: 2px solid #dee2e6;
-        padding: 1.5rem !important;
+        padding: 1rem 1.5rem;
         color: #495057;
-        position: sticky;
-        top: 0;
-        z-index: 10;
+        font-size: 0.85rem;
         white-space: nowrap;
     }
 
-    .breakdown-modal .breakdown-table tbody td {
-        padding: 1.5rem !important;
+    .timeline-table tbody td {
+        padding: 1rem 1.5rem;
         vertical-align: middle;
         border-bottom: 1px solid #f0f0f0;
-        white-space: normal;
-        word-wrap: break-word;
     }
 
-    .breakdown-modal .breakdown-table tfoot td {
-        padding: 1.5rem !important;
-        vertical-align: middle;
-        white-space: nowrap;
+    .timeline-table tbody tr:hover {
+        background-color: rgba(0, 0, 0, 0.03);
     }
 
-    .breakdown-modal .breakdown-table tbody tr:hover {
-        background-color: #f8f9fa;
-    }
-
-    .breakdown-modal .breakdown-table tbody tr:last-child {
+    .timeline-table tbody tr:last-child {
         border-bottom: none;
     }
 
-    .breakdown-modal .breakdown-table .total-row {
-        font-weight: 700;
-        background-color: #f8f9fa;
-        border-top: 2px solid #dee2e6;
-    }
-
-    .breakdown-modal .breakdown-table .total-row:hover {
-        background-color: #f8f9fa;
-    }
-
-    .breakdown-modal .day-name {
-        color: #6c757d;
+    /* Data Styling */
+    .timeline-table .date-value {
+        font-weight: 500;
+        color: #212529;
         font-size: 0.9rem;
-        white-space: nowrap;
     }
 
-    .breakdown-modal .qty-value {
+    .timeline-table .day-name {
+        color: #6c757d;
+        font-size: 0.85rem;
+        text-transform: capitalize;
+    }
+
+    .timeline-table .qty-value {
         font-weight: 600;
-        font-size: 1.1rem;
-        white-space: nowrap;
+        font-size: 1.05rem;
         font-variant-numeric: tabular-nums;
         letter-spacing: 0.02em;
     }
 
-    .breakdown-modal .date-value {
-        font-weight: 500;
+    /* Differentiate Sales vs Forecast Values */
+    .timeline-section-past .qty-value {
+        color: #0d6efd;
     }
 
-    /* Ensure modal is properly centered and visible */
-    .breakdown-modal .modal-content {
-        border-radius: 12px;
-        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+    .timeline-section-future .qty-value {
+        color: #198754;
+        font-style: italic;
     }
 
-    /* Responsive modal adjustments */
+    /* Footer Totals */
+    .timeline-table tfoot td {
+        padding: 1.25rem 1.5rem;
+        font-weight: 700;
+        background-color: #f8f9fa;
+        border-top: 2px solid #dee2e6;
+        font-size: 1rem;
+    }
+
+    .timeline-table tfoot .qty-value {
+        font-size: 1.25rem;
+    }
+
+    /* Timeline Footer (Info Banner) */
+    .timeline-footer {
+        background: #f8f9fa;
+        border-top: 2px solid #dee2e6;
+        padding: 1rem 1.5rem;
+    }
+
+    .trend-info {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.85rem;
+        color: #6c757d;
+        font-style: italic;
+    }
+
+    .trend-info i {
+        color: #0dcaf0;
+    }
+
+    /* Responsive Design */
     @media (max-width: 768px) {
-        .breakdown-modal .modal-dialog {
+        .timeline-modal .modal-dialog {
             margin: 1rem;
             max-width: calc(100% - 2rem);
         }
 
-        .breakdown-modal .modal-title {
-            font-size: 1.1rem;
+        .timeline-section {
+            border-right: none;
+            border-bottom: 2px solid #dee2e6;
+        }
+
+        .timeline-section:last-child {
+            border-bottom: none;
+        }
+
+        .timeline-summary {
+            flex-direction: column;
+            align-items: flex-start;
             gap: 0.5rem;
         }
 
-        .breakdown-modal .modal-subtitle {
-            font-size: 0.8rem;
+        .timeline-divider {
+            transform: rotate(90deg);
         }
 
-        .breakdown-modal .breakdown-table thead th,
-        .breakdown-modal .breakdown-table tbody td,
-        .breakdown-modal .breakdown-table tfoot td {
-            padding: 1rem !important;
-            font-size: 0.9rem;
+        .timeline-table thead th,
+        .timeline-table tbody td,
+        .timeline-table tfoot td {
+            padding: 0.75rem 1rem;
+            font-size: 0.85rem;
         }
 
-        .breakdown-modal .qty-value {
-            font-size: 1rem;
+        .timeline-modal .modal-title {
+            font-size: 1.1rem;
         }
     }
 
@@ -437,40 +542,101 @@
 
     {% endif %}
 
-    <!-- Breakdown Modal -->
-    <div class="modal fade breakdown-modal" id="breakdownModal" tabindex="-1" aria-labelledby="breakdownModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width: 650px;">
+    <!-- Consolidated Timeline Modal -->
+    <div class="modal fade timeline-modal" id="timelineModal" tabindex="-1" aria-labelledby="timelineModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
             <div class="modal-content">
-                <div class="modal-header" id="modalHeader">
+                <!-- Header -->
+                <div class="modal-header">
                     <div style="flex: 1;">
-                        <h5 class="modal-title" id="breakdownModalLabel">
-                            <i data-feather="calendar" style="width: 24px; height: 24px;"></i>
-                            <span id="modalTitle"></span>
+                        <h5 class="modal-title" id="timelineModalLabel">
+                            <i data-feather="bar-chart-2" style="width: 24px; height: 24px;"></i>
+                            <span>7-Day Timeline - <span id="productName"></span></span>
                         </h5>
-                        <div class="modal-subtitle" id="modalSubtitle"></div>
+                        <div class="modal-subtitle">SKU: <span id="productSku"></span></div>
+
+                        <!-- Summary Row -->
+                        <div class="timeline-summary">
+                            <span class="timeline-summary-sales">
+                                <i data-feather="calendar" style="width: 16px; height: 16px;"></i>
+                                Last 7 Days: <strong id="totalSales"></strong> units
+                            </span>
+                            <span class="timeline-divider">→</span>
+                            <span class="timeline-summary-forecast">
+                                <i data-feather="trending-up" style="width: 16px; height: 16px;"></i>
+                                Next 7 Days: <strong id="totalForecast"></strong> units
+                            </span>
+                        </div>
                     </div>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
+
+                <!-- Body (Split Columns) -->
                 <div class="modal-body p-0">
-                    <div class="table-responsive">
-                        <table class="table breakdown-table mb-0">
-                            <thead>
-                                <tr>
-                                    <th style="width: 50%;">Date</th>
-                                    <th style="width: 25%;">Day</th>
-                                    <th class="text-end" style="width: 25%;" id="qtyColumnHeader">Units</th>
-                                </tr>
-                            </thead>
-                            <tbody id="breakdownTableBody">
-                                <!-- Populated by JavaScript -->
-                            </tbody>
-                            <tfoot>
-                                <tr class="total-row">
-                                    <td colspan="2"><strong>Total</strong></td>
-                                    <td class="text-end"><strong><span id="totalQty"></span></strong></td>
-                                </tr>
-                            </tfoot>
-                        </table>
+                    <div class="row g-0">
+                        <!-- LEFT: Past Sales -->
+                        <div class="col-md-6 timeline-section timeline-section-past">
+                            <div class="timeline-section-header">
+                                <i data-feather="calendar" style="width: 18px; height: 18px;"></i>
+                                <span>PAST 7 DAYS (ACTUAL)</span>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table timeline-table mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th style="width: 45%;">Date</th>
+                                            <th style="width: 30%;">Day</th>
+                                            <th class="text-end" style="width: 25%;">Sold</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="salesTableBody">
+                                        <!-- Populated by JS -->
+                                    </tbody>
+                                    <tfoot>
+                                        <tr class="total-row">
+                                            <td colspan="2"><strong>TOTAL</strong></td>
+                                            <td class="text-end"><strong><span id="totalSalesFooter" class="qty-value"></span></strong></td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- RIGHT: Future Forecast -->
+                        <div class="col-md-6 timeline-section timeline-section-future">
+                            <div class="timeline-section-header">
+                                <i data-feather="trending-up" style="width: 18px; height: 18px;"></i>
+                                <span>NEXT 7 DAYS (FORECAST)</span>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table timeline-table mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th style="width: 45%;">Date</th>
+                                            <th style="width: 30%;">Day</th>
+                                            <th class="text-end" style="width: 25%;">Forecast</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="forecastTableBody">
+                                        <!-- Populated by JS -->
+                                    </tbody>
+                                    <tfoot>
+                                        <tr class="total-row">
+                                            <td colspan="2"><strong>TOTAL</strong></td>
+                                            <td class="text-end"><strong><span id="totalForecastFooter" class="qty-value"></span></strong></td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Footer Info Banner -->
+                    <div class="timeline-footer">
+                        <div class="trend-info">
+                            <i data-feather="info" style="width: 16px; height: 16px;"></i>
+                            <span>Forecast uses same-weekday patterns from last week, adjusted by recent trends</span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -514,99 +680,95 @@ $(document).ready(function() {
         feather.replace();
     }
 
-    // Modal functionality for breakdown
-    const breakdownModal = new bootstrap.Modal(document.getElementById('breakdownModal'));
+    // Consolidated Timeline Modal functionality
+    const timelineModal = new bootstrap.Modal(document.getElementById('timelineModal'));
 
-    // Handle badge clicks
+    // Unified badge click handler - clicking either badge opens consolidated view
     $(document).on('click', '.sales-badge', function() {
-        const badge = $(this);
-        const type = badge.data('breakdown-type');
-        const productName = badge.data('product-name');
-        const sku = badge.data('sku');
-        const total = badge.data('total');
-        const breakdownData = badge.data('breakdown');
+        const clickedRow = $(this).closest('tr');
 
-        // Update modal header based on type
-        const modalHeader = $('#modalHeader');
-        const modalTitle = $('#modalTitle');
-        const modalSubtitle = $('#modalSubtitle');
-        const qtyColumnHeader = $('#qtyColumnHeader');
+        // Extract data from BOTH badges in the same row
+        const salesBadge = clickedRow.find('.sales-badge-blue');
+        const forecastBadge = clickedRow.find('.sales-badge-green');
 
-        if (type === 'sales') {
-            modalHeader.removeClass('forecast-header').addClass('sales-header');
-            modalTitle.html('<i data-feather="trending-up" style="width: 24px; height: 24px;"></i> Sales Breakdown - ' + productName);
-            modalSubtitle.text('SKU: ' + sku);
-            qtyColumnHeader.text('Units Sold');
-        } else {
-            modalHeader.removeClass('sales-header').addClass('forecast-header');
-            modalTitle.html('<i data-feather="activity" style="width: 24px; height: 24px;"></i> Forecast Breakdown - ' + productName);
-            modalSubtitle.text('SKU: ' + sku);
-            qtyColumnHeader.text('Forecasted Units');
-        }
+        const productName = salesBadge.data('product-name');
+        const sku = salesBadge.data('sku');
 
-        // Populate table body
-        const tbody = $('#breakdownTableBody');
-        tbody.empty();
+        const salesData = salesBadge.data('breakdown');
+        const salesTotal = salesBadge.data('total');
 
-        let calculatedTotal = 0;
+        const forecastData = forecastBadge.data('breakdown');
+        const forecastTotal = forecastBadge.data('total');
 
-        if (Array.isArray(breakdownData) && breakdownData.length > 0) {
-            breakdownData.forEach(function(day) {
-                const date = new Date(day.date);
-                const formattedDate = date.toLocaleDateString('en-US', {
-                    month: 'long',
-                    day: 'numeric',
-                    year: 'numeric'
-                });
+        // Update modal header
+        $('#productName').text(productName);
+        $('#productSku').text(sku);
+        $('#totalSales').text(Math.round(salesTotal).toLocaleString());
+        $('#totalForecast').text(parseFloat(forecastTotal).toLocaleString('en-US', {
+            minimumFractionDigits: 1,
+            maximumFractionDigits: 1
+        }));
 
-                const qty = parseFloat(day.qty) || 0;
-                calculatedTotal += qty;
+        // Populate sales table (left column)
+        populateTimelineTable('salesTableBody', salesData, 'sales');
+        $('#totalSalesFooter').text(Math.round(salesTotal).toLocaleString());
 
-                // Format quantity: whole numbers for sales, one decimal for forecasts
-                let formattedQty;
-                if (type === 'sales') {
-                    formattedQty = Math.round(qty).toLocaleString();
-                } else {
-                    // For forecasts, show one decimal place
-                    formattedQty = qty.toLocaleString('en-US', {
-                        minimumFractionDigits: 1,
-                        maximumFractionDigits: 1
-                    });
-                }
+        // Populate forecast table (right column)
+        populateTimelineTable('forecastTableBody', forecastData, 'forecast');
+        $('#totalForecastFooter').text(parseFloat(forecastTotal).toLocaleString('en-US', {
+            minimumFractionDigits: 1,
+            maximumFractionDigits: 1
+        }));
 
-                const row = `
-                    <tr>
-                        <td class="date-value">${formattedDate}</td>
-                        <td class="day-name">${day.day_name}</td>
-                        <td class="text-end qty-value">${formattedQty}</td>
-                    </tr>
-                `;
-                tbody.append(row);
-            });
-        } else {
-            tbody.append('<tr><td colspan="3" class="text-center text-muted">No breakdown data available</td></tr>');
-        }
-
-        // Update total with proper formatting
-        let formattedTotal;
-        if (type === 'sales') {
-            formattedTotal = Math.round(calculatedTotal).toLocaleString();
-        } else {
-            formattedTotal = calculatedTotal.toLocaleString('en-US', {
-                minimumFractionDigits: 1,
-                maximumFractionDigits: 1
-            });
-        }
-        $('#totalQty').text(formattedTotal);
-
-        // Re-initialize Feather icons in modal
+        // Re-initialize Feather icons
         if (typeof feather !== 'undefined') {
             feather.replace();
         }
 
         // Show modal
-        breakdownModal.show();
+        timelineModal.show();
     });
+
+    // Helper function to populate table
+    function populateTimelineTable(tbodyId, data, type) {
+        const tbody = $('#' + tbodyId);
+        tbody.empty();
+
+        if (!Array.isArray(data) || data.length === 0) {
+            tbody.append('<tr><td colspan="3" class="text-center text-muted">No data available</td></tr>');
+            return;
+        }
+
+        data.forEach(function(day) {
+            const date = new Date(day.date);
+            const formattedDate = date.toLocaleDateString('en-US', {
+                month: 'short',
+                day: 'numeric'
+            });
+
+            const qty = parseFloat(day.qty) || 0;
+
+            // Format quantity based on type
+            let formattedQty;
+            if (type === 'sales') {
+                formattedQty = Math.round(qty).toLocaleString();
+            } else {
+                formattedQty = qty.toLocaleString('en-US', {
+                    minimumFractionDigits: 1,
+                    maximumFractionDigits: 1
+                });
+            }
+
+            const row = `
+                <tr>
+                    <td class="date-value">${formattedDate}</td>
+                    <td class="day-name">${day.day_name}</td>
+                    <td class="text-end qty-value">${formattedQty}</td>
+                </tr>
+            `;
+            tbody.append(row);
+        });
+    }
 
     // Handle keyboard accessibility for badges
     $(document).on('keypress', '.sales-badge', function(e) {
