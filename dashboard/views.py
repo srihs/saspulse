@@ -6422,16 +6422,23 @@ def abc_analysis_report(request):
 @permission_required('replenishment.daily_pick_list.view')
 def store_daily_pick_list(request):
     """
-    Generate simplified daily pick list for store replenishment based on 7-day sales analysis
+    Generate daily pick list for store replenishment using trend-adjusted forecasting
+
+    Forecasting Algorithm:
+    - Step 1: Base Value = Same weekday from last week
+    - Step 2: Trend Factor = Recent 7 days / Previous 7 days
+    - Step 3: Forecast = Base × Trend Factor
+    - Step 4: Minimum Rule = If forecast < 1, set to 1
 
     Features:
-    - Shows last 7 days of sales
-    - Forecasts next 7 days demand (simple average of last 7 days)
+    - Shows last 7 days of sales with daily breakdown
+    - Forecasts next 7 days using weekday patterns + trend adjustment
     - Displays current stock and incoming stock
     - Sorted by highest forecasted demand
     """
     from datetime import date, timedelta
     from django.db.models import Sum, F, Q
+    from django.db.models.functions import TruncDate
     from cin7.models import SalesOrderLineItem, Stock, Product
 
     # Get user's assigned stores
@@ -6458,14 +6465,23 @@ def store_daily_pick_list(request):
     # Get category filter (optional)
     category_filter = request.GET.get('category', '')
 
-    # Define date range for weekly sales analysis (previous 7 days)
-    end_date = target_date  # Yesterday or selected date
-    start_date = end_date - timedelta(days=6)  # 7 days ago (inclusive)
+    # Define date ranges for trend-adjusted forecasting
+    # Recent Week: Last 7 days (for base values and trend calculation)
+    recent_week_end = target_date
+    recent_week_start = recent_week_end - timedelta(days=6)
 
-    # Query weekly sales (past 7 days)
+    # Previous Week: 7 days before recent week (for trend calculation)
+    previous_week_end = recent_week_start - timedelta(days=1)
+    previous_week_start = previous_week_end - timedelta(days=6)
+
+    # Total query window: 14 days
+    query_start_date = previous_week_start
+    query_end_date = recent_week_end
+
+    # Query sales for 14 days (2 weeks)
     sales_query = SalesOrderLineItem.objects.filter(
-        sales_order__invoice_date__date__gte=start_date,
-        sales_order__invoice_date__date__lte=end_date,
+        sales_order__invoice_date__date__gte=query_start_date,
+        sales_order__invoice_date__date__lte=query_end_date,
         sales_order__is_void=False
     )
 
@@ -6481,7 +6497,7 @@ def store_daily_pick_list(request):
     if category_filter:
         sales_query = sales_query.filter(product__category_name__icontains=category_filter)
 
-    # Aggregate weekly sales by product
+    # Aggregate sales by product (for the full 14-day period)
     sales_data = sales_query.values(
         'cin7_product_id',
         'code',
@@ -6501,29 +6517,62 @@ def store_daily_pick_list(request):
         product_name = sale['name']
         category = sale['product_category'] or 'Uncategorized'
         school_name = sale['product_sub_category'] or 'N/A'
-        total_qty_sold = float(sale['total_qty_sold'])
 
-        # Simple forecast: next 7 days = last 7 days average * 7 = last 7 days total
-        forecasted_demand = total_qty_sold
+        # Get daily sales data for this product (optimized - single query)
+        daily_sales_qs = SalesOrderLineItem.objects.filter(
+            code=sku,
+            sales_order__invoice_date__date__gte=query_start_date,
+            sales_order__invoice_date__date__lte=query_end_date,
+            sales_order__is_void=False
+        )
 
-        # Get daily breakdown for the last 7 days
-        sales_by_day = []
-        current_date = start_date
+        # Apply store filtering
+        if not is_admin and has_assigned_stores:
+            accessible_categories = user.get_accessible_categories()
+            if accessible_categories:
+                daily_sales_qs = daily_sales_qs.filter(product__category_name__in=accessible_categories)
+
+        # Aggregate by date (single database query instead of 7+)
+        daily_sales_data = daily_sales_qs.annotate(
+            sale_date=TruncDate('sales_order__invoice_date')
+        ).values('sale_date').annotate(
+            total_qty=Sum('qty')
+        ).order_by('sale_date')
+
+        # Convert to dictionary for O(1) lookups
+        sales_by_date = {
+            item['sale_date']: float(item['total_qty'])
+            for item in daily_sales_data
+        }
+
+        # Calculate trend factor
+        recent_week_sales = 0
+        previous_week_sales = 0
+
+        # Sum recent week (last 7 days)
+        current_date = recent_week_start
         for i in range(7):
-            # Query sales for this specific day
-            day_sales = SalesOrderLineItem.objects.filter(
-                code=sku,
-                sales_order__invoice_date__date=current_date,
-                sales_order__is_void=False
-            )
+            recent_week_sales += sales_by_date.get(current_date, 0)
+            current_date += timedelta(days=1)
 
-            # Apply store filtering if needed
-            if not is_admin and has_assigned_stores:
-                accessible_categories = user.get_accessible_categories()
-                if accessible_categories:
-                    day_sales = day_sales.filter(product__category_name__in=accessible_categories)
+        # Sum previous week (7 days before that)
+        current_date = previous_week_start
+        for i in range(7):
+            previous_week_sales += sales_by_date.get(current_date, 0)
+            current_date += timedelta(days=1)
 
-            day_qty = day_sales.aggregate(total=Sum('qty'))['total'] or 0
+        # Calculate trend factor (avoid division by zero)
+        if previous_week_sales > 0:
+            trend_factor = recent_week_sales / previous_week_sales
+        else:
+            # No previous sales data - use neutral trend
+            trend_factor = 1.0
+
+        # Build daily breakdown for recent week (last 7 days for display)
+        sales_by_day = []
+        current_date = recent_week_start
+        for i in range(7):
+            day_qty = sales_by_date.get(current_date, 0)
 
             sales_by_day.append({
                 'date': current_date.strftime('%Y-%m-%d'),
@@ -6533,17 +6582,36 @@ def store_daily_pick_list(request):
 
             current_date += timedelta(days=1)
 
-        # Generate forecast breakdown for next 7 days (evenly distributed)
-        daily_forecast = forecasted_demand / 7
+        # Generate forecast breakdown for next 7 days using weekday-based logic
+        # Each day uses same weekday from last week × trend factor
         forecast_by_day = []
-        forecast_date = end_date + timedelta(days=1)
+        forecast_date = recent_week_end + timedelta(days=1)  # Day after recent week ends
+        base_date = recent_week_start  # Start of recent week
+
         for i in range(7):
+            # Get base sales (same weekday from last week)
+            base_sales = sales_by_date.get(base_date, 0)
+
+            # Apply trend factor
+            daily_forecast = base_sales * trend_factor
+
+            # Apply minimum rule: if forecast < 1, set to 1 (but keep 0 as 0)
+            if 0 < daily_forecast < 1:
+                daily_forecast = 1
+            elif daily_forecast < 0:  # Handle any negative values
+                daily_forecast = 0
+
             forecast_by_day.append({
                 'date': forecast_date.strftime('%Y-%m-%d'),
                 'day_name': forecast_date.strftime('%A'),
-                'qty': round(daily_forecast, 1)  # Keep one decimal place for accuracy
+                'qty': round(daily_forecast, 1),
             })
+
             forecast_date += timedelta(days=1)
+            base_date += timedelta(days=1)
+
+        # Calculate total forecasted demand
+        forecasted_demand = sum(day['qty'] for day in forecast_by_day)
 
         # Get current stock for this product at the user's assigned stores
         stock_query = Stock.objects.filter(code=sku)
@@ -6572,10 +6640,13 @@ def store_daily_pick_list(request):
             'category': category,
             'current_stock': int(current_stock),
             'incoming_stock': int(incoming_stock),
-            'total_sales_7d': int(total_qty_sold),
+            'total_sales_7d': int(recent_week_sales),
             'forecasted_demand': int(forecasted_demand),
             'sales_by_day': sales_by_day,
             'forecast_by_day': forecast_by_day,
+            'trend_factor': round(trend_factor, 2),
+            'recent_week_total': int(recent_week_sales),
+            'previous_week_total': int(previous_week_sales),
         })
 
         categories.add(category)
@@ -6600,8 +6671,12 @@ def store_daily_pick_list(request):
 
     context = {
         'target_date': target_date,
-        'start_date': start_date,
-        'end_date': end_date,
+        'start_date': recent_week_start,
+        'end_date': recent_week_end,
+        'previous_week_start': previous_week_start,
+        'previous_week_end': previous_week_end,
+        'forecast_start': recent_week_end + timedelta(days=1),
+        'forecast_end': recent_week_end + timedelta(days=7),
         'pick_list': products,
         'total_items': len(products),
         'category_count': len(categories),

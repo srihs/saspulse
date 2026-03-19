@@ -355,8 +355,9 @@
                 <p class="mb-0">
                     This list shows products based on the last 7 days of sales
                     ({{ start_date|date:"M d" }} - {{ end_date|date:"M d, Y" }}).
-                    The forecast predicts the next 7 days using the same sales pattern,
-                    helping you maintain optimal stock levels.
+                    The forecast for the next 7 days uses <strong>same-weekday patterns</strong> from last week,
+                    adjusted by recent sales trends (comparing the last 7 days vs the previous 7 days).
+                    This helps you maintain optimal stock levels while accounting for growth or decline in demand.
                 </p>
             </div>
         </div>
