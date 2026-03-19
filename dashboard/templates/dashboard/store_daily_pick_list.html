@@ -119,9 +119,9 @@
     .timeline-summary {
         display: flex;
         align-items: center;
-        gap: 1rem;
+        gap: 1.5rem;
         margin-top: 1rem;
-        padding: 0.75rem 1rem;
+        padding: 0.75rem 1.5rem;
         background: white;
         border-radius: 8px;
         border: 1px solid #dee2e6;
@@ -169,7 +169,7 @@
     .timeline-section-header {
         display: flex;
         align-items: center;
-        gap: 0.5rem;
+        gap: 0.75rem;
         padding: 1rem 1.5rem;
         background: #f8f9fa;
         border-bottom: 2px solid #dee2e6;
@@ -184,12 +184,14 @@
         color: #0d6efd;
         background: linear-gradient(135deg, #e7f1ff 0%, #f8f9fa 100%);
         border-bottom-color: #0d6efd;
+        padding-left: 2rem;
     }
 
     .timeline-section-future .timeline-section-header {
         color: #198754;
         background: linear-gradient(135deg, #d1e7dd 0%, #f8f9fa 100%);
         border-bottom-color: #198754;
+        padding-left: 2rem;
     }
 
     /* Timeline Tables */
@@ -268,7 +270,37 @@
     .timeline-footer {
         background: #f8f9fa;
         border-top: 2px solid #dee2e6;
-        padding: 1rem 1.5rem;
+        padding: 1rem 2rem;
+    }
+
+    /* Table cell edge padding fixes for proper spacing */
+    .timeline-table thead th:first-child {
+        padding-left: 2rem;
+    }
+
+    .timeline-table thead th:last-child {
+        padding-right: 2rem;
+    }
+
+    .timeline-table tbody td:first-child {
+        padding-left: 2rem;
+    }
+
+    .timeline-table tbody td:last-child {
+        padding-right: 2rem;
+    }
+
+    .timeline-table tfoot td:first-child {
+        padding-left: 2rem;
+    }
+
+    .timeline-table tfoot td:last-child {
+        padding-right: 2rem;
+    }
+
+    /* Section divider spacing */
+    .timeline-section-future {
+        padding-left: 0.5rem;
     }
 
     .trend-info {
@@ -313,8 +345,28 @@
         .timeline-table thead th,
         .timeline-table tbody td,
         .timeline-table tfoot td {
-            padding: 0.75rem 1rem;
+            padding: 0.75rem 1.25rem;
             font-size: 0.85rem;
+        }
+
+        .timeline-table thead th:first-child,
+        .timeline-table tbody td:first-child,
+        .timeline-table tfoot td:first-child {
+            padding-left: 1.5rem;
+        }
+
+        .timeline-table thead th:last-child,
+        .timeline-table tbody td:last-child,
+        .timeline-table tfoot td:last-child {
+            padding-right: 1.5rem;
+        }
+
+        .timeline-summary {
+            padding: 0.75rem 1.25rem;
+        }
+
+        .timeline-footer {
+            padding: 1rem 1.25rem;
         }
 
         .timeline-modal .modal-title {
@@ -487,8 +539,7 @@
                     <tr>
                         <th>Product</th>
                         <th>Stylecode</th>
-                        <th class="text-center">Last 7 Days Sales</th>
-                        <th class="text-center">Next 7 Days Forecast</th>
+                        <th class="text-center">Forecast</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -501,27 +552,15 @@
                             <span class="sku-code">{{ item.sku }}</span>
                         </td>
                         <td class="text-center">
-                            <span class="sales-badge sales-badge-blue"
-                                  role="button"
-                                  tabindex="0"
-                                  data-breakdown-type="sales"
-                                  data-product-name="{{ item.product_name }}"
-                                  data-sku="{{ item.sku }}"
-                                  data-total="{{ item.total_sales_7d|default:'0' }}"
-                                  data-breakdown='{{ item.sales_by_day|tojson }}'>
-                                <i data-feather="trending-up" style="width: 14px; height: 14px; vertical-align: middle;"></i>
-                                {{ item.total_sales_7d|default:"0" }}
-                            </span>
-                        </td>
-                        <td class="text-center">
                             <span class="sales-badge sales-badge-green"
                                   role="button"
                                   tabindex="0"
-                                  data-breakdown-type="forecast"
                                   data-product-name="{{ item.product_name }}"
                                   data-sku="{{ item.sku }}"
-                                  data-total="{{ item.forecasted_demand|default:'0' }}"
-                                  data-breakdown='{{ item.forecast_by_day|tojson }}'>
+                                  data-sales-total="{{ item.total_sales_7d|default:'0' }}"
+                                  data-sales-breakdown='{{ item.sales_by_day|tojson }}'
+                                  data-forecast-total="{{ item.forecasted_demand|default:'0' }}"
+                                  data-forecast-breakdown='{{ item.forecast_by_day|tojson }}'>
                                 <i data-feather="activity" style="width: 14px; height: 14px; vertical-align: middle;"></i>
                                 {{ item.forecasted_demand|default:"0" }}
                             </span>
@@ -683,22 +722,22 @@ $(document).ready(function() {
     // Consolidated Timeline Modal functionality
     const timelineModal = new bootstrap.Modal(document.getElementById('timelineModal'));
 
-    // Unified badge click handler - clicking either badge opens consolidated view
+    // Unified badge click handler - all data now on single badge
     $(document).on('click', '.sales-badge', function() {
-        const clickedRow = $(this).closest('tr');
+        // All data is now on the single badge that was clicked
+        const badge = $(this);
 
-        // Extract data from BOTH badges in the same row
-        const salesBadge = clickedRow.find('.sales-badge-blue');
-        const forecastBadge = clickedRow.find('.sales-badge-green');
+        // Extract product info
+        const productName = badge.data('product-name');
+        const sku = badge.data('sku');
 
-        const productName = salesBadge.data('product-name');
-        const sku = salesBadge.data('sku');
+        // Extract sales data (historical)
+        const salesData = badge.data('sales-breakdown');
+        const salesTotal = badge.data('sales-total');
 
-        const salesData = salesBadge.data('breakdown');
-        const salesTotal = salesBadge.data('total');
-
-        const forecastData = forecastBadge.data('breakdown');
-        const forecastTotal = forecastBadge.data('total');
+        // Extract forecast data
+        const forecastData = badge.data('forecast-breakdown');
+        const forecastTotal = badge.data('forecast-total');
 
         // Update modal header
         $('#productName').text(productName);
