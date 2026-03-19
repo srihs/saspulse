@@ -231,7 +231,7 @@
                         </h4>
                     </div>
                     <div class="table-responsive">
-                        <table id="stockTurnRateTable" class="table table-hover table-sm" style="width:100%">
+                        <table id="stockTurnRateTable" class="table table-hover table-sm">
                             <thead>
                                 <tr>
                                     <th>Product Name</th>
@@ -363,7 +363,7 @@ $(document).ready(function() {
     var table = $('#stockTurnRateTable').DataTable({
         pageLength: 25,
         order: [[5, 'desc']],  // Sort by Turn Rate descending
-        autoWidth: true,  // Allow columns to size automatically based on content
+        autoWidth: false,  // Disable automatic column width calculation
         dom: '<"row"<"col-sm-12 col-md-6"B><"col-sm-12 col-md-6"f>>rtip',
         buttons: [
             {
