@@ -588,9 +588,7 @@
                         <h5 class="mb-0">Sales Forecasts - {{ display_name }} ({{ summary.horizon_display }})</h5>
                     </div>
                     <div class="card-body">
-                        {% if forecasts %}
-                        <div class="table-responsive">
-                        {% elif display_mode == 'flat_table' and all_variations %}
+                        {% if forecasts or display_mode == 'flat_table' and all_variations %}
                         <div class="table-responsive">
                             <table id="forecastsTable" class="table table-sm table-striped">
                                 <thead>

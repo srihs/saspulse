@@ -6541,7 +6541,7 @@ def store_daily_pick_list(request):
 
         # Convert to dictionary for O(1) lookups
         sales_by_date = {
-            item['sale_date']: float(item['total_qty'])
+            item['sale_date']: float(item['total_qty'] or 0)
             for item in daily_sales_data
         }
 
