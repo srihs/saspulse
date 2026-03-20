@@ -121,6 +121,9 @@ class SalesForecastBase(models.Model):
     # Model configuration
     model_params = models.JSONField(default=dict)  # Model hyperparameters
 
+    # Precomputed total quantity for fast stock gap filtering (sum of all daily_forecasts quantities)
+    total_quantity_365d = models.FloatField(null=True, blank=True, db_index=True, help_text="Precomputed total forecasted quantity across all days")
+
     # Forecast validity tracking
     forecast_valid_until = models.DateField(null=True, blank=True, db_index=True, help_text="Date when this forecast expires (24 months from forecast_date)")
 
@@ -181,19 +184,16 @@ class SalesForecastBase(models.Model):
         Returns:
             dict: {date: {quantity, confidence_lower, confidence_upper}, ...}
         """
-        from datetime import datetime, date
+        # Convert to ISO strings for fast comparison (YYYY-MM-DD sorts lexicographically)
+        if not isinstance(start_date, str):
+            start_date = start_date.isoformat()
+        if not isinstance(end_date, str):
+            end_date = end_date.isoformat()
 
-        # Convert to date objects if strings
-        if isinstance(start_date, str):
-            start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
-        if isinstance(end_date, str):
-            end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
-
-        # Filter daily_forecasts for the date range
+        # Filter daily_forecasts using string comparison (avoids strptime per date)
         result = {}
         for date_str, forecast_data in self.daily_forecasts.items():
-            forecast_date = datetime.strptime(date_str, '%Y-%m-%d').date()
-            if start_date <= forecast_date <= end_date:
+            if start_date <= date_str <= end_date:
                 result[date_str] = forecast_data
 
         return result

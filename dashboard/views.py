@@ -1645,6 +1645,50 @@ def sales_forecasting(request):
             'product_name': row[2] if row[2] else sku_code
         }
 
+    def batch_get_stock_data(sku_codes):
+        """Get aggregated stock data for multiple SKUs in a single query"""
+        from django.db import connection
+
+        if not sku_codes:
+            return {}
+
+        sku_list = list(set(sku_codes))
+        placeholders = ','.join(['%s'] * len(sku_list))
+
+        with connection.cursor() as cursor:
+            cursor.execute(f"""
+                SELECT
+                    po.code,
+                    COALESCE(SUM(s.stock_on_hand), 0) as total_stock_on_hand,
+                    COALESCE(SUM(s.incoming), 0) as total_incoming,
+                    MAX(p.name) as product_name
+                FROM cin7_sync_productoption po
+                LEFT JOIN cin7_sync_product p ON p.id = po.product_id
+                LEFT JOIN cin7_sync_stock s ON s.code = po.code
+                WHERE po.code IN ({placeholders})
+                GROUP BY po.code
+            """, sku_list)
+            rows = cursor.fetchall()
+
+        result = {}
+        for row in rows:
+            result[row[0]] = {
+                'stock_on_hand': float(row[1] or 0),
+                'incoming': float(row[2] or 0),
+                'product_name': row[3] if row[3] else row[0]
+            }
+
+        # Fill in defaults for any SKUs not found
+        for sku in sku_list:
+            if sku not in result:
+                result[sku] = {
+                    'stock_on_hand': 0.0,
+                    'incoming': 0.0,
+                    'product_name': sku
+                }
+
+        return result
+
     # Helper function to aggregate product forecasts by shop
     def get_shop_forecasts_from_products(start_date, end_date, search_query=None, filters=None, user_school_subcategories=None, user_store_categories=None):
         """
@@ -2073,15 +2117,21 @@ def sales_forecasting(request):
         # Shop level does its own deduplication, so skip generic dedup
         skip_generic_dedup = True
 
-        # Query product-level forecasts, optionally filtered by shop (category_name)
+        # Query product-level forecasts, deduplicated to latest per entity in SQL
         sql = """
-            SELECT DISTINCT sf.id, sf.forecast_id, sf.model_type, sf.aggregation_level,
+            SELECT sf.id, sf.forecast_id, sf.model_type, sf.aggregation_level,
                    sf.entity_name, sf.entity_id, sf.daily_forecasts, sf.forecast_date,
                    sf.training_data_start, sf.training_data_end, sf.mae, sf.mape, sf.rmse,
                    sf.accuracy_score, sf.model_params, sf.created_at, sf.updated_at,
                    p.category_name as location_name,
                    p.sub_category as school_name
             FROM dashboard_salesforecastbase sf
+            INNER JOIN (
+                SELECT entity_name, MAX(forecast_date) as max_date
+                FROM dashboard_salesforecastbase
+                WHERE aggregation_level = 'product'
+                GROUP BY entity_name
+            ) latest ON sf.entity_name = latest.entity_name AND sf.forecast_date = latest.max_date
             LEFT JOIN cin7_sync_productoption po ON po.code = sf.entity_name
             LEFT JOIN cin7_sync_product p ON p.id = po.product_id
             WHERE sf.aggregation_level = 'product'
@@ -2130,42 +2180,14 @@ def sales_forecasting(request):
         logger.info(f'DEBUG: SQL query: {sql}')
         logger.info(f'DEBUG: Parameters: {params}')
 
-        # Execute raw SQL and convert to model instances
+        # Execute raw SQL and convert to model instances (already deduplicated in SQL)
         all_base_forecasts = SalesForecastBase.objects.raw(sql, params)
 
         # IMPORTANT: Keep level as 'shop' for template rendering (don't switch to 'product')
-        # The template will detect shop_filter and render accordingly
         # level stays as 'shop'
 
-        # DEBUG: Count total raw results
-        logger.info(f'DEBUG: Converting raw SQL results to list...')
-        all_base_forecasts_list = list(all_base_forecasts)
-        logger.info(f'DEBUG: Raw SQL returned {len(all_base_forecasts_list)} total forecast records')
-
-        if len(all_base_forecasts_list) > 0:
-            sample = all_base_forecasts_list[0]
-            logger.info(f'DEBUG: Sample forecast: entity_name={sample.entity_name}, forecast_date={sample.forecast_date}')
-            logger.info(f'DEBUG: Sample daily_forecasts type: {type(sample.daily_forecasts)}')
-            logger.info(f'DEBUG: Sample daily_forecasts empty? {not bool(sample.daily_forecasts)}')
-            if sample.daily_forecasts:
-                dates = list(sample.daily_forecasts.keys())
-                logger.info(f'DEBUG: Sample has {len(dates)} dates in daily_forecasts')
-                logger.info(f'DEBUG: First 3 dates: {dates[:3]}')
-                logger.info(f'DEBUG: Last 3 dates: {dates[-3:]}')
-        else:
-            logger.warning('DEBUG: Raw SQL returned NO records!')
-
-        # Keep only the latest forecast for each entity_name
-        seen_entities = set()
-        base_forecasts = []
-        for f in all_base_forecasts_list:
-            if f.entity_name not in seen_entities:
-                base_forecasts.append(f)
-                seen_entities.add(f.entity_name)
-            if len(base_forecasts) >= 2000:  # Limit to 2000 unique entities
-                break
-
-        logger.info(f'DEBUG: After deduplication, {len(base_forecasts)} unique entities')
+        base_forecasts = list(all_base_forecasts)[:2000]  # Limit to 2000 entities
+        logger.info(f'DEBUG: SQL returned {len(base_forecasts)} unique forecast records (deduplicated in SQL)')
 
     # NORMAL HANDLING FOR OTHER LEVELS (school, product, category)
     elif level != 'shop':
@@ -2173,17 +2195,21 @@ def sales_forecasting(request):
         if level == 'school':
             from django.db import connection
 
-            # Query product-level forecasts, optionally filtered by school (sub_category)
-            sql = """
-                SELECT DISTINCT sf.id, sf.forecast_id, sf.model_type, sf.aggregation_level,
-                       sf.entity_name, sf.entity_id, sf.daily_forecasts, sf.forecast_date,
-                       sf.training_data_start, sf.training_data_end, sf.mae, sf.mape, sf.rmse,
-                       sf.accuracy_score, sf.model_params, sf.created_at, sf.updated_at,
-                       p.sub_category as school_name
+            # PHASE 1: Lightweight query - get metadata + stock data + precomputed totals
+            # This avoids loading the massive daily_forecasts JSON (544MB for all records)
+            phase1_sql = """
+                SELECT sf.id, sf.entity_name, sf.forecast_date, sf.accuracy_score,
+                       sf.mae, sf.mape, sf.rmse, sf.model_params, sf.total_quantity_365d,
+                       p.sub_category as school_name,
+                       COALESCE(SUM(s.stock_on_hand), 0) as stock_on_hand,
+                       COALESCE(SUM(s.incoming), 0) as incoming,
+                       MAX(p.name) as product_name
                 FROM dashboard_salesforecastbase sf
                 LEFT JOIN cin7_sync_productoption po ON po.code = sf.entity_name
                 LEFT JOIN cin7_sync_product p ON p.id = po.product_id
+                LEFT JOIN cin7_sync_stock s ON s.code = sf.entity_name
                 WHERE sf.aggregation_level = 'product'
+                  AND sf.total_quantity_365d > 0
                   AND (p.category_name LIKE '%%Shop' OR p.category_name LIKE '%%Store')
                   AND p.category_name NOT IN ('Shop', 'Store')
                   AND p.category_name NOT LIKE 'Wholesale%%'
@@ -2195,65 +2221,91 @@ def sales_forecasting(request):
             # DATA SCOPE: Filter by user's assigned schools (Sales Team)
             if user_school_subcategories:
                 placeholders = ', '.join(['%s'] * len(user_school_subcategories))
-                sql += f" AND p.sub_category IN ({placeholders})"
+                phase1_sql += f" AND p.sub_category IN ({placeholders})"
                 params.extend(user_school_subcategories)
 
             # DATA SCOPE: Filter by user's assigned stores (Store Level)
             if user_store_categories:
                 placeholders = ', '.join(['%s'] * len(user_store_categories))
-                sql += f" AND p.category_name IN ({placeholders})"
+                phase1_sql += f" AND p.category_name IN ({placeholders})"
                 params.extend(user_store_categories)
 
             # Add school filter if provided
             if school_filter:
-                sql += " AND p.sub_category = %s"
+                phase1_sql += " AND p.sub_category = %s"
                 params.append(school_filter)
 
             # Add search query if provided
             if search_query:
-                sql += " AND (sf.entity_name LIKE %s OR p.name LIKE %s OR p.sub_category LIKE %s)"
+                phase1_sql += " AND (sf.entity_name LIKE %s OR p.name LIKE %s OR p.sub_category LIKE %s)"
                 params.extend([f'%{search_query}%', f'%{search_query}%', f'%{search_query}%'])
 
-            sql += " ORDER BY p.sub_category, p.name, sf.entity_name, sf.forecast_date DESC"
+            phase1_sql += """ GROUP BY sf.id, sf.entity_name, sf.forecast_date, sf.accuracy_score,
+                             sf.mae, sf.mape, sf.rmse, sf.model_params, sf.total_quantity_365d,
+                             p.sub_category
+                         HAVING (COALESCE(SUM(s.stock_on_hand), 0) + COALESCE(SUM(s.incoming), 0)) < sf.total_quantity_365d
+                         ORDER BY p.sub_category, sf.entity_name"""
 
-            # Log the SQL query for debugging
-            logger.info(f'DEBUG: SCHOOL LEVEL - Executing SQL query with {len(params)} parameters')
-            logger.info(f'DEBUG: SQL query: {sql}')
-            logger.info(f'DEBUG: Parameters: {params}')
+            logger.info(f'DEBUG: SCHOOL LEVEL - Phase 1: lightweight query')
 
-            # Execute raw SQL and convert to model instances
-            all_base_forecasts = SalesForecastBase.objects.raw(sql, params)
+            from django.db import connection
+            with connection.cursor() as cursor:
+                cursor.execute(phase1_sql, params)
+                phase1_rows = cursor.fetchall()
 
-            # DEBUG: Count total raw results
-            logger.info(f'DEBUG: Converting raw SQL results to list...')
-            all_base_forecasts_list = list(all_base_forecasts)
-            logger.info(f'DEBUG: Raw SQL returned {len(all_base_forecasts_list)} total forecast records')
+            logger.info(f'DEBUG: Phase 1 returned {len(phase1_rows)} records with stock shortages')
 
-            if len(all_base_forecasts_list) > 0:
-                sample = all_base_forecasts_list[0]
-                logger.info(f'DEBUG: Sample forecast: entity_name={sample.entity_name}, forecast_date={sample.forecast_date}')
-                logger.info(f'DEBUG: Sample school_name: {getattr(sample, "school_name", None)}')
-                logger.info(f'DEBUG: Sample daily_forecasts type: {type(sample.daily_forecasts)}')
-                logger.info(f'DEBUG: Sample daily_forecasts empty? {not bool(sample.daily_forecasts)}')
-                if sample.daily_forecasts:
-                    dates = list(sample.daily_forecasts.keys())
-                    logger.info(f'DEBUG: Sample has {len(dates)} dates in daily_forecasts')
-                    logger.info(f'DEBUG: First 3 dates: {dates[:3]}')
-                    logger.info(f'DEBUG: Last 3 dates: {dates[-3:]}')
+            # Build metadata cache from phase 1 results
+            # Columns: id, entity_name, forecast_date, accuracy_score, mae, mape, rmse,
+            #          model_params, total_quantity_365d, school_name, stock_on_hand, incoming, product_name
+            phase1_ids = []
+            phase1_cache = {}
+            for row in phase1_rows:
+                forecast_id = row[0]
+                entity_name = row[1]
+                phase1_ids.append(forecast_id)
+                phase1_cache[entity_name] = {
+                    'id': forecast_id,
+                    'forecast_date': row[2],
+                    'accuracy_score': row[3],
+                    'mae': row[4],
+                    'mape': row[5],
+                    'rmse': row[6],
+                    'model_params': row[7] if isinstance(row[7], dict) else {},
+                    'total_quantity_365d': row[8],
+                    'school_name': row[9],
+                    'stock_on_hand': float(row[10] or 0),
+                    'incoming': float(row[11] or 0),
+                    'product_name': row[12] if row[12] else entity_name,
+                }
+
+            # PHASE 2: Load daily_forecasts ONLY for filtered records
+            logger.info(f'DEBUG: Phase 2: loading daily_forecasts for {len(phase1_ids)} records')
+            if phase1_ids:
+                phase2_ids = phase1_ids[:2000]
+                placeholders = ','.join(['%s'] * len(phase2_ids))
+                phase2_sql = f"""
+                    SELECT id, forecast_id, model_type, aggregation_level,
+                           entity_name, entity_id, daily_forecasts, forecast_date,
+                           training_data_start, training_data_end, mae, mape, rmse,
+                           accuracy_score, model_params, created_at, updated_at
+                    FROM dashboard_salesforecastbase
+                    WHERE id IN ({placeholders})
+                    ORDER BY entity_name
+                """
+                base_forecasts = list(SalesForecastBase.objects.raw(phase2_sql, phase2_ids))
+
+                # Attach metadata from phase 1 to each forecast object
+                for f in base_forecasts:
+                    meta = phase1_cache.get(f.entity_name, {})
+                    f.school_name = meta.get('school_name')
+                    f._stock_on_hand = meta.get('stock_on_hand', 0)
+                    f._incoming = meta.get('incoming', 0)
+                    f._product_name = meta.get('product_name', f.entity_name)
             else:
-                logger.warning('DEBUG: Raw SQL returned NO records!')
+                base_forecasts = []
 
-            # Keep only the latest forecast for each entity_name
-            seen_entities = set()
-            base_forecasts = []
-            for f in all_base_forecasts_list:
-                if f.entity_name not in seen_entities:
-                    base_forecasts.append(f)
-                    seen_entities.add(f.entity_name)
-                if len(base_forecasts) >= 2000:  # Limit to 2000 unique entities
-                    break
-
-            logger.info(f'DEBUG: After deduplication, {len(base_forecasts)} unique entities')
+            logger.info(f'DEBUG: Phase 2 loaded {len(base_forecasts)} forecast records with daily data')
 
             # IMPORTANT: Only switch to product rendering if a specific school is selected
             # Otherwise, keep school level for nested school/product view
@@ -2462,6 +2514,9 @@ def sales_forecasting(request):
 
     # Check if we need to group by parent product
     if level == 'product':
+        # Batch fetch stock data for all SKUs (single query instead of N+1)
+        stock_data_cache = batch_get_stock_data([f.entity_name for f in forecasts])
+
         # Group SKU variations by parent product
         grouped_products = defaultdict(list)
         logger.info(f'DEBUG: Processing product level with {len(forecasts)} forecast records')
@@ -2513,8 +2568,8 @@ def sales_forecasting(request):
                 for date in forecast_dates
             ]
 
-            # Get stock data and actual product name for this SKU
-            stock_info = get_stock_data(f.entity_name)
+            # Get stock data from batch cache (single query instead of per-SKU)
+            stock_info = stock_data_cache.get(f.entity_name, {'stock_on_hand': 0, 'incoming': 0, 'product_name': f.entity_name})
             stock_on_hand = stock_info['stock_on_hand']
             incoming_stock = stock_info['incoming']
             product_name = stock_info['product_name']
@@ -2724,6 +2779,9 @@ def sales_forecasting(request):
                 TopPerformingSchool.objects.values_list('school_name', flat=True)
             )
 
+            # Batch fetch stock data for all SKUs (single query instead of N+1)
+            stock_data_cache = batch_get_stock_data([f.entity_name for f in forecasts])
+
             # Process all forecasts into a flat list
             all_variations = []
             logger.info(f'DEBUG: Processing {len(forecasts)} forecasts for flat table')
@@ -2783,8 +2841,8 @@ def sales_forecasting(request):
                     for date in forecast_dates
                 ]
 
-                # Get stock data
-                stock_info = get_stock_data(f.entity_name)
+                # Get stock data from batch cache (single query instead of per-SKU)
+                stock_info = stock_data_cache.get(f.entity_name, {'stock_on_hand': 0, 'incoming': 0, 'product_name': f.entity_name})
                 stock_on_hand = stock_info['stock_on_hand']
                 incoming_stock = stock_info['incoming']
                 product_name = stock_info['product_name']
@@ -2936,6 +2994,9 @@ def sales_forecasting(request):
 
             logger.info(f'DEBUG: Created {len(location_groups)} location groups')
 
+            # Batch fetch stock data for all SKUs (single query instead of N+1)
+            stock_data_cache = batch_get_stock_data([f.entity_name for f in forecasts])
+
             # Process each location
             forecast_list = []
             processed_count = 0
@@ -3000,8 +3061,8 @@ def sales_forecasting(request):
                             for date in forecast_dates
                         ]
 
-                        # Get stock data
-                        stock_info = get_stock_data(f.entity_name)
+                        # Get stock data from batch cache (single query instead of per-SKU)
+                        stock_info = stock_data_cache.get(f.entity_name, {'stock_on_hand': 0, 'incoming': 0, 'product_name': f.entity_name})
                         stock_on_hand = stock_info['stock_on_hand']
                         incoming_stock = stock_info['incoming']
                         product_name = stock_info['product_name']
@@ -3114,6 +3175,13 @@ def sales_forecasting(request):
             if school_name:
                 school_groups[school_name].append(f)
 
+        # Use pre-attached stock data from phase 1 query (if available)
+        # Fall back to batch query for non-optimized paths
+        has_phase1_data = len(forecasts) > 0 and hasattr(forecasts[0], '_stock_on_hand')
+        if not has_phase1_data:
+            all_school_skus = [f.entity_name for f in forecasts if f.entity_name in sku_to_school]
+            stock_data_cache = batch_get_stock_data(all_school_skus)
+
         # Process each school group
         forecast_list = []
         logger.info(f'DEBUG: Processing school level with {len(school_groups)} school groups')
@@ -3175,16 +3243,22 @@ def sales_forecasting(request):
                     for date in forecast_dates
                 ]
 
-                # Get stock data and actual product name for this SKU
-                stock_info = get_stock_data(f.entity_name)
-                stock_on_hand = stock_info['stock_on_hand']
-                incoming_stock = stock_info['incoming']
-                product_name = stock_info['product_name']
+                # Get stock data from phase 1 cache or batch cache
+                if has_phase1_data:
+                    stock_on_hand = getattr(f, '_stock_on_hand', 0)
+                    incoming_stock = getattr(f, '_incoming', 0)
+                    product_name = getattr(f, '_product_name', f.entity_name)
+                else:
+                    stock_info = stock_data_cache.get(f.entity_name, {'stock_on_hand': 0, 'incoming': 0, 'product_name': f.entity_name})
+                    stock_on_hand = stock_info['stock_on_hand']
+                    incoming_stock = stock_info['incoming']
+                    product_name = stock_info['product_name']
                 forecasted_stock = round(total_qty, 1)
                 stock_gap = (stock_on_hand + incoming_stock) - forecasted_stock
 
                 # Filter: Only show products with negative stock gap (shortages)
-                # Apply stock gap filter in BOTH replenishment AND normal forecasting views
+                # Stock gap already pre-filtered in phase 1 SQL HAVING clause,
+                # but re-check with date-range-specific total for accuracy
                 if stock_gap >= 0:
                     skipped_no_stock_gap += 1
                     continue
