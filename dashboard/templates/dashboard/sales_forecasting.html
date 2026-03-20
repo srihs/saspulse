@@ -364,52 +364,52 @@
                                         <!-- School Filter (visible when level = 'school') -->
                                         <div id="schoolFilterDiv" class="mb-3" style="display: none;">
                                             <label for="schoolFilter" class="form-label fw-semibold">
-                                                <i class="fas fa-school me-1"></i>Filter by School
+                                                <i class="fas fa-school me-1"></i>Filter by School <span class="text-danger">*</span>
                                             </label>
                                             <select name="school" id="schoolFilter" class="form-select">
-                                                <option value="">All Schools</option>
+                                                <option value="">-- Select a School --</option>
                                             </select>
-                                            <small class="form-text text-muted">Select a specific school to view its forecast</small>
+                                            <small class="form-text text-muted">Required: select a school to view its forecast</small>
                                         </div>
 
                                         <!-- Product Filters (visible when level = 'product') -->
                                         <div id="productFilterDiv" class="mb-3" style="display: none;">
                                             <label for="productFilter" class="form-label fw-semibold">
-                                                <i class="fas fa-box me-1"></i>Filter by Product Name
+                                                <i class="fas fa-box me-1"></i>Filter by Product Name <span class="text-danger">*</span>
                                             </label>
                                             <select name="product" id="productFilter" class="form-select">
-                                                <option value="">All Products</option>
+                                                <option value="">-- Select a Product --</option>
                                             </select>
 
                                             <label for="styleCodeFilter" class="form-label fw-semibold mt-3">
                                                 <i class="fas fa-tag me-1"></i>Filter by Style Code
                                             </label>
                                             <select name="style_code" id="styleCodeFilter" class="form-select">
-                                                <option value="">All Style Codes</option>
+                                                <option value="">-- Select a Style Code --</option>
                                             </select>
-                                            <small class="form-text text-muted">Filter products by name or style code</small>
+                                            <small class="form-text text-muted">Required: select a product or style code</small>
                                         </div>
 
                                         <!-- Shop Filter (visible when level = 'shop') -->
                                         <div id="shopFilterDiv" class="mb-3" style="display: none;">
                                             <label for="shopFilter" class="form-label fw-semibold">
-                                                <i class="fas fa-store me-1"></i>Filter by Shop Location
+                                                <i class="fas fa-store me-1"></i>Filter by Shop Location <span class="text-danger">*</span>
                                             </label>
                                             <select name="shop" id="shopFilter" class="form-select">
-                                                <option value="">All Shops</option>
+                                                <option value="">-- Select a Shop --</option>
                                             </select>
-                                            <small class="form-text text-muted">Select a specific shop to view its forecast</small>
+                                            <small class="form-text text-muted">Required: select a shop to view its forecast</small>
                                         </div>
 
                                         <!-- Category Filter (visible when level = 'category') -->
                                         <div id="categoryFilterDiv" class="mb-3" style="display: none;">
                                             <label for="categoryFilter" class="form-label fw-semibold">
-                                                <i class="fas fa-sitemap me-1"></i>Filter by Category
+                                                <i class="fas fa-sitemap me-1"></i>Filter by Category <span class="text-danger">*</span>
                                             </label>
                                             <select name="category" id="categoryFilter" class="form-select">
-                                                <option value="">All Categories</option>
+                                                <option value="">-- Select a Category --</option>
                                             </select>
-                                            <small class="form-text text-muted">Select a specific category to view its forecast</small>
+                                            <small class="form-text text-muted">Required: select a category to view its forecast</small>
                                         </div>
 
                                         <!-- Empty state when no specific filter applies -->
@@ -1395,6 +1395,55 @@ $(document).ready(function() {
     // Show preloader when filter form is submitted
     $('#forecastFilterForm').on('submit', function(e) {
         e.preventDefault();
+
+        // Validate: at least one advanced filter must be selected
+        var level = $('#levelSelect').val();
+        var filterMap = {
+            'school': '#schoolFilter',
+            'product': '#productFilter,#styleCodeFilter',
+            'shop': '#shopFilter',
+            'category': '#categoryFilter'
+        };
+
+        var filterSelectors = filterMap[level];
+        if (filterSelectors) {
+            var hasFilter = false;
+            filterSelectors.split(',').forEach(function(sel) {
+                if ($(sel).val() && $(sel).val() !== '') {
+                    hasFilter = true;
+                }
+            });
+
+            if (!hasFilter) {
+                // Show validation message
+                var filterNames = {
+                    'school': 'a School',
+                    'product': 'a Product or Style Code',
+                    'shop': 'a Shop',
+                    'category': 'a Category'
+                };
+                var msg = 'Please select ' + filterNames[level] + ' from the Advanced Filters before applying.';
+
+                // Remove any existing alert
+                $('#filterValidationAlert').remove();
+
+                // Add alert above the Apply button
+                var alert = $('<div id="filterValidationAlert" class="alert alert-warning alert-dismissible fade show mt-2" role="alert">' +
+                    '<i class="fas fa-exclamation-triangle me-2"></i>' + msg +
+                    '<button type="button" class="btn-close" data-bs-dismiss="alert"></button>' +
+                    '</div>');
+                $('#forecastFilterForm .filter-section').first().append(alert);
+
+                // Highlight the advanced filter section
+                var filterDiv = filterSelectors.split(',')[0].replace('Filter', 'FilterDiv');
+                $(filterDiv).addClass('border border-warning rounded p-2');
+                setTimeout(function() {
+                    $(filterDiv).removeClass('border border-warning rounded p-2');
+                }, 3000);
+
+                return;
+            }
+        }
 
         var preloader = $('#pagePreloader');
 
