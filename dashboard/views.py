@@ -5079,20 +5079,11 @@ def past_sales_data(request):
 
             available_years = [row[0] for row in cursor.fetchall()]
 
-        # Loop through all available years
+        # Loop through all available years using full calendar year (Jan 1 - Dec 31)
+        from datetime import date
         for year in available_years:
-            # Try to create year-adjusted dates, handle leap year edge cases
-            try:
-                year_start = start_date.replace(year=year)
-            except ValueError:
-                # Handle Feb 29 on non-leap years
-                year_start = start_date.replace(year=year, day=28)
-
-            try:
-                year_end = end_date.replace(year=year)
-            except ValueError:
-                # Handle Feb 29 on non-leap years
-                year_end = end_date.replace(year=year, day=28)
+            year_start = date(year, 1, 1)
+            year_end = date(year, 12, 31)
 
             # Query sales data for this specific SKU
             with connection.cursor() as cursor:
@@ -5113,7 +5104,7 @@ def past_sales_data(request):
             'success': True,
             'sku': sku,
             'style_code': style_code,
-            'period': f"{start_date_str} to {end_date_str}",
+            'period': 'Full calendar year (Jan 1 - Dec 31)',
             'years': years_data
         })
 
