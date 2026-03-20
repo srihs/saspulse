@@ -2576,18 +2576,17 @@ function viewPastSales(button) {
         fetch('/dashboard/forecasting/filter-options/?level=' + level)
             .then(response => response.json())
             .then(data => {
-                // Populate school filter
-                updateSelectOptions('schoolFilter', data.schools);
-
-                // Populate product filters
-                updateSelectOptions('productFilter', data.products);
-                updateSelectOptions('styleCodeFilter', data.style_codes);
-
-                // Populate shop filter
-                updateSelectOptions('shopFilter', data.shops);
-
-                // Populate category filter
-                updateSelectOptions('categoryFilter', data.categories);
+                // Only populate the filter relevant to the current level
+                if (level === 'school') {
+                    updateSelectOptions('schoolFilter', data.schools);
+                } else if (level === 'product') {
+                    updateSelectOptions('productFilter', data.products);
+                    updateSelectOptions('styleCodeFilter', data.style_codes);
+                } else if (level === 'shop') {
+                    updateSelectOptions('shopFilter', data.shops);
+                } else if (level === 'category') {
+                    updateSelectOptions('categoryFilter', data.categories);
+                }
             })
             .catch(error => {
                 console.error('Error loading filter options:', error);

@@ -1528,67 +1528,67 @@ def forecasting_filter_options(request):
         'categories': []
     }
 
-    # Get schools (sub_category from Shop categories only, excluding Wholesale)
-    with connection.cursor() as cursor:
-        cursor.execute("""
-            SELECT DISTINCT sub_category
-            FROM cin7_sync_product
-            WHERE (category_name LIKE '%%Shop' OR category_name LIKE '%%Store')
-              AND category_name NOT IN ('Shop', 'Store')
-              AND category_name NOT LIKE 'Wholesale%%'
-              AND sub_category IS NOT NULL
-              AND sub_category != ''
-            ORDER BY sub_category
-        """)
-        result['schools'] = [{'value': row[0], 'label': row[0]} for row in cursor.fetchall()]
+    # Only load filter options for the currently selected level (performance optimization)
+    if level == 'school':
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT DISTINCT sub_category
+                FROM cin7_sync_product
+                WHERE (category_name LIKE '%%Shop' OR category_name LIKE '%%Store')
+                  AND category_name NOT IN ('Shop', 'Store')
+                  AND category_name NOT LIKE 'Wholesale%%'
+                  AND sub_category IS NOT NULL
+                  AND sub_category != ''
+                ORDER BY sub_category
+            """)
+            result['schools'] = [{'value': row[0], 'label': row[0]} for row in cursor.fetchall()]
 
-    # Get products (distinct product names and cin7_id)
-    with connection.cursor() as cursor:
-        cursor.execute("""
-            SELECT DISTINCT p.name, p.cin7_id
-            FROM cin7_sync_product p
-            WHERE (p.category_name LIKE '%%Shop' OR p.category_name LIKE '%%Store')
-              AND p.category_name NOT IN ('Shop', 'Store')
-              AND p.category_name NOT LIKE 'Wholesale%%'
-              AND p.name IS NOT NULL
-            ORDER BY p.name
-        """)
-        result['products'] = [{'value': str(row[1]), 'label': row[0]} for row in cursor.fetchall()]
+    elif level == 'product':
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT DISTINCT p.name, p.cin7_id
+                FROM cin7_sync_product p
+                WHERE (p.category_name LIKE '%%Shop' OR p.category_name LIKE '%%Store')
+                  AND p.category_name NOT IN ('Shop', 'Store')
+                  AND p.category_name NOT LIKE 'Wholesale%%'
+                  AND p.name IS NOT NULL
+                ORDER BY p.name
+            """)
+            result['products'] = [{'value': str(row[1]), 'label': row[0]} for row in cursor.fetchall()]
 
-    # Get style codes (distinct style codes)
-    with connection.cursor() as cursor:
-        cursor.execute("""
-            SELECT DISTINCT style_code
-            FROM cin7_sync_product
-            WHERE style_code IS NOT NULL
-              AND style_code != ''
-              AND (category_name LIKE '%% Shop' OR category_name LIKE '%% Store')
-              AND category_name NOT IN ('Shop', 'Store')
-            ORDER BY style_code
-        """)
-        result['style_codes'] = [{'value': row[0], 'label': row[0]} for row in cursor.fetchall()]
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT DISTINCT style_code
+                FROM cin7_sync_product
+                WHERE style_code IS NOT NULL
+                  AND style_code != ''
+                  AND (category_name LIKE '%% Shop' OR category_name LIKE '%% Store')
+                  AND category_name NOT IN ('Shop', 'Store')
+                ORDER BY style_code
+            """)
+            result['style_codes'] = [{'value': row[0], 'label': row[0]} for row in cursor.fetchall()]
 
-    # Get shops (categories ending with 'Shop' or 'Store' from Product table, excluding generic 'Shop')
-    with connection.cursor() as cursor:
-        cursor.execute("""
-            SELECT DISTINCT category_name
-            FROM cin7_sync_product
-            WHERE (category_name LIKE '%% Shop' OR category_name LIKE '%% Store')
-              AND category_name NOT IN ('Shop', 'Store')
-            ORDER BY category_name
-        """)
-        result['shops'] = [{'value': row[0], 'label': row[0]} for row in cursor.fetchall()]
+    elif level == 'shop':
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT DISTINCT category_name
+                FROM cin7_sync_product
+                WHERE (category_name LIKE '%% Shop' OR category_name LIKE '%% Store')
+                  AND category_name NOT IN ('Shop', 'Store')
+                ORDER BY category_name
+            """)
+            result['shops'] = [{'value': row[0], 'label': row[0]} for row in cursor.fetchall()]
 
-    # Get categories (unique sub_categories - Tier 3)
-    with connection.cursor() as cursor:
-        cursor.execute("""
-            SELECT DISTINCT sub_category
-            FROM cin7_sync_product
-            WHERE sub_category IS NOT NULL
-              AND sub_category != ''
-            ORDER BY sub_category
-        """)
-        result['categories'] = [{'value': row[0], 'label': row[0]} for row in cursor.fetchall()]
+    elif level == 'category':
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT DISTINCT sub_category
+                FROM cin7_sync_product
+                WHERE sub_category IS NOT NULL
+                  AND sub_category != ''
+                ORDER BY sub_category
+            """)
+            result['categories'] = [{'value': row[0], 'label': row[0]} for row in cursor.fetchall()]
 
     return JsonResponse(result)
 
