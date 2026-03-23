@@ -5136,7 +5136,7 @@ def past_sales_data(request):
                 WHERE soli.code = %s
                   AND so.invoice_date IS NOT NULL
                   AND so.status != 'Cancelled'
-                  AND YEAR(so.invoice_date) < %s
+                  AND YEAR(so.invoice_date) <= %s
                 ORDER BY year DESC
             """, [sku_code, current_year])
 
