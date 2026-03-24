@@ -2084,10 +2084,6 @@ function validateDateRange() {
         }
 
         const daysDiff = Math.floor((endDate - startDate) / (1000 * 60 * 60 * 24));
-        if (daysDiff > 365) {
-            showAlert('The date range cannot exceed 365 days. Please select a shorter period.', 'Date Range Too Long', 'exclamation-triangle');
-            return false;
-        }
 
         // Update the info display
         updateDateRangeInfo(startDate, endDate, daysDiff);

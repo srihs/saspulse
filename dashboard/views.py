@@ -2017,10 +2017,6 @@ def sales_forecasting(request):
             if end_date <= start_date:
                 return JsonResponse({'error': 'End date must be after start date'}, status=400)
 
-            date_diff = (end_date - start_date).days
-            if date_diff > 365:
-                return JsonResponse({'error': 'Date range cannot exceed 365 days'}, status=400)
-
             # Calculate number of days in range
             num_days = (end_date - start_date).days
 
