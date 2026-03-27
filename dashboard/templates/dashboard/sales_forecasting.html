@@ -1720,6 +1720,12 @@ $(document).ready(function() {
     } else {
         console.log('Before DataTable init (non-grouped):', new Date().toISOString());
 
+        // Check if the table element exists in the DOM before initializing
+        if ($('#forecastsTable').length === 0) {
+            console.log('⚠ #forecastsTable not found in DOM - no data to display');
+            $('#pagePreloader').removeClass('active');
+        } else {
+
         // Detect flat table mode for Store Manager Replenishment
         var isFlatTableView = '{{ display_mode }}' === 'flat_table';
         console.log('Is flat table view:', isFlatTableView);
@@ -1793,6 +1799,7 @@ $(document).ready(function() {
                 $('#pagePreloader').removeClass('active');
             }
         }, 5000);
+        } // end if #forecastsTable exists
     }
 
     // Format function for location schools (3-level view)
@@ -2660,12 +2667,14 @@ function viewPastSales(button) {
         }
     }
 
-    // Initialize on DOM ready
+    // Initialize on DOM ready (only for non-replenishment views where filter divs exist)
+    {% if not is_replenishment_view %}
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', initializeFilters);
     } else {
         initializeFilters();
     }
+    {% endif %}
 })();
 
 {% if is_replenishment_view %}

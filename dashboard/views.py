@@ -3865,8 +3865,7 @@ def forecast_product_breakdown(request, school_name):
 
 
 @login_required
-@permission_required('replenishment.stores.review')
-@permission_required('forecasting.view')
+@permission_required('replenishment.stores.view')
 def store_manager_replenishment(request):
     """
     Store Manager Replenishment Dashboard
@@ -3877,10 +3876,12 @@ def store_manager_replenishment(request):
     from datetime import date, timedelta
     from django.http import QueryDict
 
-    # Calculate 30-60 day forward window for replenishment planning
+    # Use a 6-month forward window for replenishment planning
+    # School uniforms are seasonal (BTS in Dec-Feb for NZ), so a short window
+    # during off-season would show zero demand and no results
     today = date.today()
-    start_date = today + timedelta(days=30)
-    end_date = start_date + timedelta(days=30)  # 60 days from today
+    start_date = today
+    end_date = today + timedelta(days=180)  # 6 months forward
 
     # Create a modified request with shop level (no specific shop filter = show all Shop/Store categories)
     modified_GET = QueryDict(mutable=True)
@@ -3894,8 +3895,13 @@ def store_manager_replenishment(request):
     # Mark this as a replenishment view (to hide filters in template)
     request.is_replenishment_view = True
 
-    # Call the sales_forecasting view with modified parameters
-    return sales_forecasting(request)
+    # Call the sales_forecasting view directly, bypassing its @permission_required('forecasting.view')
+    # decorator since store managers don't have forecasting.view but should access replenishment data.
+    # Access the unwrapped function through __wrapped__ (set by @wraps in the decorators).
+    unwrapped = sales_forecasting
+    while hasattr(unwrapped, '__wrapped__'):
+        unwrapped = unwrapped.__wrapped__
+    return unwrapped(request)
 
     # OLD CODE BELOW (kept for reference but not executed)
     from dashboard.models import SalesForecastBase
