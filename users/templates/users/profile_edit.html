@@ -234,11 +234,11 @@
           <div class="mb-0">
             <label class="form-label text-muted small mb-1">Assigned Schools</label>
             <div>
-              {% for school in user.assigned_schools.all|dictsort:"sub_category" %}
-                {% if school.sub_category %}
-                  <span class="badge badge-phoenix badge-phoenix-warning me-1 mb-1">{{ school.sub_category }}</span>
-                {% endif %}
+              {% with school_names=user.get_assigned_school_subcategories %}
+              {% for name in school_names %}
+                <span class="badge badge-phoenix badge-phoenix-warning me-1 mb-1">{{ name }}</span>
               {% endfor %}
+              {% endwith %}
             </div>
           </div>
           {% endif %}

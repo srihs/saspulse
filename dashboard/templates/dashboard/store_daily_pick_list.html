@@ -548,10 +548,10 @@
     <div class="data-table-card">
         <!-- Export Button -->
         <div class="export-btn no-print">
-            <button type="button" class="btn btn-outline-primary" onclick="window.print()">
-                <i data-feather="printer" style="width: 16px; height: 16px;"></i>
-                Export / Print
-            </button>
+            <a href="{% url 'dashboard:store_daily_pick_list_export' %}{% if request.GET.date %}?date={{ request.GET.date }}{% endif %}{% if request.GET.category %}&category={{ request.GET.category }}{% endif %}" class="btn btn-outline-success">
+                <i data-feather="download" style="width: 16px; height: 16px;"></i>
+                Export to Excel
+            </a>
         </div>
 
         <!-- Data Table -->

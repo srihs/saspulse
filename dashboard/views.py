@@ -5,7 +5,7 @@ Stock Value vs BTS Sales Analysis Dashboard
 """
 
 from django.shortcuts import render, redirect
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from django.views.decorators.http import require_http_methods
 from users.decorators import login_required, permission_required
 from django.db.models import Sum, Count, F, DecimalField, Value
@@ -6832,6 +6832,237 @@ def store_daily_pick_list(request):
     }
 
     return render(request, 'dashboard/store_daily_pick_list.html', context)
+
+
+@login_required
+@permission_required('replenishment.daily_pick_list.view')
+def store_daily_pick_list_export(request):
+    """Export daily pick list forecast to Excel."""
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+    from io import BytesIO
+    from datetime import date, timedelta
+    from django.db.models import Sum, F, Q
+    from django.db.models.functions import TruncDate
+    from cin7.models import SalesOrderLineItem, Stock, Product
+
+    # === Reuse the same data logic from store_daily_pick_list ===
+    user = request.user
+    is_admin = user.is_superuser or user.is_staff
+    has_assigned_stores = user.assigned_stores.exists() if hasattr(user, 'assigned_stores') else False
+
+    target_date_str = request.GET.get('date')
+    if target_date_str:
+        try:
+            target_date = date.fromisoformat(target_date_str)
+        except ValueError:
+            target_date = date.today() - timedelta(days=1)
+    else:
+        target_date = date.today() - timedelta(days=1)
+
+    category_filter = request.GET.get('category', '')
+
+    recent_week_end = target_date
+    recent_week_start = recent_week_end - timedelta(days=6)
+    previous_week_end = recent_week_start - timedelta(days=1)
+    previous_week_start = previous_week_end - timedelta(days=6)
+    forecast_start = recent_week_end + timedelta(days=1)
+    forecast_end = recent_week_end + timedelta(days=7)
+
+    # Build the product query (same as main view)
+    query_start_date = previous_week_start
+    query_end_date = recent_week_end
+
+    sales_query = SalesOrderLineItem.objects.filter(
+        sales_order__invoice_date__date__gte=query_start_date,
+        sales_order__invoice_date__date__lte=query_end_date,
+        sales_order__is_void=False
+    )
+
+    if not is_admin and has_assigned_stores:
+        accessible_categories = user.get_accessible_categories()
+        if accessible_categories:
+            sales_query = sales_query.filter(product__category_name__in=accessible_categories)
+
+    if category_filter:
+        sales_query = sales_query.filter(product__category_name__icontains=category_filter)
+
+    # Get unique products with sales in the period
+    sales_data = sales_query.values(
+        'code',
+        'name',
+        product_category=F('product__category_name'),
+    ).annotate(
+        total_qty_sold=Sum('qty')
+    ).order_by('code')
+
+    # Build per-product data (deduplicated by SKU)
+    product_data = {}
+    for sale in sales_data:
+        sku = sale['code']
+        if sku in product_data:
+            continue
+        product_data[sku] = {
+            'product_name': sale['name'],
+            'sku': sku,
+            'category': sale['product_category'] or 'Uncategorized',
+            'sales_by_date': {},
+        }
+
+    # Get daily sales for each product (one query per SKU)
+    for sku, data in product_data.items():
+        daily_sales_qs = SalesOrderLineItem.objects.filter(
+            code=sku,
+            sales_order__invoice_date__date__gte=query_start_date,
+            sales_order__invoice_date__date__lte=query_end_date,
+            sales_order__is_void=False
+        )
+        if not is_admin and has_assigned_stores:
+            acc_cats = user.get_accessible_categories()
+            if acc_cats:
+                daily_sales_qs = daily_sales_qs.filter(product__category_name__in=acc_cats)
+
+        daily_sales_data = daily_sales_qs.annotate(
+            sale_date=TruncDate('sales_order__invoice_date')
+        ).values('sale_date').annotate(
+            total_qty=Sum('qty')
+        ).order_by('sale_date')
+
+        data['sales_by_date'] = {
+            item['sale_date']: float(item['total_qty'] or 0)
+            for item in daily_sales_data
+        }
+
+    # Calculate forecasts for each product
+    products = []
+    for sku, data in product_data.items():
+        sales_by_date = data['sales_by_date']
+
+        # Daily trend factors
+        daily_trend_factors = []
+        for i in range(7):
+            recent_day = recent_week_start + timedelta(days=i)
+            previous_day = previous_week_start + timedelta(days=i)
+            recent_sales = sales_by_date.get(recent_day, 0)
+            previous_sales = sales_by_date.get(previous_day, 0)
+            if previous_sales > 0:
+                daily_trend_factors.append(recent_sales / previous_sales)
+            else:
+                daily_trend_factors.append(1.0)
+
+        # Build forecast
+        forecast_by_day = []
+        forecast_date = recent_week_end + timedelta(days=1)
+        base_date = recent_week_start
+
+        for i in range(7):
+            base_sales = sales_by_date.get(base_date, 0)
+            daily_forecast = base_sales * daily_trend_factors[i]
+            if 0 < daily_forecast < 1:
+                daily_forecast = 1
+            elif daily_forecast < 0:
+                daily_forecast = 0
+
+            forecast_by_day.append({
+                'date': forecast_date,
+                'day_name': forecast_date.strftime('%A'),
+                'qty': round(daily_forecast, 1),
+            })
+
+            forecast_date += timedelta(days=1)
+            base_date += timedelta(days=1)
+
+        forecasted_demand = sum(day['qty'] for day in forecast_by_day)
+
+        products.append({
+            'product_name': data['product_name'],
+            'sku': sku,
+            'category': data['category'],
+            'forecasted_demand': int(forecasted_demand),
+            'forecast_by_day': forecast_by_day,
+        })
+
+    products.sort(key=lambda x: x['forecasted_demand'], reverse=True)
+
+    # === Build Excel workbook ===
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Daily Pick List Forecast"
+
+    # Styles
+    header_font = Font(bold=True, color="FFFFFF", size=11)
+    header_fill = PatternFill(start_color="4A90D9", end_color="4A90D9", fill_type="solid")
+    forecast_fill = PatternFill(start_color="E8F5E9", end_color="E8F5E9", fill_type="solid")
+    thin_border = Border(
+        left=Side(style='thin'), right=Side(style='thin'),
+        top=Side(style='thin'), bottom=Side(style='thin')
+    )
+
+    # Title row
+    ws.merge_cells('A1:J1')
+    title_cell = ws['A1']
+    title_cell.value = f"Daily Pick List — Next 7 Days Forecast ({forecast_start.strftime('%d %b')} - {forecast_end.strftime('%d %b %Y')})"
+    title_cell.font = Font(bold=True, size=14)
+    title_cell.alignment = Alignment(horizontal='left')
+
+    ws.merge_cells('A2:J2')
+    ws['A2'].value = f"Generated: {date.today().strftime('%d %b %Y')} | Data as of: {target_date.strftime('%d %b %Y')}"
+    ws['A2'].font = Font(italic=True, color="666666", size=10)
+
+    # Headers (row 4): Product, Stylecode, 7 forecast days, Total
+    forecast_dates = [(forecast_start + timedelta(days=i)) for i in range(7)]
+    headers = ['Product', 'Stylecode']
+    for d in forecast_dates:
+        headers.append(f"{d.strftime('%a %d/%m')}")
+    headers.append('Total Forecast')
+
+    for col, header in enumerate(headers, 1):
+        cell = ws.cell(row=4, column=col, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = Alignment(horizontal='center', wrap_text=True)
+        cell.border = thin_border
+
+    # Data rows
+    for row_idx, item in enumerate(products, 5):
+        ws.cell(row=row_idx, column=1, value=item['product_name']).border = thin_border
+        ws.cell(row=row_idx, column=2, value=item['sku']).border = thin_border
+
+        for day_idx, day in enumerate(item['forecast_by_day']):
+            cell = ws.cell(row=row_idx, column=3 + day_idx, value=day['qty'])
+            cell.fill = forecast_fill
+            cell.border = thin_border
+            cell.alignment = Alignment(horizontal='center')
+            cell.number_format = '0.#'
+
+        total_cell = ws.cell(row=row_idx, column=10, value=item['forecasted_demand'])
+        total_cell.font = Font(bold=True)
+        total_cell.border = thin_border
+        total_cell.alignment = Alignment(horizontal='center')
+
+    # Column widths
+    ws.column_dimensions['A'].width = 35
+    ws.column_dimensions['B'].width = 22
+    for col in range(3, 10):
+        ws.column_dimensions[get_column_letter(col)].width = 12
+    ws.column_dimensions['J'].width = 14
+
+    # Freeze header row
+    ws.freeze_panes = 'A5'
+
+    # Write to response
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+
+    filename = f"daily_pick_list_forecast_{forecast_start.strftime('%Y%m%d')}.xlsx"
+    response = HttpResponse(
+        buffer.getvalue(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.document'
+    )
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
 
 
 @login_required

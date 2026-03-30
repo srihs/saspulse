@@ -416,7 +416,7 @@ class CustomUser(models.Model):
             list: List of school sub_category values
         """
         try:
-            return list(self.assigned_schools.values_list('sub_category', flat=True).distinct())
+            return list(self.assigned_schools.order_by('sub_category').values_list('sub_category', flat=True).distinct())
         except Exception:
             # If there's an error (e.g., table doesn't exist during migrations), return empty list
             return []
