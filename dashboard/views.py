@@ -6795,7 +6795,8 @@ def store_daily_pick_list(request):
 
         categories.add(category)
 
-    # Sort by highest forecasted demand (descending)
+    # Remove products with 0 forecast and sort by highest demand
+    products = [p for p in products if p['forecasted_demand'] > 0]
     products.sort(key=lambda x: x['forecasted_demand'], reverse=True)
 
     # Get unique categories for filter dropdown
@@ -6967,7 +6968,7 @@ def store_daily_pick_list_export(request):
             forecast_by_day.append({
                 'date': forecast_date,
                 'day_name': forecast_date.strftime('%A'),
-                'qty': round(daily_forecast, 1),
+                'qty': int(round(daily_forecast)),
             })
 
             forecast_date += timedelta(days=1)
@@ -6979,10 +6980,11 @@ def store_daily_pick_list_export(request):
             'product_name': data['product_name'],
             'sku': sku,
             'category': data['category'],
-            'forecasted_demand': int(forecasted_demand),
+            'forecasted_demand': forecasted_demand,
             'forecast_by_day': forecast_by_day,
         })
 
+    products = [p for p in products if p['forecasted_demand'] > 0]
     products.sort(key=lambda x: x['forecasted_demand'], reverse=True)
 
     # === Build Excel workbook ===
@@ -7034,7 +7036,7 @@ def store_daily_pick_list_export(request):
             cell.fill = forecast_fill
             cell.border = thin_border
             cell.alignment = Alignment(horizontal='center')
-            cell.number_format = '0.#'
+            cell.number_format = '0'
 
         total_cell = ws.cell(row=row_idx, column=10, value=item['forecasted_demand'])
         total_cell.font = Font(bold=True)
