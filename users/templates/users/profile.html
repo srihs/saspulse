@@ -119,7 +119,7 @@
       </div>
 
       <!-- Assigned Branches/Schools (if applicable) -->
-      {% if user.assigned_branches.exists or user.assigned_schools.exists %}
+      {% if user.assigned_branches.exists or user.assigned_schools.exists or user.assigned_stores.exists %}
       <div class="card mb-3">
         <div class="card-header bg-body-tertiary border-bottom">
           <h5 class="mb-0">
@@ -142,8 +142,24 @@
           </div>
           {% endif %}
 
-          {% if user.assigned_schools.exists %}
-          <div class="mb-0">
+          {% if user.assigned_stores.exists %}
+          <div class="mb-3">
+            <label class="form-label text-muted small mb-2">
+              <span data-feather="book" class="me-1" style="width: 14px; height: 14px;"></span>
+              Assigned Schools
+            </label>
+            <div>
+              {% with school_names=user.get_accessible_schools %}
+              {% for name in school_names %}
+                <span class="badge badge-phoenix badge-phoenix-info me-1 mb-1">{{ name }}</span>
+              {% empty %}
+                <span class="text-muted">No schools mapped</span>
+              {% endfor %}
+              {% endwith %}
+            </div>
+          </div>
+          {% elif user.assigned_schools.exists %}
+          <div class="mb-3">
             <label class="form-label text-muted small mb-2">
               <span data-feather="book" class="me-1" style="width: 14px; height: 14px;"></span>
               Assigned Schools

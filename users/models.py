@@ -443,11 +443,10 @@ class CustomUser(models.Model):
             list: List of unique school names from assigned store mappings
         """
         try:
-            return list(
+            return sorted(set(
                 self.assigned_stores.filter(is_active=True)
                 .values_list('school_name', flat=True)
-                .distinct()
-            )
+            ))
         except Exception:
             # If there's an error (e.g., table doesn't exist during migrations), return empty list
             return []
@@ -460,11 +459,10 @@ class CustomUser(models.Model):
             list: List of unique category_name values for filtering products
         """
         try:
-            return list(
+            return list(set(
                 self.assigned_stores.filter(is_active=True)
                 .values_list('category_name', flat=True)
-                .distinct()
-            )
+            ))
         except Exception:
             # If there's an error (e.g., table doesn't exist during migrations), return empty list
             return []

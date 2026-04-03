@@ -1,0 +1,352 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load custom_filters %}
+
+{% block title %}Stock Movement Report{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.4/css/dataTables.bootstrap5.min.css">
+<style>
+    .page-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 2rem;
+        border-radius: 12px;
+        margin-bottom: 2rem;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    .summary-card {
+        border-radius: 10px;
+        padding: 1.25rem;
+        text-align: center;
+        transition: transform 0.2s;
+        border: none;
+    }
+    .summary-card:hover { transform: translateY(-2px); }
+    .summary-card .count { font-size: 2rem; font-weight: 700; }
+    .summary-card .label { font-size: 0.85rem; color: #6c757d; }
+    .summary-card .units { font-size: 0.8rem; color: #adb5bd; }
+    .card-fast { background: #d1e7dd; }
+    .card-fast .count { color: #0f5132; }
+    .card-moderate { background: #fff3cd; }
+    .card-moderate .count { color: #664d03; }
+    .card-slow { background: #f8d7da; }
+    .card-slow .count { color: #842029; }
+    .card-dead { background: #e2e3e5; }
+    .card-dead .count { color: #41464b; }
+    .nav-pills .nav-link { border-radius: 8px; font-weight: 500; }
+    .nav-pills .nav-link.active { background-color: #667eea; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header -->
+    <div class="page-header">
+        <div class="row align-items-center">
+            <div class="col">
+                <h2 class="mb-1"><span data-feather="trending-up" class="me-2"></span>Stock Movement Report</h2>
+                <p class="mb-0 opacity-75">{{ store_name }} &mdash; {{ start_date|date:"d M Y" }} to {{ end_date|date:"d M Y" }} ({{ period_days }} days)</p>
+            </div>
+            <div class="col-auto">
+                {% if schools %}
+                <select id="schoolFilter" class="form-select form-select-sm" style="width: auto; display: inline-block;" onchange="filterBySchool(this.value)">
+                    <option value="">All Schools</option>
+                    {% for s in schools %}
+                    <option value="{{ s }}" {% if s == school_filter %}selected{% endif %}>{{ s }}</option>
+                    {% endfor %}
+                </select>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    {% if error %}
+    <div class="alert alert-warning">{{ error }}</div>
+    {% else %}
+
+    <!-- How to Read -->
+    <div class="card mb-4 border-0 bg-light">
+        <div class="card-body py-3">
+            <a class="text-decoration-none d-flex align-items-center" data-bs-toggle="collapse" href="#howToRead" role="button" aria-expanded="false">
+                <span data-feather="info" class="me-2 text-primary" style="width:18px;height:18px;"></span>
+                <strong class="text-body">How to read this report</strong>
+                <span class="ms-auto fas fa-chevron-down text-muted small"></span>
+            </a>
+            <div class="collapse mt-3" id="howToRead">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <h6 class="fw-bold mb-2">Columns</h6>
+                        <ul class="mb-0 small">
+                            <li><strong>Qty Sold</strong> &mdash; Total units sold in the last {{ period_days }} days</li>
+                            <li><strong>Days Active</strong> &mdash; Number of days (out of {{ period_days }}) the product had at least one sale. E.g. 10/30 means it sold on 10 out of 30 days</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <h6 class="fw-bold mb-2">Categories</h6>
+                        <ul class="mb-0 small">
+                            <li><span class="badge bg-success">Fast Moving</span> &mdash; Sold 30+ units in the period or sold on 10+ days</li>
+                            <li><span class="badge bg-warning text-dark">Moderate</span> &mdash; Sold 9+ units in the period or sold on 5+ days</li>
+                            <li><span class="badge bg-danger">Slow Moving</span> &mdash; Sold fewer than 9 units and on fewer than 5 days</li>
+                            <li><span class="badge bg-secondary">Dead Stock</span> &mdash; Stock on hand but zero sales in {{ period_days }} days</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="card summary-card card-fast">
+                <div class="count">{{ summary.fast_count }}</div>
+                <div class="label">Fast Moving</div>
+                <div class="units">{{ summary.fast_units }} units sold</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card summary-card card-moderate">
+                <div class="count">{{ summary.moderate_count }}</div>
+                <div class="label">Moderate</div>
+                <div class="units">{{ summary.moderate_units }} units sold</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card summary-card card-slow">
+                <div class="count">{{ summary.slow_count }}</div>
+                <div class="label">Slow Moving</div>
+                <div class="units">{{ summary.slow_units }} units sold</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card summary-card card-dead">
+                <div class="count">{{ summary.dead_count }}</div>
+                <div class="label">Dead Stock</div>
+                <div class="units">{{ summary.dead_stock_units }} units in stock</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <ul class="nav nav-pills mb-3" id="movementTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" data-bs-toggle="pill" data-bs-target="#tab-all" type="button">All ({{ summary.total_products }})</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" data-bs-toggle="pill" data-bs-target="#tab-fast" type="button">Fast Moving ({{ summary.fast_count }})</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" data-bs-toggle="pill" data-bs-target="#tab-moderate" type="button">Moderate ({{ summary.moderate_count }})</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" data-bs-toggle="pill" data-bs-target="#tab-slow" type="button">Slow Moving ({{ summary.slow_count }})</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" data-bs-toggle="pill" data-bs-target="#tab-dead" type="button">Dead Stock ({{ summary.dead_count }})</button>
+        </li>
+    </ul>
+
+    <div class="tab-content">
+        <!-- All Products Tab -->
+        <div class="tab-pane fade show active" id="tab-all">
+            <div class="card">
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table id="allTable" class="table table-sm table-hover" style="width:100%">
+                            <thead>
+                                <tr>
+                                    <th>Product</th>
+                                    <th>Style Code</th>
+                                    <th>School</th>
+                                    <th class="text-center">Qty Sold</th>
+                                    <th class="text-center">Days Active</th>
+                                    <th class="text-center">Category</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for p in products %}
+                                <tr>
+                                    <td>{{ p.product_name }}</td>
+                                    <td><code>{{ p.sku }}</code></td>
+                                    <td>{{ p.school }}</td>
+                                    <td class="text-center fw-bold">{{ p.total_qty }}</td>
+                                    <td class="text-center">{{ p.days_with_sales }}/{{ period_days }}</td>
+                                    <td class="text-center"><span class="badge bg-{{ p.badge_class }}">{{ p.movement }}</span></td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Fast Moving Tab -->
+        <div class="tab-pane fade" id="tab-fast">
+            <div class="card">
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table id="fastTable" class="table table-sm table-hover" style="width:100%">
+                            <thead>
+                                <tr>
+                                    <th>Product</th>
+                                    <th>Style Code</th>
+                                    <th>School</th>
+                                    <th class="text-center">Qty Sold</th>
+                                    <th class="text-center">Days Active</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for p in products %}{% if p.movement == 'Fast Moving' %}
+                                <tr>
+                                    <td>{{ p.product_name }}</td>
+                                    <td><code>{{ p.sku }}</code></td>
+                                    <td>{{ p.school }}</td>
+                                    <td class="text-center fw-bold">{{ p.total_qty }}</td>
+                                    <td class="text-center">{{ p.days_with_sales }}/{{ period_days }}</td>
+                                </tr>
+                                {% endif %}{% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Moderate Tab -->
+        <div class="tab-pane fade" id="tab-moderate">
+            <div class="card">
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table id="moderateTable" class="table table-sm table-hover" style="width:100%">
+                            <thead>
+                                <tr>
+                                    <th>Product</th>
+                                    <th>Style Code</th>
+                                    <th>School</th>
+                                    <th class="text-center">Qty Sold</th>
+                                    <th class="text-center">Days Active</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for p in products %}{% if p.movement == 'Moderate' %}
+                                <tr>
+                                    <td>{{ p.product_name }}</td>
+                                    <td><code>{{ p.sku }}</code></td>
+                                    <td>{{ p.school }}</td>
+                                    <td class="text-center fw-bold">{{ p.total_qty }}</td>
+                                    <td class="text-center">{{ p.days_with_sales }}/{{ period_days }}</td>
+                                </tr>
+                                {% endif %}{% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slow Moving Tab -->
+        <div class="tab-pane fade" id="tab-slow">
+            <div class="card">
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table id="slowTable" class="table table-sm table-hover" style="width:100%">
+                            <thead>
+                                <tr>
+                                    <th>Product</th>
+                                    <th>Style Code</th>
+                                    <th>School</th>
+                                    <th class="text-center">Qty Sold</th>
+                                    <th class="text-center">Days Active</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for p in products %}{% if p.movement == 'Slow Moving' %}
+                                <tr>
+                                    <td>{{ p.product_name }}</td>
+                                    <td><code>{{ p.sku }}</code></td>
+                                    <td>{{ p.school }}</td>
+                                    <td class="text-center fw-bold">{{ p.total_qty }}</td>
+                                    <td class="text-center">{{ p.days_with_sales }}/{{ period_days }}</td>
+                                </tr>
+                                {% endif %}{% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Dead Stock Tab -->
+        <div class="tab-pane fade" id="tab-dead">
+            <div class="card">
+                <div class="card-body">
+                    <p class="text-muted mb-3">Products with stock on hand but zero sales in the last {{ period_days }} days.</p>
+                    <div class="table-responsive">
+                        <table id="deadTable" class="table table-sm table-hover" style="width:100%">
+                            <thead>
+                                <tr>
+                                    <th>Product</th>
+                                    <th>Style Code</th>
+                                    <th>Store/Category</th>
+                                    <th class="text-center">Stock on Hand</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for p in dead_stock %}
+                                <tr>
+                                    <td>{{ p.product_name }}</td>
+                                    <td><code>{{ p.sku }}</code></td>
+                                    <td>{{ p.category }}</td>
+                                    <td class="text-center fw-bold">{{ p.stock_on_hand }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.4/js/dataTables.bootstrap5.min.js"></script>
+<script>
+$(document).ready(function() {
+    var dtOptions = {
+        pageLength: 50,
+        order: [[3, 'desc']],
+        language: { search: "Search:" },
+        dom: '<"row"<"col-sm-6"l><"col-sm-6"f>>rtip'
+    };
+
+    $('#allTable').DataTable(dtOptions);
+
+    // Initialize other tables when their tabs are shown
+    $('button[data-bs-toggle="pill"]').on('shown.bs.tab', function (e) {
+        var target = $(e.target).attr('data-bs-target');
+        var tableId = target.replace('#tab-', '') + 'Table';
+        var table = $('#' + tableId);
+        if (table.length && !$.fn.DataTable.isDataTable(table)) {
+            table.DataTable(dtOptions);
+        }
+    });
+});
+
+function filterBySchool(school) {
+    var url = new URL(window.location.href);
+    if (school) {
+        url.searchParams.set('school', school);
+    } else {
+        url.searchParams.delete('school');
+    }
+    window.location.href = url.toString();
+}
+</script>
+{% endblock %}

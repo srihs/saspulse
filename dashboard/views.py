@@ -6821,9 +6821,12 @@ def store_daily_pick_list(request):
     # Get store display name
     store_name = 'All Stores'
     if has_assigned_stores:
-        accessible_categories = user.get_accessible_categories()
-        if accessible_categories:
-            store_name = ', '.join(accessible_categories)
+        store_names = list(set(
+            user.assigned_stores.filter(is_active=True)
+            .values_list('store_name', flat=True)
+        ))
+        if store_names:
+            store_name = ', '.join(sorted(store_names))
 
     context = {
         'target_date': target_date,
@@ -7437,3 +7440,239 @@ def auto_select_top_52_schools(request):
             'success': False,
             'error': str(e)
         }, status=400)
+
+
+@login_required
+@permission_required('replenishment.daily_pick_list.view')
+def store_stock_movement(request):
+    """
+    Slow Moving / Fast Moving stock report for store managers.
+    Analyses last 30 days of sales to classify products.
+    """
+    from datetime import date, datetime, timedelta, time
+    from django.db.models import Sum, Count, F, Q
+    from django.db.models.expressions import RawSQL
+    from cin7.models import SalesOrderLineItem, Stock
+    import zoneinfo
+    from math import ceil
+
+    NZ_TZ = zoneinfo.ZoneInfo('Pacific/Auckland')
+    UTC_TZ = zoneinfo.ZoneInfo('UTC')
+
+    user = request.user
+    is_admin = user.is_superuser or user.is_staff
+    has_assigned_stores = user.assigned_stores.exists() if hasattr(user, 'assigned_stores') else False
+
+    if not is_admin and not has_assigned_stores:
+        return render(request, 'dashboard/store_stock_movement.html', {
+            'error': 'You are not assigned to any stores. Please contact your administrator.',
+            'products': [],
+        })
+
+    # Date range: last 30 days in NZ time
+    today_nz = datetime.now(NZ_TZ).date()
+    end_date = today_nz - timedelta(days=1)
+    start_date = end_date - timedelta(days=29)
+    period_days = 30
+
+    # Convert to UTC datetime boundaries
+    utc_start = datetime.combine(start_date, time.min, tzinfo=NZ_TZ).astimezone(UTC_TZ)
+    utc_end = datetime.combine(end_date, time.max, tzinfo=NZ_TZ).astimezone(UTC_TZ)
+
+    # NZ offset for date grouping
+    nz_offset_dt = datetime.combine(start_date, time(12, 0), tzinfo=NZ_TZ)
+    total_seconds = int(nz_offset_dt.utcoffset().total_seconds())
+    nz_offset = f'+{total_seconds // 3600:02d}:{(total_seconds % 3600) // 60:02d}'
+
+    # Get school filter
+    school_filter = request.GET.get('school', '')
+
+    # Build sales query
+    sales_query = SalesOrderLineItem.objects.filter(
+        sales_order__invoice_date__gte=utc_start,
+        sales_order__invoice_date__lte=utc_end,
+        sales_order__is_void=False,
+    )
+
+    if not is_admin and has_assigned_stores:
+        accessible_categories = user.get_accessible_categories()
+        if accessible_categories:
+            sales_query = sales_query.filter(product__category_name__in=accessible_categories)
+
+    if school_filter:
+        sales_query = sales_query.filter(product__sub_category=school_filter)
+
+    # Aggregate: total qty per SKU (group by code only to avoid name variations splitting totals)
+    product_sales = sales_query.values(
+        'code',
+    ).annotate(
+        total_qty=Sum('qty'),
+    ).filter(total_qty__gt=0)
+
+    # Get product details (name, category, school) from the latest record per SKU
+    from cin7.models import Product
+    product_details = {}
+    for sale in product_sales:
+        sku = sale['code']
+        prod = Product.objects.filter(code=sku).first()
+        if prod:
+            product_details[sku] = {
+                'name': prod.name or sku,
+                'category': prod.category_name or 'Uncategorized',
+                'school': prod.sub_category or 'N/A',
+            }
+        else:
+            product_details[sku] = {
+                'name': sku,
+                'category': 'Uncategorized',
+                'school': 'N/A',
+            }
+
+    # For each product, get days with sales (need separate query for NZ date counting)
+    products = []
+    schools_set = set()
+
+    for sale in product_sales:
+        sku = sale['code']
+        total_qty = float(sale['total_qty'])
+        details = product_details.get(sku, {})
+        category = details.get('category', 'Uncategorized')
+        school = details.get('school', 'N/A')
+
+        if school != 'N/A':
+            schools_set.add(school)
+
+        # Count distinct NZ sale dates
+        days_qs = SalesOrderLineItem.objects.filter(
+            code=sku,
+            sales_order__invoice_date__gte=utc_start,
+            sales_order__invoice_date__lte=utc_end,
+            sales_order__is_void=False,
+        )
+        if not is_admin and has_assigned_stores:
+            accessible_categories = user.get_accessible_categories()
+            if accessible_categories:
+                days_qs = days_qs.filter(product__category_name__in=accessible_categories)
+
+        days_with_sales = days_qs.annotate(
+            nz_date=RawSQL(
+                "DATE(CONVERT_TZ(cin7_sync_salesorder.invoice_date, '+00:00', %s))",
+                [nz_offset]
+            )
+        ).values('nz_date').distinct().count()
+
+        avg_daily = total_qty / period_days
+        frequency = days_with_sales / period_days
+
+        # Classification
+        if avg_daily >= 1 or days_with_sales >= 10:
+            movement = 'Fast Moving'
+            badge_class = 'success'
+        elif avg_daily >= 0.3 or days_with_sales >= 5:
+            movement = 'Moderate'
+            badge_class = 'warning'
+        else:
+            movement = 'Slow Moving'
+            badge_class = 'danger'
+
+        # Get current stock
+        stock_query = Stock.objects.filter(code=sku)
+        if not is_admin and has_assigned_stores:
+            accessible_categories = user.get_accessible_categories()
+            if accessible_categories:
+                stock_query = stock_query.filter(branch_name__in=accessible_categories)
+
+        stock_record = stock_query.first()
+        stock_on_hand = float(stock_record.stock_on_hand or 0) if stock_record else 0
+
+        # Days of stock
+        days_of_stock = round(stock_on_hand / avg_daily) if avg_daily > 0 else 999
+
+        products.append({
+            'product_name': details.get('name', sku),
+            'sku': sku,
+            'school': school,
+            'category': category,
+            'total_qty': int(total_qty),
+            'days_with_sales': days_with_sales,
+            'avg_daily': round(avg_daily, 1),
+            'frequency': round(frequency * 100),
+            'movement': movement,
+            'badge_class': badge_class,
+            'stock_on_hand': int(stock_on_hand),
+            'days_of_stock': days_of_stock if days_of_stock < 999 else None,
+        })
+
+    # Dead stock: products with stock but no sales in period
+    stock_query = Stock.objects.filter(stock_on_hand__gt=0)
+    if not is_admin and has_assigned_stores:
+        accessible_categories = user.get_accessible_categories()
+        if accessible_categories:
+            stock_query = stock_query.filter(branch_name__in=accessible_categories)
+    if school_filter:
+        # When filtering by school, skip dead stock (no sub_category on Stock model)
+        stock_query = stock_query.none()
+
+    sold_codes = set(p['sku'] for p in products)
+
+    dead_stock_items = []
+    for stock in stock_query.order_by('-stock_on_hand'):
+        if stock.code not in sold_codes:
+            dead_stock_items.append({
+                'product_name': stock.product_name or stock.code,
+                'sku': stock.code,
+                'school': '',
+                'category': stock.branch_name or 'Unknown',
+                'total_qty': 0,
+                'days_with_sales': 0,
+                'avg_daily': 0,
+                'frequency': 0,
+                'movement': 'Dead Stock',
+                'badge_class': 'secondary',
+                'stock_on_hand': int(float(stock.stock_on_hand or 0)),
+                'days_of_stock': None,
+            })
+
+    # Sort products by total qty desc
+    products.sort(key=lambda x: x['total_qty'], reverse=True)
+    dead_stock_items.sort(key=lambda x: x['stock_on_hand'], reverse=True)
+
+    # Summary counts
+    fast = [p for p in products if p['movement'] == 'Fast Moving']
+    moderate = [p for p in products if p['movement'] == 'Moderate']
+    slow = [p for p in products if p['movement'] == 'Slow Moving']
+
+    # Get store name (use store_name from mappings, not category_name)
+    store_name = 'All Stores'
+    if has_assigned_stores:
+        store_names = list(set(
+            user.assigned_stores.filter(is_active=True)
+            .values_list('store_name', flat=True)
+        ))
+        if store_names:
+            store_name = ', '.join(sorted(store_names))
+
+    context = {
+        'products': products,
+        'dead_stock': dead_stock_items,
+        'start_date': start_date,
+        'end_date': end_date,
+        'period_days': period_days,
+        'store_name': store_name,
+        'school_filter': school_filter,
+        'schools': sorted(user.get_accessible_schools()) if has_assigned_stores else sorted(schools_set),
+        'summary': {
+            'fast_count': len(fast),
+            'fast_units': sum(p['total_qty'] for p in fast),
+            'moderate_count': len(moderate),
+            'moderate_units': sum(p['total_qty'] for p in moderate),
+            'slow_count': len(slow),
+            'slow_units': sum(p['total_qty'] for p in slow),
+            'dead_count': len(dead_stock_items),
+            'dead_stock_units': sum(p['stock_on_hand'] for p in dead_stock_items),
+            'total_products': len(products),
+            'total_units': sum(p['total_qty'] for p in products),
+        },
+    }
+
+    return render(request, 'dashboard/store_stock_movement.html', context)

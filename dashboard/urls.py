@@ -34,6 +34,7 @@ urlpatterns = [
     path('replenishment/store/requests/<str:request_number>/', views.store_replenishment_request_detail, name='store_replenishment_request_detail'),
     path('replenishment/store/daily-pick-list/', views.store_daily_pick_list, name='store_daily_pick_list'),
     path('replenishment/store/daily-pick-list/export/', views.store_daily_pick_list_export, name='store_daily_pick_list_export'),
+    path('replenishment/store/stock-movement/', views.store_stock_movement, name='store_stock_movement'),
 
     # DP Team Approval System (New - Batch Based)
     path('replenishment/dp/approval/', views.dp_replenishment_approval, name='dp_replenishment_approval'),
