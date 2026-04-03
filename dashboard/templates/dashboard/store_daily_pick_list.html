@@ -532,11 +532,11 @@
             <div>
                 <h5 class="mb-2">How This List Works</h5>
                 <p class="mb-0">
-                    This list shows products based on the last 7 days of sales
-                    ({{ start_date|date:"M d" }} - {{ end_date|date:"M d, Y" }}).
-                    The forecast for the next 7 days uses <strong>same-weekday patterns</strong> from last week,
-                    adjusted by recent sales trends (comparing the last 7 days vs the previous 7 days).
-                    This helps you maintain optimal stock levels while accounting for growth or decline in demand.
+                    This list shows products based on the last 14 days of sales
+                    ({{ previous_week_start|date:"M d" }} - {{ end_date|date:"M d, Y" }}).
+                    The forecast for the next 7 days uses the <strong>2-week average</strong> of same-weekday sales
+                    (averaging each day across both weeks, rounded up).
+                    This helps you maintain optimal stock levels with a stable, smoothed forecast.
                 </p>
             </div>
         </div>
@@ -731,7 +731,7 @@
                     <div class="timeline-footer">
                         <div class="trend-info">
                             <i data-feather="info" style="width: 16px; height: 16px;"></i>
-                            <span>Forecast uses same-weekday patterns from last week, adjusted by recent trends</span>
+                            <span>Forecast uses 2-week average of same-weekday sales, rounded up</span>
                         </div>
                     </div>
                 </div>

@@ -6552,24 +6552,42 @@ def abc_analysis_report(request):
 @permission_required('replenishment.daily_pick_list.view')
 def store_daily_pick_list(request):
     """
-    Generate daily pick list for store replenishment using trend-adjusted forecasting
+    Generate daily pick list for store replenishment using 2-week average forecasting
 
     Forecasting Algorithm:
-    - Step 1: Base Value = Same weekday from last week
-    - Step 2: Daily Trend Factor = Recent week's day sales / Previous week's same day sales
-    - Step 3: Forecast = Base × Daily Trend Factor
-    - Step 4: Minimum Rule = If forecast < 1, set to 1
+    - For each weekday: Forecast = AVERAGE(week1_same_day, week2_same_day)
+    - Fractional values are rounded up (ceil) since you can't pick half a unit
+    - Products with 0 total forecast are excluded
 
     Features:
-    - Shows last 7 days of sales with daily breakdown
-    - Forecasts next 7 days using weekday patterns + per-day trend adjustment
+    - Shows last 14 days of sales with daily breakdown (2 weeks)
+    - Forecasts next 7 days using 2-week average per weekday
     - Displays current stock and incoming stock
     - Sorted by highest forecasted demand
     """
-    from datetime import date, timedelta
+    from datetime import date, datetime, timedelta, time
     from django.db.models import Sum, F, Q
     from django.db.models.functions import TruncDate
+    from django.db.models.expressions import RawSQL
     from cin7.models import SalesOrderLineItem, Stock, Product
+    import zoneinfo
+
+    NZ_TZ = zoneinfo.ZoneInfo('Pacific/Auckland')
+    UTC_TZ = zoneinfo.ZoneInfo('UTC')
+
+    def nz_date_to_utc_range(start_date, end_date):
+        """Convert NZ date range to UTC datetime boundaries (handles DST)."""
+        utc_start = datetime.combine(start_date, time.min, tzinfo=NZ_TZ).astimezone(UTC_TZ)
+        utc_end = datetime.combine(end_date, time.max, tzinfo=NZ_TZ).astimezone(UTC_TZ)
+        return utc_start, utc_end
+
+    def get_nz_utc_offset(for_date):
+        """Get the UTC offset string (e.g. '+13:00') for NZ on a given date."""
+        dt = datetime.combine(for_date, time(12, 0), tzinfo=NZ_TZ)
+        total_seconds = int(dt.utcoffset().total_seconds())
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        return f'+{hours:02d}:{minutes:02d}'
 
     # Get user's assigned stores
     user = request.user
@@ -6582,15 +6600,15 @@ def store_daily_pick_list(request):
             'products': [],
         })
 
-    # Get target date from request (default: yesterday)
+    # Get target date from request (default: yesterday in NZ time)
     target_date_str = request.GET.get('date')
     if target_date_str:
         try:
             target_date = date.fromisoformat(target_date_str)
         except ValueError:
-            target_date = date.today() - timedelta(days=1)
+            target_date = datetime.now(NZ_TZ).date() - timedelta(days=1)
     else:
-        target_date = date.today() - timedelta(days=1)
+        target_date = datetime.now(NZ_TZ).date() - timedelta(days=1)
 
     # Get category filter (optional)
     category_filter = request.GET.get('category', '')
@@ -6608,10 +6626,16 @@ def store_daily_pick_list(request):
     query_start_date = previous_week_start
     query_end_date = recent_week_end
 
-    # Query sales for 14 days (2 weeks)
+    # Convert NZ date range to UTC datetime boundaries (handles DST automatically)
+    utc_start, utc_end = nz_date_to_utc_range(query_start_date, query_end_date)
+
+    # Get NZ UTC offset for CONVERT_TZ in SQL (used for date grouping)
+    nz_offset = get_nz_utc_offset(query_start_date)
+
+    # Query sales for 14 days (2 weeks) using UTC datetime boundaries
     sales_query = SalesOrderLineItem.objects.filter(
-        sales_order__invoice_date__date__gte=query_start_date,
-        sales_order__invoice_date__date__lte=query_end_date,
+        sales_order__invoice_date__gte=utc_start,
+        sales_order__invoice_date__lte=utc_end,
         sales_order__is_void=False
     )
 
@@ -6651,8 +6675,8 @@ def store_daily_pick_list(request):
         # Get daily sales data for this product (optimized - single query)
         daily_sales_qs = SalesOrderLineItem.objects.filter(
             code=sku,
-            sales_order__invoice_date__date__gte=query_start_date,
-            sales_order__invoice_date__date__lte=query_end_date,
+            sales_order__invoice_date__gte=utc_start,
+            sales_order__invoice_date__lte=utc_end,
             sales_order__is_void=False
         )
 
@@ -6662,9 +6686,12 @@ def store_daily_pick_list(request):
             if accessible_categories:
                 daily_sales_qs = daily_sales_qs.filter(product__category_name__in=accessible_categories)
 
-        # Aggregate by date (single database query instead of 7+)
+        # Aggregate by NZ date (convert UTC timestamps to NZ time before extracting date)
         daily_sales_data = daily_sales_qs.annotate(
-            sale_date=TruncDate('sales_order__invoice_date')
+            sale_date=RawSQL(
+                "DATE(CONVERT_TZ(cin7_sync_salesorder.invoice_date, '+00:00', %s))",
+                [nz_offset]
+            )
         ).values('sale_date').annotate(
             total_qty=Sum('qty')
         ).order_by('sale_date')
@@ -6675,27 +6702,16 @@ def store_daily_pick_list(request):
             for item in daily_sales_data
         }
 
-        # Calculate daily trend factors (recent day / previous day for each weekday)
+        # Calculate weekly totals for display
         recent_week_sales = 0
         previous_week_sales = 0
-        daily_trend_factors = []
 
         for i in range(7):
             recent_day_date = recent_week_start + timedelta(days=i)
             previous_day_date = previous_week_start + timedelta(days=i)
 
-            recent_day_sales = sales_by_date.get(recent_day_date, 0)
-            previous_day_sales = sales_by_date.get(previous_day_date, 0)
-
-            recent_week_sales += recent_day_sales
-            previous_week_sales += previous_day_sales
-
-            # Calculate daily trend factor (avoid division by zero)
-            if previous_day_sales > 0:
-                daily_trend_factors.append(recent_day_sales / previous_day_sales)
-            else:
-                # No previous sales for this day - use neutral trend
-                daily_trend_factors.append(1.0)
+            recent_week_sales += sales_by_date.get(recent_day_date, 0)
+            previous_week_sales += sales_by_date.get(previous_day_date, 0)
 
         # Build daily breakdown for previous week (7 days before recent week)
         previous_week_sales_by_day = []
@@ -6725,33 +6741,28 @@ def store_daily_pick_list(request):
 
             current_date += timedelta(days=1)
 
-        # Generate forecast breakdown for next 7 days using weekday-based logic
-        # Each day uses same weekday from last week × that day's trend factor
+        # Generate forecast breakdown for next 7 days using 2-week average
+        # Each day's forecast = average of same weekday from both weeks, rounded up
         forecast_by_day = []
         forecast_date = recent_week_end + timedelta(days=1)  # Day after recent week ends
-        base_date = recent_week_start  # Start of recent week
 
         for i in range(7):
-            # Get base sales (same weekday from last week)
-            base_sales = sales_by_date.get(base_date, 0)
+            week1_day_sales = sales_by_date.get(previous_week_start + timedelta(days=i), 0)
+            week2_day_sales = sales_by_date.get(recent_week_start + timedelta(days=i), 0)
 
-            # Apply daily trend factor for this weekday
-            daily_forecast = base_sales * daily_trend_factors[i]
+            # Average of same weekday across both weeks
+            daily_forecast = (week1_day_sales + week2_day_sales) / 2
 
-            # Apply minimum rule: if forecast < 1, set to 1 (but keep 0 as 0)
-            if 0 < daily_forecast < 1:
-                daily_forecast = 1
-            elif daily_forecast < 0:  # Handle any negative values
-                daily_forecast = 0
+            # Round up fractional forecasts (can't pick half a unit)
+            daily_forecast = int(daily_forecast) + (1 if daily_forecast % 1 > 0 else 0) if daily_forecast > 0 else 0
 
             forecast_by_day.append({
                 'date': forecast_date.strftime('%Y-%m-%d'),
                 'day_name': forecast_date.strftime('%A'),
-                'qty': round(daily_forecast, 1),
+                'qty': int(daily_forecast),
             })
 
             forecast_date += timedelta(days=1)
-            base_date += timedelta(days=1)
 
         # Calculate total forecasted demand
         forecasted_demand = sum(day['qty'] for day in forecast_by_day)
@@ -6788,7 +6799,7 @@ def store_daily_pick_list(request):
             'previous_week_sales_by_day': previous_week_sales_by_day,
             'sales_by_day': sales_by_day,
             'forecast_by_day': forecast_by_day,
-            'daily_trend_factors': [round(tf, 2) for tf in daily_trend_factors],
+            'daily_trend_factors': [],
             'recent_week_total': int(recent_week_sales),
             'previous_week_total': int(previous_week_sales),
         })
@@ -6843,10 +6854,29 @@ def store_daily_pick_list_export(request):
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
     from openpyxl.utils import get_column_letter
     from io import BytesIO
-    from datetime import date, timedelta
+    from datetime import date, datetime, timedelta, time
     from django.db.models import Sum, F, Q
     from django.db.models.functions import TruncDate
+    from django.db.models.expressions import RawSQL
     from cin7.models import SalesOrderLineItem, Stock, Product
+    import zoneinfo
+
+    NZ_TZ = zoneinfo.ZoneInfo('Pacific/Auckland')
+    UTC_TZ = zoneinfo.ZoneInfo('UTC')
+
+    def nz_date_to_utc_range(start_date, end_date):
+        """Convert NZ date range to UTC datetime boundaries (handles DST)."""
+        utc_start = datetime.combine(start_date, time.min, tzinfo=NZ_TZ).astimezone(UTC_TZ)
+        utc_end = datetime.combine(end_date, time.max, tzinfo=NZ_TZ).astimezone(UTC_TZ)
+        return utc_start, utc_end
+
+    def get_nz_utc_offset(for_date):
+        """Get the UTC offset string (e.g. '+13:00') for NZ on a given date."""
+        dt = datetime.combine(for_date, time(12, 0), tzinfo=NZ_TZ)
+        total_seconds = int(dt.utcoffset().total_seconds())
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        return f'+{hours:02d}:{minutes:02d}'
 
     # === Reuse the same data logic from store_daily_pick_list ===
     user = request.user
@@ -6858,9 +6888,9 @@ def store_daily_pick_list_export(request):
         try:
             target_date = date.fromisoformat(target_date_str)
         except ValueError:
-            target_date = date.today() - timedelta(days=1)
+            target_date = datetime.now(NZ_TZ).date() - timedelta(days=1)
     else:
-        target_date = date.today() - timedelta(days=1)
+        target_date = datetime.now(NZ_TZ).date() - timedelta(days=1)
 
     category_filter = request.GET.get('category', '')
 
@@ -6875,9 +6905,15 @@ def store_daily_pick_list_export(request):
     query_start_date = previous_week_start
     query_end_date = recent_week_end
 
+    # Convert NZ date range to UTC datetime boundaries (handles DST automatically)
+    utc_start, utc_end = nz_date_to_utc_range(query_start_date, query_end_date)
+
+    # Get NZ UTC offset for CONVERT_TZ in SQL (used for date grouping)
+    nz_offset = get_nz_utc_offset(query_start_date)
+
     sales_query = SalesOrderLineItem.objects.filter(
-        sales_order__invoice_date__date__gte=query_start_date,
-        sales_order__invoice_date__date__lte=query_end_date,
+        sales_order__invoice_date__gte=utc_start,
+        sales_order__invoice_date__lte=utc_end,
         sales_order__is_void=False
     )
 
@@ -6915,8 +6951,8 @@ def store_daily_pick_list_export(request):
     for sku, data in product_data.items():
         daily_sales_qs = SalesOrderLineItem.objects.filter(
             code=sku,
-            sales_order__invoice_date__date__gte=query_start_date,
-            sales_order__invoice_date__date__lte=query_end_date,
+            sales_order__invoice_date__gte=utc_start,
+            sales_order__invoice_date__lte=utc_end,
             sales_order__is_void=False
         )
         if not is_admin and has_assigned_stores:
@@ -6925,7 +6961,10 @@ def store_daily_pick_list_export(request):
                 daily_sales_qs = daily_sales_qs.filter(product__category_name__in=acc_cats)
 
         daily_sales_data = daily_sales_qs.annotate(
-            sale_date=TruncDate('sales_order__invoice_date')
+            sale_date=RawSQL(
+                "DATE(CONVERT_TZ(cin7_sync_salesorder.invoice_date, '+00:00', %s))",
+                [nz_offset]
+            )
         ).values('sale_date').annotate(
             total_qty=Sum('qty')
         ).order_by('sale_date')
@@ -6935,44 +6974,29 @@ def store_daily_pick_list_export(request):
             for item in daily_sales_data
         }
 
-    # Calculate forecasts for each product
+    # Calculate forecasts for each product using 2-week average
     products = []
     for sku, data in product_data.items():
         sales_by_date = data['sales_by_date']
 
-        # Daily trend factors
-        daily_trend_factors = []
-        for i in range(7):
-            recent_day = recent_week_start + timedelta(days=i)
-            previous_day = previous_week_start + timedelta(days=i)
-            recent_sales = sales_by_date.get(recent_day, 0)
-            previous_sales = sales_by_date.get(previous_day, 0)
-            if previous_sales > 0:
-                daily_trend_factors.append(recent_sales / previous_sales)
-            else:
-                daily_trend_factors.append(1.0)
-
-        # Build forecast
+        # Build forecast using 2-week average per weekday
         forecast_by_day = []
         forecast_date = recent_week_end + timedelta(days=1)
-        base_date = recent_week_start
 
         for i in range(7):
-            base_sales = sales_by_date.get(base_date, 0)
-            daily_forecast = base_sales * daily_trend_factors[i]
-            if 0 < daily_forecast < 1:
-                daily_forecast = 1
-            elif daily_forecast < 0:
-                daily_forecast = 0
+            week1_day_sales = sales_by_date.get(previous_week_start + timedelta(days=i), 0)
+            week2_day_sales = sales_by_date.get(recent_week_start + timedelta(days=i), 0)
+
+            daily_forecast = (week1_day_sales + week2_day_sales) / 2
+            daily_forecast = int(daily_forecast) + (1 if daily_forecast % 1 > 0 else 0) if daily_forecast > 0 else 0
 
             forecast_by_day.append({
                 'date': forecast_date,
                 'day_name': forecast_date.strftime('%A'),
-                'qty': int(round(daily_forecast)),
+                'qty': int(daily_forecast),
             })
 
             forecast_date += timedelta(days=1)
-            base_date += timedelta(days=1)
 
         forecasted_demand = sum(day['qty'] for day in forecast_by_day)
 
