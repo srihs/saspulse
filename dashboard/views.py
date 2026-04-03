@@ -7676,3 +7676,204 @@ def store_stock_movement(request):
     }
 
     return render(request, 'dashboard/store_stock_movement.html', context)
+
+
+@login_required
+@permission_required('replenishment.daily_pick_list.view')
+def store_school_comparison(request):
+    """
+    School comparison report for store managers.
+    Side-by-side comparison of all assigned schools.
+    """
+    from datetime import date, datetime, timedelta, time
+    from django.db.models import Sum, Count, F, Q, Value
+    from django.db.models.functions import Coalesce
+    from django.db.models.expressions import RawSQL
+    from cin7.models import SalesOrderLineItem, Stock
+    import zoneinfo
+
+    NZ_TZ = zoneinfo.ZoneInfo('Pacific/Auckland')
+    UTC_TZ = zoneinfo.ZoneInfo('UTC')
+
+    user = request.user
+    is_admin = user.is_superuser or user.is_staff
+    has_assigned_stores = user.assigned_stores.exists() if hasattr(user, 'assigned_stores') else False
+
+    if not is_admin and not has_assigned_stores:
+        return render(request, 'dashboard/store_school_comparison.html', {
+            'error': 'You are not assigned to any stores. Please contact your administrator.',
+            'schools': [],
+        })
+
+    # Date range: configurable period
+    today_nz = datetime.now(NZ_TZ).date()
+    period = request.GET.get('period', '30')
+    try:
+        period_days = int(period)
+    except ValueError:
+        period_days = 30
+
+    end_date = today_nz - timedelta(days=1)
+    start_date = end_date - timedelta(days=period_days - 1)
+
+    # Previous period for comparison
+    prev_end = start_date - timedelta(days=1)
+    prev_start = prev_end - timedelta(days=period_days - 1)
+
+    # Convert to UTC
+    utc_start = datetime.combine(start_date, time.min, tzinfo=NZ_TZ).astimezone(UTC_TZ)
+    utc_end = datetime.combine(end_date, time.max, tzinfo=NZ_TZ).astimezone(UTC_TZ)
+    prev_utc_start = datetime.combine(prev_start, time.min, tzinfo=NZ_TZ).astimezone(UTC_TZ)
+    prev_utc_end = datetime.combine(prev_end, time.max, tzinfo=NZ_TZ).astimezone(UTC_TZ)
+
+    # NZ offset for date grouping
+    nz_offset_dt = datetime.combine(start_date, time(12, 0), tzinfo=NZ_TZ)
+    total_seconds = int(nz_offset_dt.utcoffset().total_seconds())
+    nz_offset = f'+{total_seconds // 3600:02d}:{(total_seconds % 3600) // 60:02d}'
+
+    # Base query filters
+    base_filter = Q(sales_order__is_void=False)
+    if not is_admin and has_assigned_stores:
+        accessible_categories = user.get_accessible_categories()
+        if accessible_categories:
+            base_filter &= Q(product__category_name__in=accessible_categories)
+
+    # Current period: aggregate by school (sub_category)
+    current_sales = SalesOrderLineItem.objects.filter(
+        base_filter,
+        sales_order__invoice_date__gte=utc_start,
+        sales_order__invoice_date__lte=utc_end,
+    ).values(
+        school=F('product__sub_category'),
+    ).annotate(
+        total_units=Sum('qty'),
+        total_revenue=Sum(F('unit_price') * F('qty')),
+        active_products=Count('code', distinct=True),
+        total_orders=Count('sales_order', distinct=True),
+    ).filter(total_units__gt=0).order_by('-total_units')
+
+    # Previous period
+    prev_sales = SalesOrderLineItem.objects.filter(
+        base_filter,
+        sales_order__invoice_date__gte=prev_utc_start,
+        sales_order__invoice_date__lte=prev_utc_end,
+    ).values(
+        school=F('product__sub_category'),
+    ).annotate(
+        total_units=Sum('qty'),
+        total_revenue=Sum(F('unit_price') * F('qty')),
+    )
+    prev_lookup = {
+        s['school']: {
+            'units': float(s['total_units'] or 0),
+            'revenue': float(s['total_revenue'] or 0),
+        }
+        for s in prev_sales
+    }
+
+    # Daily sales by school for sparkline/trend (group by NZ date)
+    daily_by_school = SalesOrderLineItem.objects.filter(
+        base_filter,
+        sales_order__invoice_date__gte=utc_start,
+        sales_order__invoice_date__lte=utc_end,
+    ).annotate(
+        nz_date=RawSQL(
+            "DATE(CONVERT_TZ(cin7_sync_salesorder.invoice_date, '+00:00', %s))",
+            [nz_offset]
+        )
+    ).values(
+        school=F('product__sub_category'),
+        date=F('nz_date'),
+    ).annotate(
+        daily_units=Sum('qty'),
+    ).order_by('school', 'date')
+
+    # Build daily trend per school
+    daily_trends = {}
+    for row in daily_by_school:
+        school = row['school']
+        if school not in daily_trends:
+            daily_trends[school] = {}
+        daily_trends[school][str(row['date'])] = float(row['daily_units'] or 0)
+
+    # Build school list
+    schools = []
+    grand_total_units = 0
+    grand_total_revenue = 0
+
+    for sale in current_sales:
+        school_name = sale['school'] or 'Uncategorized'
+        units = int(float(sale['total_units'] or 0))
+        revenue = float(sale['total_revenue'] or 0)
+        active_products = sale['active_products']
+        total_orders = sale['total_orders']
+
+        prev = prev_lookup.get(sale['school'], {'units': 0, 'revenue': 0})
+        units_change = units - prev['units'] if prev['units'] else None
+        units_change_pct = round((units_change / prev['units']) * 100) if prev['units'] and units_change is not None else None
+        revenue_change_pct = round(((revenue - prev['revenue']) / prev['revenue']) * 100) if prev['revenue'] else None
+
+        # Daily trend data (list of daily values for the period)
+        trend_data = []
+        for i in range(period_days):
+            d = start_date + timedelta(days=i)
+            trend_data.append(daily_trends.get(sale['school'], {}).get(str(d), 0))
+
+        # Avg units per day
+        avg_daily = round(units / period_days, 1)
+
+        # Days with sales
+        days_active = sum(1 for v in trend_data if v > 0)
+
+        grand_total_units += units
+        grand_total_revenue += revenue
+
+        schools.append({
+            'name': school_name,
+            'total_units': units,
+            'total_units_fmt': f'{units:,}',
+            'total_revenue': round(revenue, 2),
+            'total_revenue_fmt': f'{revenue:,.0f}',
+            'active_products': active_products,
+            'total_orders': total_orders,
+            'avg_daily': avg_daily,
+            'days_active': days_active,
+            'units_change': int(units_change) if units_change is not None else None,
+            'units_change_pct': units_change_pct,
+            'revenue_change_pct': revenue_change_pct,
+            'trend_data': trend_data,
+        })
+
+    # Sort by total units desc
+    schools.sort(key=lambda x: x['total_units'], reverse=True)
+
+    # Calculate share percentages
+    for s in schools:
+        s['units_share'] = round((s['total_units'] / grand_total_units) * 100, 1) if grand_total_units else 0
+        s['revenue_share'] = round((s['total_revenue'] / grand_total_revenue) * 100, 1) if grand_total_revenue else 0
+
+    # Store name
+    store_name = 'All Stores'
+    if has_assigned_stores:
+        store_names = list(set(
+            user.assigned_stores.filter(is_active=True)
+            .values_list('store_name', flat=True)
+        ))
+        if store_names:
+            store_name = ', '.join(sorted(store_names))
+
+    context = {
+        'schools': schools,
+        'start_date': start_date,
+        'end_date': end_date,
+        'prev_start': prev_start,
+        'prev_end': prev_end,
+        'period_days': period_days,
+        'period': period,
+        'store_name': store_name,
+        'grand_total_units': f'{grand_total_units:,}',
+        'grand_total_revenue': f'{grand_total_revenue:,.0f}',
+        'total_schools': len(schools),
+    }
+
+    return render(request, 'dashboard/store_school_comparison.html', context)

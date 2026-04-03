@@ -1,0 +1,257 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load custom_filters %}
+
+{% block title %}School Comparison{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.4/css/dataTables.bootstrap5.min.css">
+<style>
+    .page-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 2rem;
+        border-radius: 12px;
+        margin-bottom: 2rem;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    .summary-card {
+        border-radius: 10px;
+        padding: 1.25rem;
+        text-align: center;
+        border: none;
+    }
+    .summary-card .count { font-size: 2rem; font-weight: 700; }
+    .summary-card .label { font-size: 0.85rem; color: #6c757d; }
+    .school-card {
+        border-radius: 10px;
+        transition: transform 0.2s, box-shadow 0.2s;
+        border: 1px solid #e9ecef;
+    }
+    .school-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 6px 20px rgba(0,0,0,0.08);
+    }
+    .school-rank {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 0.85rem;
+    }
+    .rank-1 { background: #ffd700; color: #000; }
+    .rank-2 { background: #c0c0c0; color: #000; }
+    .rank-3 { background: #cd7f32; color: #fff; }
+    .rank-other { background: #e9ecef; color: #6c757d; }
+    .change-up { color: #198754; }
+    .change-down { color: #dc3545; }
+    .change-flat { color: #6c757d; }
+    .share-bar {
+        height: 8px;
+        border-radius: 4px;
+        background: #e9ecef;
+        overflow: hidden;
+    }
+    .share-bar-fill {
+        height: 100%;
+        border-radius: 4px;
+        background: linear-gradient(90deg, #667eea, #764ba2);
+    }
+    .sparkline { display: inline-block; }
+    .stat-label { font-size: 0.75rem; color: #6c757d; text-transform: uppercase; letter-spacing: 0.5px; }
+    .stat-value { font-size: 1.1rem; font-weight: 600; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header -->
+    <div class="page-header">
+        <div class="row align-items-center">
+            <div class="col">
+                <h2 class="mb-1"><span data-feather="bar-chart-2" class="me-2"></span>School Comparison</h2>
+                <p class="mb-0 opacity-75">{{ store_name }} &mdash; {{ start_date|date:"d M Y" }} to {{ end_date|date:"d M Y" }} ({{ period_days }} days)</p>
+            </div>
+            <div class="col-auto">
+                <select id="periodFilter" class="form-select form-select-sm" style="width:auto;display:inline-block;" onchange="changePeriod(this.value)">
+                    <option value="7" {% if period == '7' %}selected{% endif %}>Last 7 days</option>
+                    <option value="14" {% if period == '14' %}selected{% endif %}>Last 14 days</option>
+                    <option value="30" {% if period == '30' or period == '' %}selected{% endif %}>Last 30 days</option>
+                    <option value="60" {% if period == '60' %}selected{% endif %}>Last 60 days</option>
+                    <option value="90" {% if period == '90' %}selected{% endif %}>Last 90 days</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    {% if error %}
+    <div class="alert alert-warning">{{ error }}</div>
+    {% else %}
+
+    <!-- How to Read -->
+    <div class="card mb-4 border-0 bg-light">
+        <div class="card-body py-3">
+            <a class="text-decoration-none d-flex align-items-center" data-bs-toggle="collapse" href="#howToRead" role="button" aria-expanded="false">
+                <span data-feather="info" class="me-2 text-primary" style="width:18px;height:18px;"></span>
+                <strong class="text-body">How to read this report</strong>
+                <span class="ms-auto fas fa-chevron-down text-muted small"></span>
+            </a>
+            <div class="collapse mt-3" id="howToRead">
+                <ul class="mb-0 small">
+                    <li><strong>Units Sold</strong> &mdash; Total items sold for the school in the selected period</li>
+                    <li><strong>Revenue</strong> &mdash; Total sales value for the school</li>
+                    <li><strong>Active Products</strong> &mdash; Number of unique style codes sold</li>
+                    <li><strong>Orders</strong> &mdash; Number of unique customer orders</li>
+                    <li><strong>Share</strong> &mdash; Percentage of total store sales this school represents</li>
+                    <li><strong>vs Previous</strong> &mdash; Comparison against the same length period immediately before. E.g. if viewing Last 30 days (Mar 4 – Apr 2), it compares against the previous 30 days (Feb 2 – Mar 3). Large swings are normal due to seasonality (e.g. school term start vs holidays)</li>
+                    <li><strong>Trend</strong> &mdash; Daily sales pattern across the period</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Summary -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-4">
+            <div class="card summary-card" style="background:#e8f4fd;">
+                <div class="count text-primary">{{ total_schools }}</div>
+                <div class="label">Schools</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-4">
+            <div class="card summary-card" style="background:#d1e7dd;">
+                <div class="count" style="color:#0f5132;">{{ grand_total_units }}</div>
+
+                <div class="label">Total Units Sold</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-4">
+            <div class="card summary-card" style="background:#fff3cd;">
+                <div class="count" style="color:#664d03;">${{ grand_total_revenue }}</div>
+                <div class="label">Total Revenue</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- School Cards -->
+    <div class="row g-3">
+        {% for school in schools %}
+        <div class="col-12">
+            <div class="card school-card">
+                <div class="card-body">
+                    <div class="row align-items-center">
+                        <!-- Rank + Name -->
+                        <div class="col-md-3">
+                            <div class="d-flex align-items-center">
+                                <span class="school-rank {% if forloop.counter == 1 %}rank-1{% elif forloop.counter == 2 %}rank-2{% elif forloop.counter == 3 %}rank-3{% else %}rank-other{% endif %} me-3">{{ forloop.counter }}</span>
+                                <div>
+                                    <h6 class="mb-0 fw-bold">{{ school.name }}</h6>
+                                    <small class="text-muted">{{ school.days_active }}/{{ period_days }} days active</small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Units -->
+                        <div class="col-6 col-md-2 mt-2 mt-md-0">
+                            <div class="stat-label">Units Sold</div>
+                            <div class="stat-value">{{ school.total_units_fmt }}</div>
+                            {% if school.units_change_pct != None %}
+                            <small class="{% if school.units_change_pct > 0 %}change-up{% elif school.units_change_pct < 0 %}change-down{% else %}change-flat{% endif %}">
+                                {% if school.units_change_pct > 0 %}+{% endif %}{{ school.units_change_pct }}% vs prev
+                            </small>
+                            {% endif %}
+                        </div>
+
+                        <!-- Revenue -->
+                        <div class="col-6 col-md-2 mt-2 mt-md-0">
+                            <div class="stat-label">Revenue</div>
+                            <div class="stat-value">${{ school.total_revenue_fmt }}</div>
+                            {% if school.revenue_change_pct != None %}
+                            <small class="{% if school.revenue_change_pct > 0 %}change-up{% elif school.revenue_change_pct < 0 %}change-down{% else %}change-flat{% endif %}">
+                                {% if school.revenue_change_pct > 0 %}+{% endif %}{{ school.revenue_change_pct }}% vs prev
+                            </small>
+                            {% endif %}
+                        </div>
+
+                        <!-- Products / Orders -->
+                        <div class="col-6 col-md-1 mt-2 mt-md-0">
+                            <div class="stat-label">Products</div>
+                            <div class="stat-value">{{ school.active_products }}</div>
+                        </div>
+                        <div class="col-6 col-md-1 mt-2 mt-md-0">
+                            <div class="stat-label">Orders</div>
+                            <div class="stat-value">{{ school.total_orders }}</div>
+                        </div>
+
+                        <!-- Share + Trend -->
+                        <div class="col-12 col-md-3 mt-2 mt-md-0">
+                            <div class="stat-label">Share of Store Sales</div>
+                            <div class="d-flex align-items-center mb-1">
+                                <div class="share-bar flex-grow-1 me-2">
+                                    <div class="share-bar-fill" style="width:{{ school.units_share }}%"></div>
+                                </div>
+                                <span class="fw-bold" style="font-size:0.85rem;">{{ school.units_share }}%</span>
+                            </div>
+                            <canvas class="sparkline" id="spark-{{ forloop.counter0 }}" width="200" height="30"
+                                    data-values="{{ school.trend_data|join:',' }}"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% empty %}
+        <div class="col-12">
+            <div class="alert alert-info">No sales data found for the selected period.</div>
+        </div>
+        {% endfor %}
+    </div>
+
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function changePeriod(val) {
+    var url = new URL(window.location.href);
+    url.searchParams.set('period', val);
+    window.location.href = url.toString();
+}
+
+// Draw sparklines
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.sparkline').forEach(function(canvas) {
+        var values = canvas.dataset.values.split(',').map(Number);
+        if (!values.length || values.every(v => v === 0)) return;
+
+        var ctx = canvas.getContext('2d');
+        var w = canvas.width;
+        var h = canvas.height;
+        var max = Math.max.apply(null, values) || 1;
+        var step = w / (values.length - 1 || 1);
+
+        ctx.strokeStyle = '#667eea';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+
+        for (var i = 0; i < values.length; i++) {
+            var x = i * step;
+            var y = h - (values[i] / max) * (h - 4) - 2;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+
+        // Fill area
+        ctx.lineTo((values.length - 1) * step, h);
+        ctx.lineTo(0, h);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(102, 126, 234, 0.1)';
+        ctx.fill();
+    });
+});
+</script>
+{% endblock %}
