@@ -5108,7 +5108,7 @@ def detect_missing_forecasts(request):
             LEFT JOIN dashboard_salesforecastbase sf
                 ON sf.entity_name = po.code AND sf.aggregation_level = 'product'
             LEFT JOIN (
-                SELECT li.code,
+                SELECT li.code COLLATE utf8mb4_bin as code,
                        SUM(li.qty) as total_qty,
                        COUNT(DISTINCT DATE(so.invoice_date)) as sale_days,
                        MAX(so.invoice_date) as last_sale,
@@ -5116,8 +5116,8 @@ def detect_missing_forecasts(request):
                 FROM cin7_sync_salesorderlineitem li
                 JOIN cin7_sync_salesorder so ON so.id = li.sales_order_id
                 WHERE so.stage = 'Dispatched' AND so.invoice_date IS NOT NULL
-                GROUP BY li.code
-            ) s ON s.code = po.code
+                GROUP BY li.code COLLATE utf8mb4_bin
+            ) s ON s.code = CAST(po.code AS BINARY)
             WHERE (p.category_name LIKE '%%Shop' OR p.category_name LIKE '%%Store')
               AND p.category_name NOT IN ('Shop', 'Store')
               AND p.category_name NOT LIKE 'Wholesale%%'
