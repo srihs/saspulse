@@ -5090,6 +5090,59 @@ def trigger_forecast_regeneration(request):
 
 
 @login_required
+@permission_required('forecasting.view')
+def detect_missing_forecasts(request):
+    """Detect and generate forecasts for shop products that have no forecast"""
+    from django.db import connection
+    from django.core.management import call_command
+    import threading
+
+    # Detect missing products
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            SELECT DISTINCT po.code, p.name, p.category_name, p.sub_category
+            FROM cin7_sync_productoption po
+            JOIN cin7_sync_product p ON p.cin7_id = po.cin7_product_id
+            LEFT JOIN dashboard_salesforecastbase sf
+                ON sf.entity_name = po.code AND sf.aggregation_level = 'product'
+            WHERE (p.category_name LIKE '%%Shop' OR p.category_name LIKE '%%Store')
+              AND p.category_name NOT IN ('Shop', 'Store')
+              AND p.category_name NOT LIKE 'Wholesale%%'
+              AND p.is_active = 1
+              AND sf.id IS NULL
+            ORDER BY p.category_name, p.sub_category, po.code
+        """)
+        missing = [
+            {'sku': row[0], 'name': row[1], 'shop': row[2], 'school': row[3]}
+            for row in cursor.fetchall()
+        ]
+
+    if request.method == 'POST' and request.POST.get('action') == 'generate':
+        if not missing:
+            return JsonResponse({'success': True, 'message': 'No missing forecasts to generate.'})
+
+        def run_missing_forecasts():
+            try:
+                call_command('generate_365d_forecasts', level='product', only_missing=True, force=True)
+            except Exception as e:
+                print(f"Error generating missing forecasts: {e}")
+
+        thread = threading.Thread(target=run_missing_forecasts)
+        thread.daemon = True
+        thread.start()
+
+        return JsonResponse({
+            'success': True,
+            'message': f'Generating forecasts for {len(missing)} products in background.'
+        })
+
+    return JsonResponse({
+        'missing_count': len(missing),
+        'missing_products': missing[:100],  # Limit response size
+    })
+
+
+@login_required
 def past_sales_data(request):
     """API endpoint to fetch historical sales data for Past Sales modal"""
     from django.db import connection
@@ -7877,3 +7930,164 @@ def store_school_comparison(request):
     }
 
     return render(request, 'dashboard/store_school_comparison.html', context)
+
+
+@login_required
+@permission_required('forecasting.view')
+def non_forecasted_items(request):
+    """
+    Non-Forecasted Items Report
+    Shows products in Shop/Store categories that have no forecast in dashboard_salesforecastbase,
+    with the reason they were skipped during forecast generation.
+    """
+    from django.db import connection
+    from datetime import datetime, timedelta
+
+    shop_filter = request.GET.get('shop', '')
+
+    # Build the WHERE clause for optional shop filter
+    shop_clause = ""
+    params = []
+    if shop_filter:
+        shop_clause = "AND p.category_name = %s"
+        params.append(shop_filter)
+
+    with connection.cursor() as cursor:
+        # Single query: find all shop/store SKUs without a forecast, and compute sales stats
+        cursor.execute(f"""
+            WITH shop_skus AS (
+                SELECT
+                    po.code AS sku_code,
+                    p.name AS product_name,
+                    p.category_name AS shop,
+                    p.sub_category AS school
+                FROM cin7_sync_productoption po
+                JOIN cin7_sync_product p ON p.id = po.product_id
+                WHERE (p.category_name LIKE '%% Shop' OR p.category_name LIKE '%% Store')
+                  AND p.category_name NOT IN ('Shop', 'Store')
+                  AND p.category_name NOT LIKE 'Wholesale%%'
+                  AND p.is_active = 1
+                  {shop_clause}
+            ),
+            forecasted_skus AS (
+                SELECT DISTINCT entity_name
+                FROM dashboard_salesforecastbase
+                WHERE aggregation_level = 'product'
+            ),
+            sales_stats AS (
+                SELECT
+                    li.code AS sku_code,
+                    COALESCE(SUM(li.qty), 0) AS total_sold,
+                    COUNT(DISTINCT DATE(so.invoice_date)) AS distinct_days,
+                    MAX(so.invoice_date) AS last_sale_date
+                FROM cin7_sync_salesorderlineitem li
+                JOIN cin7_sync_salesorder so ON so.id = li.sales_order_id
+                WHERE so.stage = 'Dispatched'
+                  AND so.invoice_date IS NOT NULL
+                GROUP BY li.code
+            )
+            SELECT
+                ss.sku_code,
+                ss.product_name,
+                ss.shop,
+                ss.school,
+                COALESCE(st.total_sold, 0) AS total_sold,
+                COALESCE(st.distinct_days, 0) AS distinct_days,
+                st.last_sale_date
+            FROM shop_skus ss
+            LEFT JOIN forecasted_skus fs ON fs.entity_name = ss.sku_code
+            LEFT JOIN sales_stats st ON st.sku_code = ss.sku_code
+            WHERE fs.entity_name IS NULL
+            ORDER BY ss.shop, ss.product_name, ss.sku_code
+        """, params)
+
+        rows = cursor.fetchall()
+
+    # Also get distinct shops for filter dropdown
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            SELECT DISTINCT p.category_name
+            FROM cin7_sync_product p
+            WHERE (p.category_name LIKE '%% Shop' OR p.category_name LIKE '%% Store')
+              AND p.category_name NOT IN ('Shop', 'Store')
+              AND p.category_name NOT LIKE 'Wholesale%%'
+              AND p.is_active = 1
+            ORDER BY p.category_name
+        """)
+        shops = [r[0] for r in cursor.fetchall()]
+
+    # Process results and determine reason
+    today = datetime.now().date()
+    items = []
+    reason_counts = {
+        'no_sales': 0,
+        'insufficient_sales': 0,
+        'insufficient_history': 0,
+        'discontinued': 0,
+        'low_frequency': 0,
+        'pending': 0,
+    }
+
+    for row in rows:
+        sku_code = row[0]
+        product_name = row[1]
+        shop = row[2]
+        school = row[3] or ''
+        total_sold = float(row[4] or 0)
+        distinct_days = int(row[5] or 0)
+        last_sale_date = row[6]
+
+        # Determine reason using same logic as generate_365d_forecasts
+        if total_sold == 0:
+            reason = 'No sales history'
+        elif total_sold < 10:
+            reason = f'Insufficient sales ({int(total_sold)} sold, minimum 10)'
+        elif distinct_days < 30:
+            reason = f'Insufficient history ({distinct_days} days, minimum 30)'
+        elif last_sale_date:
+            days_since = (today - last_sale_date.date() if hasattr(last_sale_date, 'date') else (today - last_sale_date)).days
+            if days_since > 365:
+                reason = f'Discontinued - no sales in {days_since} days'
+            else:
+                # Check sales per year
+                sales_per_year = total_sold / (distinct_days / 365) if distinct_days > 0 else 0
+                if sales_per_year < 5:
+                    reason = f'Low frequency ({sales_per_year:.1f} sales/year, minimum 5)'
+                else:
+                    reason = 'Pending generation'
+        else:
+            reason = 'No sales history'
+
+        # Categorize for summary counts
+        if reason == 'No sales history':
+            reason_counts['no_sales'] += 1
+        elif reason.startswith('Insufficient sales'):
+            reason_counts['insufficient_sales'] += 1
+        elif reason.startswith('Insufficient history'):
+            reason_counts['insufficient_history'] += 1
+        elif reason.startswith('Discontinued'):
+            reason_counts['discontinued'] += 1
+        elif reason.startswith('Low frequency'):
+            reason_counts['low_frequency'] += 1
+        else:
+            reason_counts['pending'] += 1
+
+        items.append({
+            'sku_code': sku_code,
+            'product_name': product_name,
+            'shop': shop,
+            'school': school,
+            'total_sold': int(total_sold),
+            'last_sale_date': last_sale_date,
+            'reason': reason,
+        })
+
+    context = {
+        'items': items,
+        'total_items': len(items),
+        'reason_counts': reason_counts,
+        'shops': shops,
+        'selected_shop': shop_filter,
+    }
+
+    return render(request, 'dashboard/non_forecasted_items.html', context)

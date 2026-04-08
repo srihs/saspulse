@@ -106,9 +106,42 @@ class Command(BaseCommand):
             default=730,  # Changed from 365 to 730 (2 years)
             help='Number of days to forecast ahead (default: 730 for 2 years)'
         )
+        parser.add_argument(
+            '--only-missing',
+            action='store_true',
+            help='Only generate forecasts for shop products that have no forecast yet'
+        )
+
+    def get_missing_product_skus(self):
+        """Find shop/store product SKUs that have no forecast"""
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT DISTINCT po.code
+                FROM cin7_sync_productoption po
+                JOIN cin7_sync_product p ON p.cin7_id = po.cin7_product_id
+                LEFT JOIN dashboard_salesforecastbase sf
+                    ON sf.entity_name = po.code AND sf.aggregation_level = 'product'
+                WHERE (p.category_name LIKE '%%Shop' OR p.category_name LIKE '%%Store')
+                  AND p.category_name NOT IN ('Shop', 'Store')
+                  AND p.category_name NOT LIKE 'Wholesale%%'
+                  AND p.is_active = 1
+                  AND sf.id IS NULL
+            """)
+            return [row[0] for row in cursor.fetchall()]
 
     def handle(self, *args, **options):
         horizon_days = options['horizon_days']
+        only_missing = options.get('only_missing', False)
+
+        if only_missing:
+            missing_skus = self.get_missing_product_skus()
+            if not missing_skus:
+                self.stdout.write(self.style.SUCCESS('All shop products already have forecasts.'))
+                return
+            self.stdout.write(self.style.WARNING(f'Found {len(missing_skus)} products without forecasts'))
+            options['_missing_skus'] = missing_skus
+            # Force product level only for missing mode
+            options['level'] = 'product'
 
         self.stdout.write(self.style.SUCCESS('=' * 80))
         self.stdout.write(self.style.SUCCESS(f'{horizon_days}-DAY BASE FORECASTING ENGINE - Statistical + AI/ML Models'))
@@ -127,13 +160,15 @@ class Command(BaseCommand):
         # Define levels to process
         levels = ['school', 'product', 'shop'] if level == 'all' else [level]
 
+        missing_skus = options.get('_missing_skus', None)
+
         for l in levels:
             self.stdout.write(f"\n{self.style.WARNING(f'Processing: {l.upper()} - {horizon_days}-day base forecasts')}")
-            self.generate_forecasts(l, model_type, min_sales, force, limit, horizon_days)
+            self.generate_forecasts(l, model_type, min_sales, force, limit, horizon_days, missing_skus=missing_skus)
 
         self.stdout.write(self.style.SUCCESS(f'\n✓ {horizon_days}-day base forecasting complete!'))
 
-    def generate_forecasts(self, aggregation_level, model_type, min_sales, force, limit, horizon_days):
+    def generate_forecasts(self, aggregation_level, model_type, min_sales, force, limit, horizon_days, missing_skus=None):
         """Generate multi-day base forecasts for a specific aggregation level"""
 
         # Get historical sales data
@@ -148,6 +183,15 @@ class Command(BaseCommand):
         error_count = 0
 
         entities = sales_data['entity_name'].unique()
+
+        # Filter to only missing SKUs if specified
+        if missing_skus is not None:
+            missing_set = set(missing_skus)
+            entities = [e for e in entities if e in missing_set]
+            if not entities:
+                self.stdout.write(self.style.WARNING(f'  No sales history found for missing products'))
+                return
+            self.stdout.write(f'  Filtered to {len(entities)} missing products with sales history')
         total_entities = len(entities)
 
         if limit:

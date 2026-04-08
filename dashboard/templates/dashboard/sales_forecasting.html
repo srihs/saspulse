@@ -288,6 +288,64 @@
                     <h5 class="text-body-tertiary fw-semibold">
                         Statistical + Machine Learning Predictions for School Products
                     </h5>
+                    {% if user.is_staff %}
+                    <div class="mt-3" id="missingForecastsSection">
+                        <span id="missingForecastsBadge" class="d-none">
+                            <span class="badge bg-warning text-dark me-2" id="missingCount"></span>
+                            <button class="btn btn-sm btn-outline-primary" id="generateMissingBtn" onclick="generateMissingForecasts()">
+                                Generate Missing Forecasts
+                            </button>
+                            <span id="missingStatus" class="ms-2 text-muted small"></span>
+                        </span>
+                    </div>
+                    <script>
+                    (function() {
+                        fetch('{% url "dashboard:detect_missing_forecasts" %}')
+                        .then(r => r.json())
+                        .then(data => {
+                            if (data.missing_count > 0) {
+                                document.getElementById('missingForecastsBadge').classList.remove('d-none');
+                                document.getElementById('missingCount').textContent = data.missing_count + ' products without forecasts';
+                            }
+                        });
+                    })();
+
+                    function generateMissingForecasts() {
+                        const btn = document.getElementById('generateMissingBtn');
+                        const status = document.getElementById('missingStatus');
+                        btn.disabled = true;
+                        btn.textContent = 'Generating...';
+                        status.textContent = '';
+
+                        fetch('{% url "dashboard:detect_missing_forecasts" %}', {
+                            method: 'POST',
+                            headers: {
+                                'X-CSRFToken': '{{ csrf_token }}',
+                                'Content-Type': 'application/x-www-form-urlencoded',
+                            },
+                            body: 'action=generate'
+                        })
+                        .then(r => r.json())
+                        .then(data => {
+                            if (data.success) {
+                                status.textContent = data.message;
+                                status.className = 'ms-2 text-success small';
+                            } else {
+                                status.textContent = 'Error: ' + (data.error || 'Unknown error');
+                                status.className = 'ms-2 text-danger small';
+                                btn.disabled = false;
+                                btn.textContent = 'Generate Missing Forecasts';
+                            }
+                        })
+                        .catch(err => {
+                            status.textContent = 'Error: ' + err.message;
+                            status.className = 'ms-2 text-danger small';
+                            btn.disabled = false;
+                            btn.textContent = 'Generate Missing Forecasts';
+                        });
+                    }
+                    </script>
+                    {% endif %}
                     {% endif %}
                 </div>
 

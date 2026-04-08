@@ -1,0 +1,303 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block title %}Non-Forecasted Items - SAS Pulse{% endblock %}
+
+{% block preloader %}
+<div id="pagePreloader" class="preloader-overlay active">
+    <div class="preloader-content">
+        <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <h4 class="mt-3">Loading Report...</h4>
+        <p class="text-muted">Processing data, please wait...</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
+<link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.bootstrap5.min.css">
+<style>
+.dt-buttons {
+    margin-bottom: 1rem;
+}
+.dt-button {
+    margin-right: 0.5rem !important;
+    border-radius: 0.375rem !important;
+    padding: 0.5rem 1rem !important;
+    font-size: 0.875rem !important;
+}
+#nonForecastedTable thead th {
+    background-color: #f8f9fa;
+    font-weight: 600;
+    border-bottom: 2px solid #dee2e6;
+}
+#nonForecastedTable tbody tr:hover {
+    background-color: #f8f9fa;
+}
+.badge-reason-no-sales { background-color: #6c757d; }
+.badge-reason-insufficient-sales { background-color: #fd7e14; }
+.badge-reason-insufficient-history { background-color: #0dcaf0; color: #000; }
+.badge-reason-discontinued { background-color: #dc3545; }
+.badge-reason-low-frequency { background-color: #ffc107; color: #000; }
+.badge-reason-pending { background-color: #198754; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="pb-5">
+    <div class="row g-4">
+        <div class="col-12">
+            <!-- Page Header -->
+            <div class="mb-8">
+                <h2 class="mb-2"><i class="fas fa-exclamation-circle me-2 text-warning"></i>Non-Forecasted Items</h2>
+                <h5 class="text-body-tertiary fw-semibold">
+                    Products in shops that were skipped during forecast generation
+                </h5>
+            </div>
+
+            <!-- Shop Filter -->
+            <div class="card mb-4">
+                <div class="card-body py-3">
+                    <form method="get" class="row align-items-end g-3">
+                        <div class="col-auto">
+                            <label for="shopFilter" class="form-label fw-semibold mb-1">Filter by Shop</label>
+                            <select name="shop" id="shopFilter" class="form-select" style="min-width: 250px;">
+                                <option value="">All Shops</option>
+                                {% for shop in shops %}
+                                <option value="{{ shop }}" {% if shop == selected_shop %}selected{% endif %}>{{ shop }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-auto">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-filter me-1"></i>Apply Filter
+                            </button>
+                        </div>
+                        {% if selected_shop %}
+                        <div class="col-auto">
+                            <a href="{% url 'dashboard:non_forecasted_items' %}" class="btn btn-outline-secondary">
+                                <i class="fas fa-times me-1"></i>Clear Filter
+                            </a>
+                        </div>
+                        {% endif %}
+                    </form>
+                </div>
+            </div>
+
+            <!-- Summary Cards -->
+            <div class="row g-4 mb-4">
+                <div class="col-12 col-md-6 col-xl-2">
+                    <div class="card border-start border-secondary border-4 h-100">
+                        <div class="card-body">
+                            <h6 class="text-muted mb-2">Total</h6>
+                            <h3 class="mb-0 fw-bold">{{ total_items|intcomma }}</h3>
+                            <small class="text-muted">skipped SKUs</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-md-6 col-xl-2">
+                    <div class="card border-start border-4 h-100" style="border-color: #6c757d !important;">
+                        <div class="card-body">
+                            <h6 class="text-muted mb-2">No Sales</h6>
+                            <h3 class="mb-0 fw-bold" style="color: #6c757d;">{{ reason_counts.no_sales|intcomma }}</h3>
+                            <small class="text-muted">zero history</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-md-6 col-xl-2">
+                    <div class="card border-start border-warning border-4 h-100">
+                        <div class="card-body">
+                            <h6 class="text-muted mb-2">Low Sales</h6>
+                            <h3 class="mb-0 text-warning fw-bold">{{ reason_counts.insufficient_sales|intcomma }}</h3>
+                            <small class="text-muted">&lt; 10 sold</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-md-6 col-xl-2">
+                    <div class="card border-start border-info border-4 h-100">
+                        <div class="card-body">
+                            <h6 class="text-muted mb-2">Short History</h6>
+                            <h3 class="mb-0 text-info fw-bold">{{ reason_counts.insufficient_history|intcomma }}</h3>
+                            <small class="text-muted">&lt; 30 days</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-md-6 col-xl-2">
+                    <div class="card border-start border-danger border-4 h-100">
+                        <div class="card-body">
+                            <h6 class="text-muted mb-2">Discontinued</h6>
+                            <h3 class="mb-0 text-danger fw-bold">{{ reason_counts.discontinued|intcomma }}</h3>
+                            <small class="text-muted">&gt; 365 days</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-md-6 col-xl-2">
+                    <div class="card border-start border-4 h-100" style="border-color: #ffc107 !important;">
+                        <div class="card-body">
+                            <h6 class="text-muted mb-2">Low Freq</h6>
+                            <h3 class="mb-0 fw-bold" style="color: #ffc107;">{{ reason_counts.low_frequency|intcomma }}</h3>
+                            <small class="text-muted">&lt; 5/year</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Data Table -->
+            <div class="card mb-4">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <h4 class="mb-0">
+                            <i class="fas fa-table me-2 text-warning"></i>Non-Forecasted Items
+                            {% if selected_shop %}<span class="text-muted fs-6"> - {{ selected_shop }}</span>{% endif %}
+                        </h4>
+                    </div>
+                    <div class="table-responsive">
+                        <table id="nonForecastedTable" class="table table-hover table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Product Name</th>
+                                    <th>SKU</th>
+                                    <th>Shop</th>
+                                    <th>School</th>
+                                    <th>Total Sold</th>
+                                    <th>Last Sale</th>
+                                    <th>Reason</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in items %}
+                                <tr>
+                                    <td>{{ item.product_name }}</td>
+                                    <td><code>{{ item.sku_code }}</code></td>
+                                    <td>{{ item.shop }}</td>
+                                    <td>{{ item.school }}</td>
+                                    <td class="text-end">{{ item.total_sold|intcomma }}</td>
+                                    <td class="text-center">
+                                        {% if item.last_sale_date %}
+                                            {{ item.last_sale_date|date:"M d, Y" }}
+                                        {% else %}
+                                            <span class="badge bg-dark">Never</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if 'No sales' in item.reason %}
+                                            <span class="badge badge-reason-no-sales">{{ item.reason }}</span>
+                                        {% elif 'Insufficient sales' in item.reason %}
+                                            <span class="badge badge-reason-insufficient-sales">{{ item.reason }}</span>
+                                        {% elif 'Insufficient history' in item.reason %}
+                                            <span class="badge badge-reason-insufficient-history">{{ item.reason }}</span>
+                                        {% elif 'Discontinued' in item.reason %}
+                                            <span class="badge badge-reason-discontinued">{{ item.reason }}</span>
+                                        {% elif 'Low frequency' in item.reason %}
+                                            <span class="badge badge-reason-low-frequency">{{ item.reason }}</span>
+                                        {% else %}
+                                            <span class="badge badge-reason-pending">{{ item.reason }}</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Info Section -->
+            <div class="row g-4 mb-4">
+                <div class="col-12 col-lg-6">
+                    <div class="card h-100 shadow-sm">
+                        <div class="card-body">
+                            <h5 class="mb-3">
+                                <i class="fas fa-info-circle me-2 text-primary"></i>About This Report
+                            </h5>
+                            <p>This report shows products in shop/store categories that do <strong>not</strong> have a forecast generated by the AI forecasting engine.</p>
+                            <p class="mb-2"><strong>Skip Reasons:</strong></p>
+                            <ul class="mb-0">
+                                <li><span class="badge badge-reason-no-sales">No sales history</span> - Zero sales found in the system</li>
+                                <li><span class="badge badge-reason-insufficient-sales">Insufficient sales</span> - Less than 10 total units sold</li>
+                                <li><span class="badge badge-reason-insufficient-history">Insufficient history</span> - Less than 30 distinct sale days</li>
+                                <li><span class="badge badge-reason-discontinued">Discontinued</span> - No sales in over 365 days</li>
+                                <li><span class="badge badge-reason-low-frequency">Low frequency</span> - Less than 5 sales per year average</li>
+                                <li><span class="badge badge-reason-pending">Pending generation</span> - Meets criteria but forecast not yet generated</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-lg-6">
+                    <div class="card h-100 shadow-sm border-warning">
+                        <div class="card-body">
+                            <h5 class="mb-3">
+                                <i class="fas fa-lightbulb me-2 text-warning"></i>How to Interpret
+                            </h5>
+                            <ul class="mb-0">
+                                <li class="mb-2">
+                                    <strong class="text-success">Pending generation</strong> items should be investigated - they may need a manual forecast run.
+                                </li>
+                                <li class="mb-2">
+                                    <strong class="text-danger">Discontinued</strong> items may need to be deactivated in Cin7 if they are no longer sold.
+                                </li>
+                                <li class="mb-2">
+                                    <strong style="color: #fd7e14;">Insufficient sales/history</strong> items are typically new products or very slow movers.
+                                </li>
+                                <li class="mb-2">
+                                    <strong style="color: #6c757d;">No sales history</strong> items may be newly listed or incorrectly categorized.
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/dataTables.buttons.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.bootstrap5.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.print.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+<script>
+$(document).ready(function() {
+    var table = $('#nonForecastedTable').DataTable({
+        pageLength: 25,
+        order: [[2, 'asc'], [0, 'asc']],
+        autoWidth: false,
+        dom: '<"row"<"col-sm-12 col-md-6"B><"col-sm-12 col-md-6"f>>rtip',
+        buttons: [
+            {
+                extend: 'excelHtml5',
+                text: '<i class="fas fa-file-excel me-1"></i>Excel',
+                className: 'btn btn-success btn-sm',
+                title: 'Non-Forecasted Items',
+                exportOptions: { columns: ':visible' }
+            },
+            {
+                extend: 'csvHtml5',
+                text: '<i class="fas fa-file-csv me-1"></i>CSV',
+                className: 'btn btn-outline-secondary btn-sm',
+                title: 'Non-Forecasted Items',
+                exportOptions: { columns: ':visible' }
+            }
+        ],
+        language: {
+            search: "Search:",
+            lengthMenu: "Show _MENU_ entries",
+            info: "Showing _START_ to _END_ of _TOTAL_ items",
+            emptyTable: "No non-forecasted items found"
+        }
+    });
+
+    // Hide preloader
+    $('#pagePreloader').removeClass('active');
+});
+</script>
+{% endblock %}
