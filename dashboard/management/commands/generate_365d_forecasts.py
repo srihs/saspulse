@@ -328,6 +328,8 @@ class Command(BaseCommand):
         """Get historical sales data aggregated by level"""
 
         # Query sales for school products
+        # Uses product_id join first, falls back to SKU code match via productoption
+        # for line items where product_id is NULL
         query = """
         SELECT
             so.invoice_date as sale_date,
@@ -337,9 +339,12 @@ class Command(BaseCommand):
             COUNT(DISTINCT so.id) as order_count
         FROM cin7_sync_salesorderlineitem li
         JOIN cin7_sync_salesorder so ON so.id = li.sales_order_id
-        JOIN cin7_sync_product p ON p.id = li.product_id
-        WHERE (p.category_name LIKE '%%Shop' OR p.category_name LIKE '%%Store')
-          AND p.category_name NOT IN ('Shop', 'Store')
+        LEFT JOIN cin7_sync_product p ON p.id = li.product_id
+        LEFT JOIN cin7_sync_productoption po ON po.code = li.code AND li.product_id IS NULL
+        LEFT JOIN cin7_sync_product p2 ON p2.cin7_id = po.cin7_product_id AND li.product_id IS NULL
+        WHERE (COALESCE(p.category_name, p2.category_name) LIKE '%%Shop'
+           OR COALESCE(p.category_name, p2.category_name) LIKE '%%Store')
+          AND COALESCE(p.category_name, p2.category_name) NOT IN ('Shop', 'Store')
           AND so.stage = 'Dispatched'
           AND so.invoice_date IS NOT NULL
           AND so.invoice_date >= DATE_SUB(CURDATE(), INTERVAL 1460 DAY)
@@ -348,11 +353,12 @@ class Command(BaseCommand):
         """
 
         # Set entity field based on aggregation level
+        # Use COALESCE to handle line items where product_id is NULL (fallback to p2 via SKU match)
         entity_fields = {
-            'school': 'p.sub_category',
+            'school': 'COALESCE(p.sub_category, p2.sub_category)',
             'product': 'li.code',  # Use SKU code to forecast each variation separately
-            'shop': 'p.category_name',
-            'category': 'p.category_name'
+            'shop': 'COALESCE(p.category_name, p2.category_name)',
+            'category': 'COALESCE(p.category_name, p2.category_name)'
         }
 
         entity_field = entity_fields.get(aggregation_level, 'p.sub_category')
