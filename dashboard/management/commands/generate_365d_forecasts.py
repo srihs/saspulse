@@ -113,7 +113,7 @@ class Command(BaseCommand):
         )
 
     def get_missing_product_skus(self):
-        """Find shop/store product SKUs that have no forecast"""
+        """Find eligible shop/store product SKUs that have no forecast"""
         with connection.cursor() as cursor:
             cursor.execute("""
                 SELECT DISTINCT po.code
@@ -121,11 +121,26 @@ class Command(BaseCommand):
                 JOIN cin7_sync_product p ON p.cin7_id = po.cin7_product_id
                 LEFT JOIN dashboard_salesforecastbase sf
                     ON sf.entity_name = po.code AND sf.aggregation_level = 'product'
+                LEFT JOIN (
+                    SELECT li.code,
+                           SUM(li.qty) as total_qty,
+                           COUNT(DISTINCT DATE(so.invoice_date)) as sale_days,
+                           MAX(so.invoice_date) as last_sale,
+                           DATEDIFF(MAX(so.invoice_date), MIN(so.invoice_date)) as history_span
+                    FROM cin7_sync_salesorderlineitem li
+                    JOIN cin7_sync_salesorder so ON so.id = li.sales_order_id
+                    WHERE so.stage = 'Dispatched' AND so.invoice_date IS NOT NULL
+                    GROUP BY li.code
+                ) s ON s.code = po.code
                 WHERE (p.category_name LIKE '%%Shop' OR p.category_name LIKE '%%Store')
                   AND p.category_name NOT IN ('Shop', 'Store')
                   AND p.category_name NOT LIKE 'Wholesale%%'
                   AND p.is_active = 1
                   AND sf.id IS NULL
+                  AND s.total_qty >= 10
+                  AND s.sale_days >= 30
+                  AND s.last_sale >= DATE_SUB(CURDATE(), INTERVAL 365 DAY)
+                  AND (s.total_qty / (s.history_span / 365.0)) >= 5
             """)
             return [row[0] for row in cursor.fetchall()]
 

@@ -5097,23 +5097,40 @@ def detect_missing_forecasts(request):
     from django.core.management import call_command
     import threading
 
-    # Detect missing products
+    # Detect missing products that are ELIGIBLE for forecasting
+    # Must have: 10+ total sales, 30+ days of history, sold in last 365 days, 5+ sales/year
     with connection.cursor() as cursor:
         cursor.execute("""
-            SELECT DISTINCT po.code, p.name, p.category_name, p.sub_category
+            SELECT po.code, p.name, p.category_name, p.sub_category,
+                   COALESCE(s.total_qty, 0) as total_qty
             FROM cin7_sync_productoption po
             JOIN cin7_sync_product p ON p.cin7_id = po.cin7_product_id
             LEFT JOIN dashboard_salesforecastbase sf
                 ON sf.entity_name = po.code AND sf.aggregation_level = 'product'
+            LEFT JOIN (
+                SELECT li.code,
+                       SUM(li.qty) as total_qty,
+                       COUNT(DISTINCT DATE(so.invoice_date)) as sale_days,
+                       MAX(so.invoice_date) as last_sale,
+                       DATEDIFF(MAX(so.invoice_date), MIN(so.invoice_date)) as history_span
+                FROM cin7_sync_salesorderlineitem li
+                JOIN cin7_sync_salesorder so ON so.id = li.sales_order_id
+                WHERE so.stage = 'Dispatched' AND so.invoice_date IS NOT NULL
+                GROUP BY li.code
+            ) s ON s.code = po.code
             WHERE (p.category_name LIKE '%%Shop' OR p.category_name LIKE '%%Store')
               AND p.category_name NOT IN ('Shop', 'Store')
               AND p.category_name NOT LIKE 'Wholesale%%'
               AND p.is_active = 1
               AND sf.id IS NULL
+              AND s.total_qty >= 10
+              AND s.sale_days >= 30
+              AND s.last_sale >= DATE_SUB(CURDATE(), INTERVAL 365 DAY)
+              AND (s.total_qty / (s.history_span / 365.0)) >= 5
             ORDER BY p.category_name, p.sub_category, po.code
         """)
         missing = [
-            {'sku': row[0], 'name': row[1], 'shop': row[2], 'school': row[3]}
+            {'sku': row[0], 'name': row[1], 'shop': row[2], 'school': row[3], 'total_sold': row[4]}
             for row in cursor.fetchall()
         ]
 
