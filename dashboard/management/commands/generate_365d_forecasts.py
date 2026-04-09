@@ -80,8 +80,8 @@ class Command(BaseCommand):
             '--model',
             type=str,
             choices=['statistical', 'ml', 'hybrid'],
-            default='hybrid',
-            help='Model type (default: hybrid)'
+            default='statistical',
+            help='Model type (default: statistical)'
         )
         parser.add_argument(
             '--min-sales',
@@ -145,7 +145,10 @@ class Command(BaseCommand):
             return [row[0] for row in cursor.fetchall()]
 
     def handle(self, *args, **options):
-        horizon_days = options['horizon_days']
+        # Calculate horizon: today to Dec 31 of next year
+        today = datetime.now().date()
+        forecast_end = datetime(today.year + 1, 12, 31).date()
+        horizon_days = (forecast_end - today).days + 1
         only_missing = options.get('only_missing', False)
 
         if only_missing:
@@ -159,11 +162,10 @@ class Command(BaseCommand):
             options['level'] = 'product'
 
         self.stdout.write(self.style.SUCCESS('=' * 80))
-        self.stdout.write(self.style.SUCCESS(f'{horizon_days}-DAY BASE FORECASTING ENGINE - Statistical + AI/ML Models'))
+        self.stdout.write(self.style.SUCCESS(f'FORECASTING ENGINE - Yearly Trend Analysis'))
         self.stdout.write(self.style.SUCCESS('=' * 80))
-        self.stdout.write(self.style.WARNING(f'Strategy: Generate ONE {horizon_days}-day forecast, extract any date range dynamically'))
-        self.stdout.write(self.style.WARNING('Benefits: Optimized storage, infinite flexibility, simplified maintenance'))
-        self.stdout.write(self.style.WARNING(f'Forecast Valid Until: {(datetime.now().date() + timedelta(days=horizon_days)).strftime("%Y-%m-%d")}'))
+        self.stdout.write(self.style.WARNING(f'Forecast Period: {today.strftime("%Y-%m-%d")} to {forecast_end.strftime("%Y-%m-%d")} ({horizon_days} days)'))
+        self.stdout.write(self.style.WARNING('Method: YoY trend analysis with seasonal monthly distribution'))
         self.stdout.write(self.style.SUCCESS('=' * 80))
 
         level = options['level']
@@ -327,42 +329,66 @@ class Command(BaseCommand):
     def get_historical_sales(self, aggregation_level):
         """Get historical sales data aggregated by level"""
 
-        # Query sales for school products
-        # Uses product_id join first, falls back to SKU code match via productoption
-        # for line items where product_id is NULL
-        query = """
-        SELECT
-            DATE(so.invoice_date) as sale_date,
-            {entity_field} as entity_name,
-            SUM(li.qty) as quantity,
-            SUM(li.line_total) as revenue,
-            COUNT(DISTINCT so.id) as order_count
-        FROM cin7_sync_salesorderlineitem li
-        JOIN cin7_sync_salesorder so ON so.id = li.sales_order_id
-        LEFT JOIN cin7_sync_product p ON p.id = li.product_id
-        LEFT JOIN cin7_sync_productoption po ON po.code = li.code AND li.product_id IS NULL
-        LEFT JOIN cin7_sync_product p2 ON p2.cin7_id = po.cin7_product_id AND li.product_id IS NULL
-        WHERE (COALESCE(p.category_name, p2.category_name) LIKE '%%Shop'
-           OR COALESCE(p.category_name, p2.category_name) LIKE '%%Store')
-          AND COALESCE(p.category_name, p2.category_name) NOT IN ('Shop', 'Store')
-          AND so.stage = 'Dispatched'
-          AND so.invoice_date IS NOT NULL
-          AND so.invoice_date >= DATE_SUB(CURDATE(), INTERVAL 1460 DAY)
-        GROUP BY DATE(so.invoice_date), {entity_field}
-        ORDER BY sale_date, entity_name
-        """
+        if aggregation_level == 'product':
+            # For product level, group by product_id to merge renamed SKUs,
+            # then map back to the current SKU code from productoption.
+            # Match current code by cin7_product_id + same size suffix (text after last " -").
+            # Falls back to li.code for line items where product_id is NULL.
+            query = """
+            SELECT
+                DATE(so.invoice_date) as sale_date,
+                COALESCE(po_current.code, po_fallback.code, li.code) as entity_name,
+                SUM(li.qty) as quantity,
+                SUM(li.line_total) as revenue,
+                COUNT(DISTINCT so.id) as order_count
+            FROM cin7_sync_salesorderlineitem li
+            JOIN cin7_sync_salesorder so ON so.id = li.sales_order_id
+            LEFT JOIN cin7_sync_product p ON p.id = li.product_id
+            LEFT JOIN cin7_sync_productoption po_current
+                ON po_current.cin7_product_id = p.cin7_id
+                AND SUBSTRING_INDEX(po_current.code, ' -', -1) = SUBSTRING_INDEX(li.code, ' -', -1)
+                AND li.product_id IS NOT NULL
+            LEFT JOIN cin7_sync_productoption po_fallback ON po_fallback.code = li.code AND li.product_id IS NULL
+            LEFT JOIN cin7_sync_product p2 ON p2.cin7_id = po_fallback.cin7_product_id AND li.product_id IS NULL
+            WHERE (COALESCE(p.category_name, p2.category_name) LIKE '%%Shop'
+               OR COALESCE(p.category_name, p2.category_name) LIKE '%%Store')
+              AND COALESCE(p.category_name, p2.category_name) NOT IN ('Shop', 'Store')
+              AND so.stage = 'Dispatched'
+              AND so.invoice_date IS NOT NULL
+              AND so.invoice_date >= DATE_SUB(CURDATE(), INTERVAL 1460 DAY)
+            GROUP BY DATE(so.invoice_date), entity_name
+            ORDER BY sale_date, entity_name
+            """
+        else:
+            # For school/shop/category level, use original approach
+            entity_fields = {
+                'school': 'COALESCE(p.sub_category, p2.sub_category)',
+                'shop': 'COALESCE(p.category_name, p2.category_name)',
+                'category': 'COALESCE(p.category_name, p2.category_name)'
+            }
+            entity_field = entity_fields.get(aggregation_level, 'p.sub_category')
 
-        # Set entity field based on aggregation level
-        # Use COALESCE to handle line items where product_id is NULL (fallback to p2 via SKU match)
-        entity_fields = {
-            'school': 'COALESCE(p.sub_category, p2.sub_category)',
-            'product': 'li.code',  # Use SKU code to forecast each variation separately
-            'shop': 'COALESCE(p.category_name, p2.category_name)',
-            'category': 'COALESCE(p.category_name, p2.category_name)'
-        }
-
-        entity_field = entity_fields.get(aggregation_level, 'p.sub_category')
-        query = query.format(entity_field=entity_field)
+            query = """
+            SELECT
+                DATE(so.invoice_date) as sale_date,
+                {entity_field} as entity_name,
+                SUM(li.qty) as quantity,
+                SUM(li.line_total) as revenue,
+                COUNT(DISTINCT so.id) as order_count
+            FROM cin7_sync_salesorderlineitem li
+            JOIN cin7_sync_salesorder so ON so.id = li.sales_order_id
+            LEFT JOIN cin7_sync_product p ON p.id = li.product_id
+            LEFT JOIN cin7_sync_productoption po ON po.code = li.code AND li.product_id IS NULL
+            LEFT JOIN cin7_sync_product p2 ON p2.cin7_id = po.cin7_product_id AND li.product_id IS NULL
+            WHERE (COALESCE(p.category_name, p2.category_name) LIKE '%%Shop'
+               OR COALESCE(p.category_name, p2.category_name) LIKE '%%Store')
+              AND COALESCE(p.category_name, p2.category_name) NOT IN ('Shop', 'Store')
+              AND so.stage = 'Dispatched'
+              AND so.invoice_date IS NOT NULL
+              AND so.invoice_date >= DATE_SUB(CURDATE(), INTERVAL 1460 DAY)
+            GROUP BY DATE(so.invoice_date), {entity_field}
+            ORDER BY sale_date, entity_name
+            """.format(entity_field=entity_field)
 
         # Execute query
         with connection.cursor() as cursor:
@@ -480,180 +506,141 @@ class Command(BaseCommand):
         return filtered
 
     def forecast_statistical(self, ts_data, horizon_days):
-        """Generate forecast using Prophet (Facebook's time series forecasting model)"""
+        """
+        Generate forecast using historical monthly sales with weighted year averaging.
+
+        Rest of current year: weighted average of same months from prior years.
+        Next year: same approach, but uses forecasted months from current year as "sales"
+        for months that haven't happened yet.
+        """
 
         try:
-            # Try Prophet first - it's excellent for intermittent demand and seasonality
-            if PROPHET_AVAILABLE:
-                try:
-                    # Prepare data in Prophet format (ds = date, y = value)
-                    prophet_df = pd.DataFrame({
-                        'ds': ts_data.index,
-                        'y': ts_data['quantity'].values
-                    })
+            from collections import defaultdict
+            import calendar
 
-                    # Initialize Prophet with optimized parameters for school products
-                    model = Prophet(
-                        daily_seasonality=False,
-                        weekly_seasonality=True,
-                        yearly_seasonality=True,
-                        seasonality_mode='multiplicative',  # Better for intermittent demand
-                        changepoint_prior_scale=0.05,  # Lower = less flexible, more stable
-                        interval_width=0.8,  # 80% confidence intervals
-                        growth='linear'
-                    )
+            today = datetime.now().date()
+            current_year = today.year
+            current_month = today.month
+            next_year = current_year + 1
 
-                    # Suppress Prophet's verbose output
-                    import logging
-                    logging.getLogger('prophet').setLevel(logging.ERROR)
-                    logging.getLogger('cmdstanpy').setLevel(logging.ERROR)
+            # === STEP 1: Build monthly sales history {year: {month: qty}} ===
+            monthly_sales = defaultdict(lambda: defaultdict(float))
 
-                    # Fit the model
-                    model.fit(prophet_df)
+            for date, row in ts_data.iterrows():
+                monthly_sales[date.year][date.month] += row['quantity']
 
-                    # Create future dataframe starting from today (forward-looking forecast)
-                    today = datetime.now().date()
-                    future_dates = pd.date_range(start=today, periods=horizon_days, freq='D')
-                    future = pd.DataFrame({'ds': future_dates})
-                    forecast = model.predict(future)
+            all_years = sorted(monthly_sales.keys())
+            if len(all_years) == 0:
+                return None
 
-                    # Create forecast dictionary
-                    forecast_dict = {}
-                    for _, row in forecast.iterrows():
-                        date_str = row['ds'].strftime('%Y-%m-%d')
-                        qty = max(0, row['yhat'])  # Ensure non-negative
+            # Prior years with data (excluding current year)
+            prior_years = sorted([y for y in all_years if y < current_year], reverse=True)
 
-                        forecast_dict[date_str] = {
-                            'quantity': float(qty),
-                            'confidence_lower': float(max(0, row['yhat_lower'])),
-                            'confidence_upper': float(max(0, row['yhat_upper']))
-                        }
+            if len(prior_years) == 0:
+                # Only current year data — use it as-is for remaining months
+                prior_years = [current_year]
 
-                    # FILTER BY ACTIVE MONTHS: Only forecast for months with historical sales
-                    active_months = self.calculate_active_months(ts_data, min_frequency=0.20)
-                    forecast_dict = self.filter_forecast_by_active_months(forecast_dict, active_months)
+            # === STEP 2: Forecast remaining months of current year (Apr-Dec 2026) ===
+            # For each remaining month, take weighted average of same month from prior years
+            # Weights: most recent year gets highest weight (e.g., 2025=3, 2024=2, 2023=1)
+            forecast_2026 = {}  # {month: qty}
 
-                    return {
-                        'forecasts': forecast_dict,
-                        'model': 'Prophet',
-                        'fitted_params': {
-                            'changepoint_prior_scale': 0.05,
-                            'seasonality_mode': 'multiplicative',
-                            'data_points': len(prophet_df),
-                            'active_months': sorted(list(active_months))  # Store for debugging
-                        }
-                    }
+            # Months already completed this year — use actual sales
+            for mn in range(1, current_month):
+                forecast_2026[mn] = monthly_sales[current_year].get(mn, 0)
 
-                except Exception as prophet_error:
-                    # Fall through to backup methods
-                    pass
+            # Remaining months — weighted average from prior years
+            remaining_months = list(range(current_month, 13))
+            for mn in remaining_months:
+                weighted_sum = 0.0
+                weight_total = 0.0
+                for idx, yr in enumerate(prior_years[:4]):  # Use up to 4 prior years
+                    weight = len(prior_years[:4]) - idx  # Most recent = highest weight
+                    month_qty = monthly_sales[yr].get(mn, 0)
+                    weighted_sum += month_qty * weight
+                    weight_total += weight
 
-            # FALLBACK: Calculate key statistics for intermittent demand
-            quantities = ts_data['quantity'].values
-            total_quantity = quantities.sum()
-            num_days = len(quantities)
-            days_with_sales = (quantities > 0).sum()
+                if weight_total > 0:
+                    forecast_2026[mn] = weighted_sum / weight_total
+                else:
+                    forecast_2026[mn] = 0.0
 
-            # Calculate average daily demand (simple moving average)
-            # Use weighted recent history (last 90 days get more weight)
-            recent_window = min(90, num_days)
-            recent_data = quantities[-recent_window:]
+            # === STEP 3: Forecast full next year (Jan-Dec 2027) ===
+            # Build a complete 2026 picture: actual (Jan-Mar) + forecasted (Apr-Dec)
+            # Then use 2026 (with forecast as "sales"), 2025, 2024, 2023 for weighted avg
+            # The "prior years" for 2027 forecasting includes synthetic 2026
+            forecast_2027 = {}
 
-            # Calculate demand rate (average per day)
-            avg_daily_demand = recent_data.mean()
+            for mn in range(1, 13):
+                weighted_sum = 0.0
+                weight_total = 0.0
 
-            # For intermittent demand, also calculate:
-            # - Demand when it occurs (average non-zero demand)
-            # - Probability of demand occurring
-            non_zero_recent = recent_data[recent_data > 0]
-            if len(non_zero_recent) > 0:
-                avg_demand_when_occurs = non_zero_recent.mean()
-                demand_probability = len(non_zero_recent) / len(recent_data)
-            else:
-                avg_demand_when_occurs = 0
-                demand_probability = 0
+                # 2026 (actual + forecasted) gets highest weight
+                month_qty_2026 = forecast_2026.get(mn, 0)
+                weight_2026 = len(prior_years[:3]) + 1  # Highest weight
+                weighted_sum += month_qty_2026 * weight_2026
+                weight_total += weight_2026
 
-            # Use exponential smoothing if data is not too sparse
-            if days_with_sales / num_days >= 0.3 and STATS_AVAILABLE:  # At least 30% of days have sales
-                try:
-                    if len(ts_data) >= 14:
-                        model = ExponentialSmoothing(
-                            ts_data['quantity'],
-                            seasonal_periods=7,
-                            trend='add',
-                            seasonal='add',
-                            initialization_method='estimated'
-                        )
-                        fitted_model = model.fit(optimized=True, disp=False)
-                        forecast_values = fitted_model.forecast(steps=horizon_days)
-                        model_name = 'Exponential Smoothing'
-                    else:
-                        model = ExponentialSmoothing(
-                            ts_data['quantity'],
-                            trend='add',
-                            initialization_method='estimated'
-                        )
-                        fitted_model = model.fit(optimized=True, disp=False)
-                        forecast_values = fitted_model.forecast(steps=horizon_days)
-                        model_name = 'Exponential Smoothing (Simple)'
+                # Then prior years (2025, 2024, 2023)
+                for idx, yr in enumerate(prior_years[:3]):
+                    weight = len(prior_years[:3]) - idx
+                    month_qty = monthly_sales[yr].get(mn, 0)
+                    weighted_sum += month_qty * weight
+                    weight_total += weight
 
-                    # Create forecast dictionary from model output
-                    forecast_dict = {}
-                    start_date = datetime.now().date()
+                if weight_total > 0:
+                    forecast_2027[mn] = weighted_sum / weight_total
+                else:
+                    forecast_2027[mn] = 0.0
 
-                    for i in range(horizon_days):
-                        date = start_date + timedelta(days=i)
-                        qty = max(0, forecast_values.iloc[i] if hasattr(forecast_values, 'iloc') else forecast_values[i])
-
-                        forecast_dict[date.strftime('%Y-%m-%d')] = {
-                            'quantity': float(qty),
-                            'confidence_lower': float(max(0, qty * 0.8)),
-                            'confidence_upper': float(qty * 1.2)
-                        }
-
-                    # FILTER BY ACTIVE MONTHS
-                    active_months = self.calculate_active_months(ts_data, min_frequency=0.20)
-                    forecast_dict = self.filter_forecast_by_active_months(forecast_dict, active_months)
-
-                    return {
-                        'forecasts': forecast_dict,
-                        'model': model_name,
-                        'fitted_params': {
-                            'active_months': sorted(list(active_months))
-                        }
-                    }
-                except:
-                    # Fall through to simple average method if ES fails
-                    pass
-
-            # For sparse/intermittent demand, use simple average method
+            # === STEP 4: Distribute daily across forecast horizon ===
             forecast_dict = {}
-            start_date = datetime.now().date()
+            forecast_start = today
 
             for i in range(horizon_days):
-                date = start_date + timedelta(days=i)
+                date = forecast_start + timedelta(days=i)
+                mn = date.month
+                yr = date.year
 
-                # Simple forecast: use average daily demand
-                qty = avg_daily_demand
+                if yr == current_year:
+                    month_total = forecast_2026.get(mn, 0)
+                elif yr == next_year:
+                    month_total = forecast_2027.get(mn, 0)
+                else:
+                    month_total = 0
+
+                # Spread evenly across days in this month
+                days_in_month = calendar.monthrange(yr, mn)[1]
+                daily_qty = month_total / days_in_month if days_in_month > 0 else 0
+                daily_qty = max(0, daily_qty)
 
                 forecast_dict[date.strftime('%Y-%m-%d')] = {
-                    'quantity': float(qty),
-                    'confidence_lower': float(max(0, qty * 0.7)),
-                    'confidence_upper': float(qty * 1.3)
+                    'quantity': float(daily_qty),
+                    'confidence_lower': float(max(0, daily_qty * 0.7)),
+                    'confidence_upper': float(daily_qty * 1.3)
                 }
 
-            # FILTER BY ACTIVE MONTHS
+            # FILTER BY ACTIVE MONTHS: zero out months with no historical sales
             active_months = self.calculate_active_months(ts_data, min_frequency=0.20)
             forecast_dict = self.filter_forecast_by_active_months(forecast_dict, active_months)
 
+            # Build summary info
+            total_2026_forecast = sum(forecast_2026.get(mn, 0) for mn in remaining_months)
+            total_2027_forecast = sum(forecast_2027.values())
+            yearly_actuals = {}
+            for yr in all_years:
+                yearly_actuals[str(yr)] = round(sum(monthly_sales[yr].values()), 1)
+
             return {
                 'forecasts': forecast_dict,
-                'model': 'Moving Average (Intermittent Demand)',
+                'model': 'Yearly Trend Analysis',
                 'fitted_params': {
-                    'avg_daily_demand': float(avg_daily_demand),
-                    'demand_probability': float(demand_probability),
-                    'avg_when_occurs': float(avg_demand_when_occurs),
-                    'days_with_sales_pct': float(days_with_sales / num_days * 100),
+                    'yearly_sales': yearly_actuals,
+                    'prior_years_used': prior_years[:4],
+                    'forecast_2026_remaining': {str(m): round(forecast_2026[m], 1) for m in remaining_months},
+                    'forecast_2027': {str(m): round(v, 1) for m, v in forecast_2027.items()},
+                    'total_2026_remaining': round(total_2026_forecast, 1),
+                    'total_2027': round(total_2027_forecast, 1),
                     'active_months': sorted(list(active_months))
                 }
             }

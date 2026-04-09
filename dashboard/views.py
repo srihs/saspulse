@@ -5199,18 +5199,40 @@ def past_sales_data(request):
             sku_code = result[0]
             style_code = result[1]
 
-        # Get all available years from historical data for this specific SKU
+        # Find all historical SKU codes for this product (handles renamed SKUs)
+        # Match by product_id: same product + same size suffix
         with connection.cursor() as cursor:
             cursor.execute("""
+                SELECT DISTINCT soli.code
+                FROM cin7_sync_salesorderlineitem soli
+                INNER JOIN cin7_sync_salesorder so ON so.id = soli.sales_order_id
+                INNER JOIN cin7_sync_product p ON p.id = soli.product_id
+                INNER JOIN cin7_sync_productoption po ON po.code = %s
+                WHERE p.cin7_id = po.cin7_product_id
+                  AND SUBSTRING_INDEX(soli.code, ' -', -1) = SUBSTRING_INDEX(%s, ' -', -1)
+                  AND so.invoice_date IS NOT NULL
+            """, [sku_code, sku_code])
+            all_codes = [row[0] for row in cursor.fetchall()]
+
+        # Fallback: if no codes found via product_id, use the current code
+        if not all_codes:
+            all_codes = [sku_code]
+
+        # Build placeholders for IN clause
+        placeholders = ','.join(['%s'] * len(all_codes))
+
+        # Get all available years from historical data for this SKU (including old codes)
+        with connection.cursor() as cursor:
+            cursor.execute(f"""
                 SELECT DISTINCT YEAR(so.invoice_date) as year
                 FROM cin7_sync_salesorderlineitem soli
-                INNER JOIN cin7_sync_salesorder so ON CAST(so.cin7_id AS CHAR) = soli.cin7_sales_order_id
-                WHERE soli.code = %s
+                INNER JOIN cin7_sync_salesorder so ON so.id = soli.sales_order_id
+                WHERE soli.code IN ({placeholders})
                   AND so.invoice_date IS NOT NULL
-                  AND so.status != 'Cancelled'
+                  AND so.stage = 'Dispatched'
                   AND YEAR(so.invoice_date) <= %s
                 ORDER BY year DESC
-            """, [sku_code, current_year])
+            """, all_codes + [current_year])
 
             available_years = [row[0] for row in cursor.fetchall()]
 
@@ -5220,17 +5242,17 @@ def past_sales_data(request):
             year_start = date(year, 1, 1)
             year_end = date(year, 12, 31)
 
-            # Query sales data for this specific SKU
+            # Query sales data for this SKU (including old codes)
             with connection.cursor() as cursor:
-                cursor.execute("""
+                cursor.execute(f"""
                     SELECT COALESCE(SUM(soli.qty), 0) as total_quantity
                     FROM cin7_sync_salesorderlineitem soli
-                    INNER JOIN cin7_sync_salesorder so ON CAST(so.cin7_id AS CHAR) = soli.cin7_sales_order_id
-                    WHERE soli.code = %s
+                    INNER JOIN cin7_sync_salesorder so ON so.id = soli.sales_order_id
+                    WHERE soli.code IN ({placeholders})
                       AND so.invoice_date >= %s
                       AND so.invoice_date <= %s
-                      AND so.status != 'Cancelled'
-                """, [sku_code, year_start, year_end])
+                      AND so.stage = 'Dispatched'
+                """, all_codes + [year_start, year_end])
 
                 row = cursor.fetchone()
                 years_data[str(year)] = int(row[0]) if row and row[0] else 0
